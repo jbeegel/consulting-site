@@ -113,7 +113,7 @@ export default function AuditDeep({ audit: a }: { audit: OpportunityAudit }) {
           <div className="text-[11px] mono tracking-[0.2em]" style={{ color: "var(--muted)" }}>
             {BRAND.product.toUpperCase()} · {BRAND.productTagline.toUpperCase()} · {a.meta.generatedAt.toUpperCase()}
           </div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <span className="text-[10px] mono px-2 py-1 rounded-md"
               style={{
                 background: "var(--surface-2)", border: "1px solid var(--border)",
@@ -121,6 +121,16 @@ export default function AuditDeep({ audit: a }: { audit: OpportunityAudit }) {
               }}>
               {a.meta.mode === "live" ? "● LIVE DATA" : "● DEMO DATA"}
             </span>
+            <a href={`/audit/${a.brand.domain}/report`}
+              className="no-print text-[13px] font-semibold px-3.5 py-2 rounded-lg"
+              style={{ background: "var(--accent)", color: "var(--accent-ink)" }}>
+              📄 Client report
+            </a>
+            <a href={`/api/audit/export?domain=${a.brand.domain}`}
+              className="no-print text-[13px] font-semibold px-3.5 py-2 rounded-lg"
+              style={{ border: "1px solid var(--accent)", color: "var(--accent)" }}>
+              ⬇ Excel
+            </a>
             <PrintButton />
           </div>
         </div>
