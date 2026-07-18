@@ -5,6 +5,7 @@
 // exactly what's real.
 
 import { buildMarketProfile, normalizeDomain, verticalKeyFor } from "@/lib/core/market";
+import { applyAnalystPass } from "./analyst";
 import { assembleAudit, buildAudit } from "./engine";
 import {
   dataforseoConfigured,
@@ -175,7 +176,7 @@ export async function buildAuditMaybeLive(
     );
   }
 
-  const audit = assembleAudit({
+  const assembled = assembleAudit({
     domain,
     profile: buildMarketProfile(domain),
     archKey: verticalKeyFor(domain),
@@ -185,6 +186,10 @@ export async function buildAuditMaybeLive(
     sources,
     competitorGaps,
   });
+
+  // Narrative upgrade on real data — no-op without ANTHROPIC_API_KEY, and
+  // the template narrative stands on any failure.
+  const audit = await applyAnalystPass(assembled);
 
   cache.set(domain, { at: Date.now(), audit });
   return audit;

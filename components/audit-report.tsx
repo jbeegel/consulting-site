@@ -199,6 +199,32 @@ export default function AuditDeep({ audit: a }: { audit: OpportunityAudit }) {
           </p>
         </div>
 
+        {/* analyst observations — present when the Claude analyst pass ran on live data */}
+        {a.observations && a.observations.length > 0 && (
+          <>
+            <SectionHead kicker="ANALYST PASS" title="What a strategist would circle"
+              sub="Written by the analyst layer from this audit's live data — anomalies, mismatches, and unclaimed openings the standard sections don't call out." />
+            <div className="grid md:grid-cols-2 gap-3">
+              {a.observations.map((o) => {
+                const c =
+                  o.kind === "geo" ? "var(--series-4)"
+                  : o.kind === "competitive" ? "var(--series-3)"
+                  : o.kind === "technical" ? "var(--series-2)"
+                  : "var(--series-1)";
+                return (
+                  <div key={o.title} className="card p-4" style={{ borderLeft: `2px solid ${c}` }}>
+                    <div className="flex items-center gap-2">
+                      <Badge label={o.kind.toUpperCase()} color={c} />
+                      <span className="text-sm font-semibold" style={{ color: "var(--ink)" }}>{o.title}</span>
+                    </div>
+                    <p className="text-[13px] mt-2 leading-relaxed" style={{ color: "var(--ink-2)" }}>{o.detail}</p>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
         {/* ============ 2 · TOP OPPORTUNITIES ============ */}
         <SectionHead kicker="WHERE THE MONEY IS" title="Top opportunities — SEO and GEO, one ranking"
           sub="Every play priced in the same unit: incremental revenue per month at target, base scenario. This is the priority order." />

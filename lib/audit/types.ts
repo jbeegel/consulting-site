@@ -134,6 +134,15 @@ export interface TopOpportunity {
   action: string;
 }
 
+// Strategist observations from the analyst pass (live audits with an
+// Anthropic key only) — the non-obvious reads a senior consultant would
+// circle in the real data. Absent in demo mode or without the key.
+export interface AnalystObservation {
+  title: string;
+  detail: string;
+  kind: "seo" | "geo" | "competitive" | "technical";
+}
+
 export interface OpportunityAudit {
   brand: {
     domain: string;
@@ -143,6 +152,7 @@ export interface OpportunityAudit {
   };
   businessModel: BusinessModelRead;
   topOpportunities: TopOpportunity[];
+  observations?: AnalystObservation[];
   score: {
     overall: number; // 0-100 opportunity-capture score (low = money on the table)
     seo: number;
