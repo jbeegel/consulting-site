@@ -3,9 +3,8 @@ import { BRAND } from "@/lib/brand";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: `${BRAND.product} — ${BRAND.productTagline}`,
-  description:
-    "A deep SEO & GEO opportunity analysis: keyword clusters priced in revenue, AI-assistant demand, citation gaps, and a sequenced 90-day plan.",
+  title: `${BRAND.siteName} — Search, AI answers & AI agents for SMBs`,
+  description: BRAND.siteTagline,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
