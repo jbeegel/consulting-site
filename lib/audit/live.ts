@@ -7,6 +7,7 @@
 import { buildMarketProfile, normalizeDomain, verticalKeyFor } from "@/lib/core/market";
 import { applyAnalystPass } from "./analyst";
 import { assembleAudit, buildAudit } from "./engine";
+import { loadRecentAudit, saveAudit } from "./store";
 import {
   dataforseoConfigured,
   dfsAiKeywordVolumes,
@@ -42,6 +43,14 @@ export async function buildAuditMaybeLive(
 
   const hit = cache.get(domain);
   if (hit && Date.now() - hit.at < TTL_MS) return hit.audit;
+
+  // Durable cache: a live audit saved within the TTL serves instantly —
+  // survives cold starts and redeploys, and skips the provider spend.
+  const stored = await loadRecentAudit(domain, TTL_MS);
+  if (stored) {
+    cache.set(domain, { at: Date.now(), audit: stored });
+    return stored;
+  }
 
   const clusters: OpportunityCluster[] = JSON.parse(JSON.stringify(base.clusters));
   const allTerms = clusters.flatMap((c) => c.keywords.map((k) => k.term));
@@ -191,6 +200,7 @@ export async function buildAuditMaybeLive(
   // the template narrative stands on any failure.
   const audit = await applyAnalystPass(assembled);
 
+  await saveAudit(audit); // archive + durable cache; no-op without Supabase keys
   cache.set(domain, { at: Date.now(), audit });
   return audit;
 }
