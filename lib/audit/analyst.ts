@@ -18,7 +18,7 @@ export function anthropicConfigured(): boolean {
 }
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-opus-4-8";
-const TIMEOUT_MS = 45_000; // stay inside the route's 60s budget; fall back past this
+const TIMEOUT_MS = 90_000; // routes budget 300s now; data-first audits carry bigger payloads
 
 interface AnalystOverlay {
   verdict: string;

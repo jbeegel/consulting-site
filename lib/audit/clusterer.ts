@@ -62,6 +62,29 @@ export function difficultyFallback(volume: number): number {
   return Math.min(72, 18 + Math.round(Math.log10(Math.max(10, volume)) * 14));
 }
 
+// The keyword-ideas endpoint returns the whole adjacent category — a popcorn
+// shop's seeds pull in candy, cereal, even vapes. Only ideas sharing one of
+// the domain's own core topic tokens (from what it actually ranks for) are
+// on-category enough to put in front of a client.
+export function coreTopicTokens(rankedTerms: string[], max = 4): Set<string> {
+  const freq = new Map<string, number>();
+  for (const term of rankedTerms) {
+    for (const tok of new Set(tokensOf(term))) freq.set(tok, (freq.get(tok) ?? 0) + 1);
+  }
+  return new Set(
+    [...freq.entries()]
+      .filter(([, n]) => n >= 3)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, max)
+      .map(([tok]) => tok)
+  );
+}
+
+export function ideaIsRelevant(term: string, core: Set<string>): boolean {
+  if (core.size === 0) return true; // no signal to filter on — keep everything
+  return tokensOf(term).some((tok) => core.has(tok));
+}
+
 function toAuditKeyword(t: LiveTerm): AuditKeyword {
   return {
     term: t.term,

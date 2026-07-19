@@ -15,6 +15,7 @@ export async function GET(req: NextRequest) {
   }
   const live = req.nextUrl.searchParams.get("live");
   const useLive = live === "0" ? false : live === "1" ? true : dataforseoConfigured();
-  const audit = await buildAuditMaybeLive(domain, useLive);
+  const fresh = req.nextUrl.searchParams.get("fresh") === "1";
+  const audit = await buildAuditMaybeLive(domain, useLive, fresh);
   return NextResponse.json(audit);
 }

@@ -130,21 +130,22 @@ const VERTICALS: Record<string, Vertical> = {
 
 // Vertical detection by domain token — a prospect's domain lands in the
 // right playbook with the right real competitors, no configuration.
+const POPCORN_RIVALS: [string, string][] = [
+  ["Garrett Popcorn", "garrettpopcorn.com"],
+  ["The Popcorn Factory", "thepopcornfactory.com"],
+  ["Popcornopolis", "popcornopolis.com"],
+  ["Poppy Handcrafted Popcorn", "poppyhandcraftedpopcorn.com"],
+];
+
 const TOKEN_VERTICALS: {
   token: string;
   vertical: keyof typeof VERTICALS;
   rivals: [string, string][];
 }[] = [
-  {
-    token: "popcorn",
-    vertical: "popcorn",
-    rivals: [
-      ["Garrett Popcorn", "garrettpopcorn.com"],
-      ["The Popcorn Factory", "thepopcornfactory.com"],
-      ["Popcornopolis", "popcornopolis.com"],
-      ["Poppy Handcrafted Popcorn", "poppyhandcraftedpopcorn.com"],
-    ],
-  },
+  { token: "popcorn", vertical: "popcorn", rivals: POPCORN_RIVALS },
+  // Brand-name spellings that don't contain the literal category token.
+  { token: "popscorn", vertical: "popcorn", rivals: POPCORN_RIVALS },
+  { token: "kettlecorn", vertical: "popcorn", rivals: POPCORN_RIVALS },
 ];
 
 const CURATED: Record<
