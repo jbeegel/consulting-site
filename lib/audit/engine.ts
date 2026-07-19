@@ -614,7 +614,10 @@ export function assembleAudit(inp: AssembleInputs): OpportunityAudit {
   const { assumptions } = playbook;
   const rng = seededRng(`${domain}|audit|derived`);
 
-  const topCompetitor = p.competitors[0]?.name ?? "the category leader";
+  // Live competitor data beats the synthesized market profile everywhere
+  // the name appears — headline, verdict, cluster attributions.
+  const topCompetitor =
+    inp.competitorGaps?.[0]?.name ?? p.competitors[0]?.name ?? "the category leader";
   const cat = p.brand.category.split("/")[0].trim().toLowerCase();
   const fill = (s: string) =>
     s

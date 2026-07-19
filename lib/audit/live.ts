@@ -15,7 +15,13 @@
 
 import { buildMarketProfile, normalizeDomain, verticalKeyFor } from "@/lib/core/market";
 import { applyAnalystPass } from "./analyst";
-import { buildTopicClusters, difficultyFallback, type LiveTerm } from "./clusterer";
+import {
+  buildTopicClusters,
+  coreTopicTokens,
+  difficultyFallback,
+  ideaIsRelevant,
+  type LiveTerm,
+} from "./clusterer";
 import { assembleAudit, buildAudit } from "./engine";
 import { loadRecentAudit, saveAudit } from "./store";
 import {
@@ -48,21 +54,24 @@ function titleCase(domain: string): string {
 
 export async function buildAuditMaybeLive(
   rawDomain: string,
-  live: boolean
+  live: boolean,
+  fresh = false // skip cache reads (still writes) — for forced re-runs after engine changes
 ): Promise<OpportunityAudit> {
   const domain = normalizeDomain(rawDomain) || "example.com";
   const base = buildAudit(domain);
   if (!live || !dataforseoConfigured()) return base;
 
-  const hit = cache.get(domain);
-  if (hit && Date.now() - hit.at < TTL_MS) return hit.audit;
+  if (!fresh) {
+    const hit = cache.get(domain);
+    if (hit && Date.now() - hit.at < TTL_MS) return hit.audit;
 
-  // Durable cache: a live audit saved within the TTL serves instantly —
-  // survives cold starts and redeploys, and skips the provider spend.
-  const stored = await loadRecentAudit(domain, TTL_MS);
-  if (stored) {
-    cache.set(domain, { at: Date.now(), audit: stored });
-    return stored;
+    // Durable cache: a live audit saved within the TTL serves instantly —
+    // survives cold starts and redeploys, and skips the provider spend.
+    const stored = await loadRecentAudit(domain, TTL_MS);
+    if (stored) {
+      cache.set(domain, { at: Date.now(), audit: stored });
+      return stored;
+    }
   }
 
   const liveModules: string[] = [];
@@ -86,6 +95,7 @@ export async function buildAuditMaybeLive(
     const ideas = await dfsKeywordIdeas(seeds.length ? seeds : ranked.slice(0, 3).map((r) => r.term), IDEAS_LIMIT);
 
     const rankedTerms = new Set(ranked.map((r) => r.term.toLowerCase()));
+    const core = coreTopicTokens(ranked.map((r) => r.term));
     const terms: LiveTerm[] = [
       ...ranked.map((r) => ({
         term: r.term,
@@ -96,7 +106,7 @@ export async function buildAuditMaybeLive(
         aiVolume: null,
       })),
       ...(ideas ?? [])
-        .filter((i) => !rankedTerms.has(i.term.toLowerCase()))
+        .filter((i) => !rankedTerms.has(i.term.toLowerCase()) && ideaIsRelevant(i.term, core))
         .map((i) => ({
           term: i.term,
           volume: i.volume,
