@@ -6,9 +6,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { BRAND } from "@/lib/brand";
+import { normalizeDomain } from "@/lib/core/market";
 
+// Recognizable demo brands only — so a visitor can preview the format on a
+// name they know, and never mistakes a demo for another client's audit.
 const EXAMPLES = [
-  { domain: "goldenkernelpopcorn.com", label: "Popcorn — gifting & events" },
   { domain: "allbirds.com", label: "Allbirds — DTC" },
   { domain: "notion.so", label: "Notion — SaaS" },
   { domain: "sweetgreen.com", label: "Sweetgreen — Multi-location" },
@@ -16,8 +18,19 @@ const EXAMPLES = [
 
 export default function AuditLanding() {
   const [domain, setDomain] = useState("");
+  const [error, setError] = useState("");
   const router = useRouter();
-  const go = (d: string) => router.push(`/audit/${encodeURIComponent(d)}`);
+  // Accept anything a person pastes — full URLs, paths, www — and navigate
+  // with the clean domain so the route always matches.
+  const go = (d: string) => {
+    const clean = normalizeDomain(d);
+    if (!clean || !clean.includes(".")) {
+      setError("That doesn't look like a domain yet — try something like yourbrand.com");
+      return;
+    }
+    setError("");
+    router.push(`/audit/${encodeURIComponent(clean)}`);
+  };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-6 py-16" style={{ background: "var(--page)" }}>
@@ -39,7 +52,7 @@ export default function AuditLanding() {
         className="mt-8 flex w-full max-w-md gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          if (domain.trim()) go(domain.trim());
+          go(domain);
         }}
       >
         <input
@@ -59,7 +72,12 @@ export default function AuditLanding() {
         </button>
       </form>
 
-      <div className="flex flex-wrap justify-center gap-2 mt-4 max-w-xl">
+      {error && (
+        <div className="text-[12.5px] mt-2" style={{ color: "var(--warning)" }}>{error}</div>
+      )}
+
+      <div className="flex flex-wrap justify-center items-center gap-2 mt-4 max-w-xl">
+        <span className="text-[11px] mono" style={{ color: "var(--muted)" }}>DEMO EXAMPLES:</span>
         {EXAMPLES.map((d) => (
           <button key={d.domain} className="chip" onClick={() => go(d.domain)}>
             {d.label}

@@ -277,9 +277,13 @@ export default function Unlocks() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3 mt-6">
-        <a href="#contact" className="px-5 py-3 rounded-xl text-sm font-semibold"
+        <a href="/unlock" className="px-5 py-3 rounded-xl text-sm font-semibold"
           style={{ background: "var(--accent)", color: "var(--accent-ink)" }}>
-          Tell me your version of the grind →
+          Run the 2-minute Unlock Scanner →
+        </a>
+        <a href="#contact" className="px-5 py-3 rounded-xl text-sm font-semibold"
+          style={{ border: "1px solid var(--accent)", color: "var(--accent)" }}>
+          Tell me your version of the grind
         </a>
         <span className="text-[12.5px]" style={{ color: "var(--muted)" }}>
           Don&rsquo;t see your industry? The pattern is the same — if it&rsquo;s manual and repeatable, it&rsquo;s buildable.

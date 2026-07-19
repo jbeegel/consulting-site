@@ -10,6 +10,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Unlocks from "@/components/unlocks";
 import { BRAND } from "@/lib/brand";
+import { normalizeDomain } from "@/lib/core/market";
 
 const SERVICES = [
   {
@@ -80,7 +81,10 @@ export default function Home() {
   const [sent, setSent] = useState(false);
 
   const runAudit = () => {
-    if (domain.trim()) router.push(`/audit/${encodeURIComponent(domain.trim())}`);
+    // Normalize whatever gets pasted — full URLs, paths, www — so the
+    // audit route always matches.
+    const clean = normalizeDomain(domain);
+    if (clean && clean.includes(".")) router.push(`/audit/${encodeURIComponent(clean)}`);
     else router.push("/audit");
   };
 
@@ -113,6 +117,7 @@ export default function Home() {
         <div className="hidden md:flex gap-5 text-[13px]" style={{ color: "var(--muted)" }}>
           <a href="#unlocks" className="hover:opacity-80">The Unlocks</a>
           <a href="#services" className="hover:opacity-80">What I do</a>
+          <a href="/unlock" className="hover:opacity-80">Scanner</a>
           <a href="#tool" className="hover:opacity-80">The Audit</a>
           <a href="#packages" className="hover:opacity-80">Packages</a>
         </div>
@@ -366,6 +371,7 @@ export default function Home() {
           <span>{BRAND.practiceFocus}</span>
           <span className="ml-auto flex gap-4">
             <a href="/audit" style={{ color: "var(--muted)" }}>{BRAND.product}</a>
+            <a href="/unlock" style={{ color: "var(--muted)" }}>Unlock Scanner</a>
             <a href={BRAND.contact} style={{ color: "var(--muted)" }}>Email</a>
           </span>
         </div>

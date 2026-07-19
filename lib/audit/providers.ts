@@ -179,6 +179,44 @@ export async function dfsCompetitorsDomain(domain: string): Promise<DomainCompet
   return out.length ? out : null;
 }
 
+export interface KeywordIdea {
+  term: string;
+  volume: number;
+  cpc: number;
+  difficulty: number | null;
+}
+
+// Category demand the domain may not rank for at all — seeded from its own
+// top terms. This is where "unclaimed demand" clusters come from.
+export async function dfsKeywordIdeas(seeds: string[], limit = 100): Promise<KeywordIdea[] | null> {
+  if (seeds.length === 0) return null;
+  const r = await dfsPost<{
+    items?: {
+      keyword?: string;
+      keyword_info?: { search_volume?: number; cpc?: number };
+      keyword_properties?: { keyword_difficulty?: number };
+    }[];
+  }>("dataforseo_labs/google/keyword_ideas/live", {
+    keywords: seeds.slice(0, 5),
+    ...US,
+    limit,
+    order_by: ["keyword_info.search_volume,desc"],
+    filters: [["keyword_info.search_volume", ">", 40]],
+  });
+  if (!r?.items) return null;
+  const out: KeywordIdea[] = [];
+  for (const i of r.items) {
+    if (!i.keyword) continue;
+    out.push({
+      term: i.keyword,
+      volume: i.keyword_info?.search_volume ?? 0,
+      cpc: i.keyword_info?.cpc ?? 0,
+      difficulty: i.keyword_properties?.keyword_difficulty ?? null,
+    });
+  }
+  return out.length ? out : null;
+}
+
 // Keyword difficulty for the audited set — one call, whole list.
 export async function dfsBulkDifficulty(keywords: string[]): Promise<Map<string, number> | null> {
   if (keywords.length === 0) return null;

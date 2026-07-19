@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- The Answer Engineer — terminal-prompt A with cursor -->
+  <rect width="64" height="64" rx="14" fill="#05070d"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" fill="none" stroke="#00c8e8" stroke-opacity="0.35" stroke-width="2"/>
+  <path d="M20 46 L32 16 L44 46" fill="none" stroke="#00c8e8" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="26" y1="36" x2="38" y2="36" stroke="#00c8e8" stroke-width="5" stroke-linecap="round"/>
+  <rect x="46" y="42" width="9" height="6" rx="1.5" fill="#7c6ff7"/>
+</svg>
