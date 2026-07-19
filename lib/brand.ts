@@ -5,12 +5,12 @@ export const BRAND = {
   product: "Capture", // the audit tool's name
   productTagline: "SEO & GEO Opportunity Audit",
   practice: "The Answer Engineer", // shown in the footer credit
-  practiceFocus: "Answer engine optimization · SEO · AI agents",
+  practiceFocus: "Custom AI agents · Answer engine optimization · SEO",
   contact: "mailto:jbeegel@gmail.com",
   homeUrl: "/",
   // Site identity — edit these lines to rename the whole site.
   siteName: "The Answer Engineer",
   siteDomain: "theanswerengineer.com",
   siteTagline:
-    "Search engines became answer engines. I engineer small & mid-sized businesses into the answers — then build the AI systems that scale what works.",
+    "Custom AI agents that dissolve the manual work strangling your business, and AI-search visibility that puts you in the answers customers see. For small & mid-sized businesses.",
 };
