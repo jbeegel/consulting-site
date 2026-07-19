@@ -132,35 +132,55 @@ export default function Home() {
         <div className="text-[11px] mono tracking-[0.2em] mb-5" style={{ color: "var(--series-4)" }}>
           FOR SMALL &amp; MID-SIZED BUSINESSES · {BRAND.siteDomain.toUpperCase()}
         </div>
-        <h1 className="text-4xl md:text-6xl font-extrabold leading-[1.05] max-w-3xl" style={{ color: "var(--ink)", letterSpacing: "-0.02em" }}>
-          Search engines stopped giving links.<br />
-          They give answers.<br />
-          <span style={{ color: "var(--accent)" }}>Be the answer.</span>
+        <h1 className="text-4xl md:text-6xl font-extrabold leading-[1.08] max-w-4xl" style={{ color: "var(--ink)", letterSpacing: "-0.02em" }}>
+          Be the answer<br />AI gives your customers.<br />
+          <span style={{ color: "var(--accent)" }}>Engineer the AI<br />your business runs on.</span>
         </h1>
         <p className="mt-6 max-w-2xl text-[16px] leading-relaxed" style={{ color: "var(--muted)" }}>
-          An answer engineer works both sides of the age of AI. The answers your customers see:
-          ChatGPT, Perplexity, and Google&rsquo;s AI Overviews name two or three businesses per
-          question — I make you one of them. And the answers your business runs on: the quoting,
-          reporting, and intake still done by hand — I build the custom agents that run them
-          continuously, so you scale without hiring for it.
+          Two different jobs — the name covers both.{" "}
+          <strong style={{ color: "var(--ink-2)" }}>The answer:</strong> when ChatGPT, Perplexity, or
+          Google&rsquo;s AI Overviews answer a buying question, two or three businesses get named — I
+          make you one of them. <strong style={{ color: "var(--ink-2)" }}>The engineering:</strong>{" "}
+          the quoting, reporting, and follow-up your team grinds through by hand becomes custom
+          agents that run continuously. Start with whichever is costing you more.
         </p>
-        <div className="mt-9 flex w-full max-w-xl gap-2 flex-wrap">
-          <input
-            value={domain}
-            onChange={(e) => setDomain(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && runAudit()}
-            placeholder="yourbusiness.com"
-            className="flex-1 min-w-[220px] bg-transparent outline-none text-sm rounded-xl px-4 py-3.5"
-            style={{ border: "1px solid var(--border)", color: "var(--ink)", background: "var(--surface-1)" }}
-          />
-          <button onClick={runAudit}
-            className="px-5 py-3.5 rounded-xl text-sm font-semibold transition-transform active:scale-95"
-            style={{ background: "var(--accent)", color: "var(--accent-ink)" }}>
-            See if you&rsquo;re the answer →
-          </button>
-        </div>
-        <div className="mt-3 text-[12.5px]" style={{ color: "var(--muted)" }}>
-          Free. Live data. Every opportunity priced in $/mo. Board-ready report + Excel included. No email required.
+        <div className="mt-9 grid md:grid-cols-2 gap-3 w-full max-w-3xl">
+          <div className="card p-4">
+            <div className="text-[11px] mono tracking-[0.14em] mb-2.5" style={{ color: "var(--series-1)" }}>
+              SHOWING UP IN AI · FREE AUDIT
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              <input
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && runAudit()}
+                placeholder="yourbusiness.com"
+                className="flex-1 min-w-[170px] bg-transparent outline-none text-sm rounded-xl px-4 py-3"
+                style={{ border: "1px solid var(--border)", color: "var(--ink)", background: "var(--surface-1)" }}
+              />
+              <button onClick={runAudit}
+                className="px-4 py-3 rounded-xl text-sm font-semibold transition-transform active:scale-95"
+                style={{ background: "var(--accent)", color: "var(--accent-ink)" }}>
+                Am I the answer? →
+              </button>
+            </div>
+            <div className="mt-2 text-[11.5px]" style={{ color: "var(--muted)" }}>
+              Live data · every gap priced in $/mo · no email required
+            </div>
+          </div>
+          <div className="card p-4">
+            <div className="text-[11px] mono tracking-[0.14em] mb-2.5" style={{ color: "var(--series-4)" }}>
+              LEVERAGING AI · 2-MIN SCAN
+            </div>
+            <a href="/unlock"
+              className="block text-center px-4 py-3 rounded-xl text-sm font-semibold transition-transform active:scale-95"
+              style={{ border: "1px solid var(--series-4)", color: "var(--series-4)" }}>
+              What is manual work costing me? →
+            </a>
+            <div className="mt-2 text-[11.5px]" style={{ color: "var(--muted)" }}>
+              Tap through your grinds · the burn in $/yr · the agent plan
+            </div>
+          </div>
         </div>
       </header>
 

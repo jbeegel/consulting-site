@@ -6,7 +6,7 @@ import { normalizeDomain } from "@/lib/core/market";
 import { dataforseoConfigured } from "@/lib/audit/providers";
 import { buildAuditMaybeLive } from "@/lib/audit/live";
 
-export const maxDuration = 60;
+export const maxDuration = 300; // first live run can exceed 60s (providers + analyst pass)
 
 export async function GET(req: NextRequest) {
   const domain = normalizeDomain(req.nextUrl.searchParams.get("domain") ?? "");
