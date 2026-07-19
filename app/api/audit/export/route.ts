@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { normalizeDomain } from "@/lib/core/market";
 import { dataforseoConfigured } from "@/lib/audit/providers";
 import { buildAuditMaybeLive } from "@/lib/audit/live";
+import { latestReadyJourney } from "@/lib/audit/journey-store";
 import { buildWorkbook } from "@/lib/audit/workbook";
 
 export const maxDuration = 60;
@@ -16,8 +17,11 @@ export async function GET(req: NextRequest) {
   }
   const live = req.nextUrl.searchParams.get("live");
   const useLive = live === "0" ? false : live === "1" ? true : dataforseoConfigured();
-  const audit = await buildAuditMaybeLive(domain, useLive);
-  const buffer = await buildWorkbook(audit);
+  const [audit, journey] = await Promise.all([
+    buildAuditMaybeLive(domain, useLive),
+    latestReadyJourney(domain),
+  ]);
+  const buffer = await buildWorkbook(audit, journey);
   return new NextResponse(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

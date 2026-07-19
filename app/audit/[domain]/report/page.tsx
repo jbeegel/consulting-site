@@ -3,6 +3,7 @@ import AuditDoc from "@/components/audit-doc";
 import { buildMarketProfile, normalizeDomain } from "@/lib/core/market";
 import { dataforseoConfigured } from "@/lib/audit/providers";
 import { buildAuditMaybeLive } from "@/lib/audit/live";
+import { latestReadyJourney } from "@/lib/audit/journey-store";
 
 export const maxDuration = 60;
 
@@ -22,6 +23,9 @@ export default async function AuditReportDocPage({ params, searchParams }: Props
   const { live } = await searchParams;
   const normalized = normalizeDomain(decodeURIComponent(domain)) || "example.com";
   const useLive = live === "0" ? false : live === "1" ? true : dataforseoConfigured();
-  const audit = await buildAuditMaybeLive(normalized, useLive);
-  return <AuditDoc audit={audit} />;
+  const [audit, journey] = await Promise.all([
+    buildAuditMaybeLive(normalized, useLive),
+    latestReadyJourney(normalized),
+  ]);
+  return <AuditDoc audit={audit} journey={journey} />;
 }

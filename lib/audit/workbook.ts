@@ -9,6 +9,7 @@
 
 import ExcelJS from "exceljs";
 import { AI_CITED_CAPTURE, ctrAt } from "./model";
+import type { JourneyMap } from "./journey-types";
 import type { OpportunityAudit } from "./types";
 
 const INK = "FF141B2E";
@@ -59,7 +60,7 @@ function addTableSheet(
   return ws;
 }
 
-export async function buildWorkbook(a: OpportunityAudit): Promise<Buffer> {
+export async function buildWorkbook(a: OpportunityAudit, journey?: JourneyMap | null): Promise<Buffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Capture — SEO & GEO Opportunity Audit";
   wb.created = new Date();
@@ -266,6 +267,99 @@ export async function buildWorkbook(a: OpportunityAudit): Promise<Buffer> {
     ],
     a.roadmap.flatMap((p) => p.moves.map((m, i) => [p.phase, i === 0 ? p.focus : "", m, i === 0 ? p.kpi : "", i === 0 ? p.expectedLift : ""]))
   );
+
+  // ---- Journey Map sheets (present once the deep pass has been built) ----
+  if (journey) {
+    addTableSheet(
+      wb,
+      "Site Pages",
+      `${journey.inventory.pagesCrawled} pages crawled (Firecrawl) and classified — pivot by Type; sort by Quality or Answerability.`,
+      [
+        { header: "Path", width: 36 },
+        { header: "Type", width: 12 },
+        { header: "Topic", width: 40 },
+        { header: "Quality (0-100)", width: 14 },
+        { header: "Answerability (0-100)", width: 18 },
+        { header: "Words", width: 10, numFmt: "#,##0" },
+        { header: "Analyst note", width: 70 },
+      ],
+      journey.pages.map((p) => [p.path, p.type, p.topic, p.quality, p.answerability, p.wordCount, p.note])
+    );
+
+    addTableSheet(
+      wb,
+      "Personas",
+      "The buyer personas behind the audited demand, with each one's share.",
+      [
+        { header: "Persona", width: 24 },
+        { header: "Share of demand", width: 15, numFmt: "0%" },
+        { header: "Who they are", width: 50 },
+        { header: "What they want", width: 50 },
+        { header: "What makes them hesitate", width: 50 },
+        { header: "Buying trigger", width: 50 },
+      ],
+      journey.personas.map((p) => [p.name, p.share / 100, p.who, p.wants, p.fears, p.buyingTrigger])
+    );
+
+    const personaName = new Map(journey.personas.map((p) => [p.id, p.name]));
+    addTableSheet(
+      wb,
+      "Journey Grid",
+      "Persona × stage coverage judged against the crawled site — filter Status to MISSING for the structural gaps.",
+      [
+        { header: "Persona", width: 24 },
+        { header: "Stage", width: 10 },
+        { header: "Status", width: 10 },
+        { header: "Pages serving this step", width: 40 },
+        { header: "Terms assigned", width: 14 },
+        { header: "Why this status", width: 80 },
+      ],
+      journey.grid.map((g) => [
+        personaName.get(g.personaId) ?? g.personaId,
+        g.stage,
+        g.status.toUpperCase(),
+        g.pagePaths.join(", ") || "—",
+        g.terms.length,
+        g.note,
+      ])
+    );
+
+    addTableSheet(
+      wb,
+      "Assignments",
+      "Every audited keyword and AI prompt routed to the page that should win it — pivot by Action, Persona, or Target path.",
+      [
+        { header: "Term", width: 38 },
+        { header: "Kind", width: 9 },
+        { header: "Google vol/mo", width: 14, numFmt: "#,##0" },
+        { header: "AI vol/mo", width: 12, numFmt: "#,##0" },
+        { header: "Persona", width: 22 },
+        { header: "Stage", width: 10 },
+        { header: "Action", width: 12 },
+        { header: "Target path", width: 32 },
+        { header: "Target page title", width: 44 },
+        { header: "What to do", width: 80 },
+      ],
+      journey.assignments.map((x) => [
+        x.term, x.kind, x.volume, x.aiVolume,
+        personaName.get(x.personaId) ?? x.personaId, x.stage, x.action.toUpperCase(),
+        x.targetPath, x.targetTitle, x.detail,
+      ])
+    );
+
+    addTableSheet(
+      wb,
+      "Forecast",
+      `Monthly capture run-rate, engine-computed from the audit's revenue model. Steady state (base): $${journey.forecast.steadyState.base.toLocaleString()}/mo · Year-one cumulative (base): $${journey.forecast.yearOneCumulative.base.toLocaleString()}. ${journey.forecast.methodology[1] ?? ""}`,
+      [
+        { header: "Month", width: 8 },
+        { header: "Conservative $/mo", width: 17, numFmt: "$#,##0" },
+        { header: "Base $/mo", width: 13, numFmt: "$#,##0" },
+        { header: "Aggressive $/mo", width: 16, numFmt: "$#,##0" },
+      ],
+      journey.forecast.points.map((p) => [p.month, p.conservative, p.base, p.aggressive])
+    );
+  }
 
   const out = await wb.xlsx.writeBuffer();
   return Buffer.from(out as ArrayBuffer);
