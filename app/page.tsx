@@ -8,25 +8,26 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Unlocks from "@/components/unlocks";
 import { BRAND } from "@/lib/brand";
 
 const SERVICES = [
   {
     k: "01",
-    t: "Get into the answers — AEO, GEO & SEO",
+    t: "Engineer the outcome — custom AI agents & automation",
+    d: "This is the deep end, and it's where I live. I find the most expensive manual process in your business — the quoting done by googling, the reporting that eats the first week of every month, the intake nobody can keep up with — and build the agents that run it continuously: scoped with you, wired to your data, delivered running with guardrails and your team trained. For agencies, that becomes a full agent hub running the repeatable 80% of delivery across every client.",
+    tags: ["Process discovery", "Custom agent builds", "Agent hubs for agencies", "Automation with guardrails", "Team enablement"],
+  },
+  {
+    k: "02",
+    t: "Get into the answers — AI search, AEO & SEO",
     d: "When a customer asks ChatGPT what to buy, or Google answers above the links, two or three businesses get named. I find every question your buyers ask, price what each answer is worth in dollars, and run the plan that makes you the one that gets cited — in AI answers and on page one, because the same evidence wins both.",
     tags: ["Answer engine optimization", "Opportunity audits", "AI citation strategy", "Rankings & schema"],
   },
   {
-    k: "02",
-    t: "Engineer the outcome — custom AI agents",
-    d: "Being the answer creates demand; engineering absorbs it. I build the agents that do the work bigger companies hire for: lead follow-up, quoting, reporting, research, back-office flow. Scoped to one high-ROI process, delivered running, your team trained on it.",
-    tags: ["Process discovery", "Custom agent builds", "Workflow automation", "Team enablement"],
-  },
-  {
     k: "03",
     t: "Stay ahead — advisory",
-    d: "The answer landscape re-ranks itself constantly; someone has to be accountable for your position in it. A standing seat at your table for search and AI decisions — what to adopt, what to skip, what to build — and a monthly review of the numbers that matter.",
+    d: "The answer landscape re-ranks itself constantly, and the agent frontier moves monthly; someone has to be accountable for your position in both. A standing seat at your table for search and AI decisions — what to adopt, what to skip, what to build — and a monthly review of the numbers that matter.",
     tags: ["Fractional advisor", "Monthly reviews", "Build vs. buy calls", "Roadmaps"],
   },
 ];
@@ -43,20 +44,21 @@ const PACKAGES = [
     featured: true,
   },
   {
+    name: "Custom Agent Build",
+    price: "from $7,500",
+    unit: "/project",
+    d: "Your most expensive manual process, scoped and automated end to end — discovery, build, deployment, guardrails, and a trained team. Fixed scope, working software, no research project. Agencies: ask about the multi-client agent hub.",
+    cta: "Book a scoping call",
+    href: "#contact",
+    featured: true,
+  },
+  {
     name: "Answer Sprint",
     price: "$2,500",
     unit: "/mo · 90 days",
     d: "The audit's roadmap, executed: quick wins first, then the money clusters, then AI citations. Re-measured monthly against the baseline — progress in the same dollars we started with.",
     cta: "Start with the audit",
     href: "/audit",
-  },
-  {
-    name: "Custom Agent Build",
-    price: "from $7,500",
-    unit: "/project",
-    d: "One high-ROI process, scoped and automated end to end — discovery, build, deployment, and a trained team. Fixed scope, working software, no research project.",
-    cta: "Book a scoping call",
-    href: "#contact",
   },
   {
     name: "Engineer on Call",
@@ -109,6 +111,7 @@ export default function Home() {
           {BRAND.siteName}
         </a>
         <div className="hidden md:flex gap-5 text-[13px]" style={{ color: "var(--muted)" }}>
+          <a href="#unlocks" className="hover:opacity-80">The Unlocks</a>
           <a href="#services" className="hover:opacity-80">What I do</a>
           <a href="#tool" className="hover:opacity-80">The Audit</a>
           <a href="#packages" className="hover:opacity-80">Packages</a>
@@ -130,10 +133,11 @@ export default function Home() {
           <span style={{ color: "var(--accent)" }}>Be the answer.</span>
         </h1>
         <p className="mt-6 max-w-2xl text-[16px] leading-relaxed" style={{ color: "var(--muted)" }}>
-          ChatGPT, Perplexity, and Google&rsquo;s AI Overviews now answer your customers directly —
-          naming two or three businesses and ignoring the rest. I&rsquo;m an answer engineer: I get
-          owner-led businesses into those answers, onto page one, and then build the AI agents that
-          turn being found into being bought.
+          An answer engineer works both sides of the age of AI. The answers your customers see:
+          ChatGPT, Perplexity, and Google&rsquo;s AI Overviews name two or three businesses per
+          question — I make you one of them. And the answers your business runs on: the quoting,
+          reporting, and intake still done by hand — I build the custom agents that run them
+          continuously, so you scale without hiring for it.
         </p>
         <div className="mt-9 flex w-full max-w-xl gap-2 flex-wrap">
           <input
@@ -160,10 +164,11 @@ export default function Home() {
         <div className="card p-6 md:p-7" style={{ borderColor: "var(--series-4)" }}>
           <div className="text-[11px] mono tracking-[0.18em] mb-2" style={{ color: "var(--series-4)" }}>THE BLUNT VERSION</div>
           <p className="text-[15px] md:text-[16.5px] leading-relaxed max-w-4xl" style={{ color: "var(--ink)" }}>
-            AI didn&rsquo;t add a marketing channel — it replaced the doorway. Every month you&rsquo;re not in
-            the answers, an AI is telling your customers, by name, to buy from someone else. The businesses
-            leaning in now are compounding citations, rankings, and agent leverage that get harder to catch
-            every quarter. The rest are being summarized out of their own market.
+            AI didn&rsquo;t add a marketing channel — it replaced the doorway, and it&rsquo;s replacing the
+            back office. Every month you&rsquo;re not in the answers, an AI is telling your customers, by
+            name, to buy from someone else. And every week your team spends googling prices, assembling
+            reports, and retyping intake forms, a competitor&rsquo;s agents are doing the same work
+            continuously, for nearly nothing. Both gaps compound.
             <span style={{ color: "var(--accent)" }}> Lean in aggressively, or be left behind.</span>
           </p>
         </div>
@@ -185,12 +190,15 @@ export default function Home() {
         </div>
       </section>
 
+      {/* the unlocks — industry-by-industry agent builds, shown not told */}
+      <Unlocks />
+
       {/* services */}
       <section id="services" className="max-w-5xl mx-auto px-6 pb-16">
         <div className="text-[11px] mono tracking-[0.18em] mb-2" style={{ color: "var(--accent)" }}>WHAT AN ANSWER ENGINEER DOES</div>
-        <h2 className="text-3xl font-bold mb-2" style={{ color: "var(--ink)" }}>Engineer the answer. Then engineer the outcome.</h2>
+        <h2 className="text-3xl font-bold mb-2" style={{ color: "var(--ink)" }}>Engineer the outcome. Engineer the answer.</h2>
         <p className="text-[13.5px] mb-8 max-w-2xl" style={{ color: "var(--muted)" }}>
-          Answer engines decide who gets discovered; engineering decides who can scale what follows. I do both — that&rsquo;s the point.
+          Engineering decides how far you can scale; answer engines decide who gets discovered. I do both — that&rsquo;s the point.
         </p>
         <div className="flex flex-col gap-4">
           {SERVICES.map((s) => (
@@ -274,9 +282,9 @@ export default function Home() {
       <section className="max-w-5xl mx-auto px-6 pb-16">
         <div className="grid md:grid-cols-3 gap-3">
           {[
-            { n: "1", t: "Audit", d: "Free, live-data, priced in dollars — including the crawl-powered Journey Map. We walk it together for 30 minutes." },
-            { n: "2", t: "Engineer the plan", d: "A 90-day sequence ordered by payback — quick wins fund the bigger builds, citations compound on top." },
-            { n: "3", t: "Compound", d: "Sprints, agents, or advisory — re-measured monthly against the audit baseline, in the same dollars." },
+            { n: "1", t: "Start with evidence", d: "Visibility: the free audit, live-data, priced in dollars. Automation: a scoping call on the manual process costing you most." },
+            { n: "2", t: "Engineer the plan", d: "A sequence ordered by payback — quick wins fund the bigger builds, agents and citations compound on top." },
+            { n: "3", t: "Compound", d: "Builds, sprints, or advisory — re-measured monthly against the baseline, in the same dollars." },
           ].map((x) => (
             <div key={x.n} className="card p-5">
               <div className="text-[22px] font-extrabold mono" style={{ color: "var(--series-4)" }}>{x.n}</div>
@@ -329,9 +337,10 @@ export default function Home() {
                     className="outline-none text-sm rounded-lg px-3 py-3"
                     style={{ border: "1px solid var(--border)", color: "var(--ink)", background: "var(--surface-1)" }}>
                     <option value="not-sure">Not sure yet — let&rsquo;s talk</option>
-                    <option value="audit">Opportunity audit walkthrough</option>
+                    <option value="agents">Automating a manual process / agent build</option>
+                    <option value="agency-hub">Agent hub for my agency</option>
                     <option value="seo-geo">Getting into AI answers / SEO</option>
-                    <option value="agents">AI agents & automation</option>
+                    <option value="audit">Opportunity audit walkthrough</option>
                     <option value="advisory">Ongoing advisory</option>
                   </select>
                 </div>
