@@ -5,7 +5,7 @@ import { dataforseoConfigured } from "@/lib/audit/providers";
 import { buildAuditMaybeLive } from "@/lib/audit/live";
 import { latestReadyJourney } from "@/lib/audit/journey-store";
 
-export const maxDuration = 60;
+export const maxDuration = 300; // first live run can exceed 60s (providers + analyst pass)
 
 interface Props {
   params: Promise<{ domain: string }>;
