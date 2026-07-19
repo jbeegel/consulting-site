@@ -8,4 +8,7 @@ export const BRAND = {
   practiceFocus: "GEO · SEO · AI agents & automation",
   contact: "mailto:jbeegel@gmail.com",
   homeUrl: "/",
+  // Site identity — edit these two lines to rename the whole site.
+  siteName: "Beegel Advisory",
+  siteTagline: "Search visibility, AI answers, and AI agents for small & mid-sized businesses",
 };
