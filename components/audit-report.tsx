@@ -11,8 +11,11 @@
 // Server component; the only client children are the chart primitives.
 
 import { Bars, LineChart } from "@/components/charts";
+import JourneyPanel from "@/components/journey-map";
 import { PrintButton } from "@/components/print";
 import { BRAND } from "@/lib/brand";
+import { anthropicConfigured } from "@/lib/audit/analyst";
+import { firecrawlConfigured } from "@/lib/audit/crawl";
 import { fmtNum, fmtUsd } from "@/lib/audit/model";
 import type {
   OpportunityAudit,
@@ -510,6 +513,11 @@ export default function AuditDeep({ audit: a }: { audit: OpportunityAudit }) {
               </div>
             </div>
           ))}
+        </div>
+
+        {/* the deep pass — crawl-powered journey map (async job, client panel) */}
+        <div className="no-print">
+          <JourneyPanel domain={a.brand.domain} enabled={firecrawlConfigured() && anthropicConfigured()} />
         </div>
 
         {/* methodology */}

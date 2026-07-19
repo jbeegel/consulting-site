@@ -8,6 +8,7 @@
 import { PrintButton } from "@/components/print";
 import { BRAND } from "@/lib/brand";
 import { fmtNum, fmtUsd } from "@/lib/audit/model";
+import { JOURNEY_STAGES, type JourneyMap } from "@/lib/audit/journey-types";
 import type { OpportunityAudit } from "@/lib/audit/types";
 
 const C = {
@@ -68,10 +69,11 @@ function HBar({ value, max, color = C.accent }: { value: number; max: number; co
   );
 }
 
-export default function AuditDoc({ audit: a }: { audit: OpportunityAudit }) {
+export default function AuditDoc({ audit: a, journey }: { audit: OpportunityAudit; journey?: JourneyMap | null }) {
   const top = a.clusters[0];
   const maxOpp = Math.max(...a.topOpportunities.map((o) => o.monthly), 1);
   const quickWinTotal = a.quickWins.reduce((s, w) => s + w.monthlyUpside, 0);
+  const j = journey ?? null;
 
   return (
     <div style={{ background: "#ffffff", minHeight: "100vh", color: C.ink2, fontFamily: "IBM Plex Sans, system-ui, sans-serif" }}>
@@ -331,6 +333,142 @@ export default function AuditDoc({ audit: a }: { audit: OpportunityAudit }) {
             </tbody>
           </table>
         </Exhibit>
+
+        {/* Journey Map exhibits — present when the deep pass has been built */}
+        {j && (
+          <>
+            <div className="page-break" />
+            <Exhibit n={8}
+              title={`The site in ${j.inventory.pagesCrawled} pages: average content quality ${j.inventory.avgQuality}/100, AI-quotability ${j.inventory.avgAnswerability}/100`}
+              soWhat={j.inventory.read}>
+              <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 12 }}>
+                <thead><tr><th style={th}>Page type</th><th style={th}>Count</th><th style={th}>Share of site</th></tr></thead>
+                <tbody>
+                  {j.inventory.byType.map((t) => (
+                    <tr key={t.type}>
+                      <td style={tdStrong}>{t.type}</td>
+                      <td style={tdNum}>{t.count}</td>
+                      <td style={td}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <div style={{ flex: 1, height: 10, background: C.wash }}>
+                            <div style={{ width: `${Math.max(2, (t.count / j.inventory.pagesCrawled) * 100)}%`, height: 10, background: C.accent }} />
+                          </div>
+                          <span style={{ fontFamily: "IBM Plex Mono, monospace", fontSize: 11.5, color: C.ink, minWidth: 38, textAlign: "right" }}>
+                            {Math.round((t.count / j.inventory.pagesCrawled) * 100)}%
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p style={{ fontSize: 12, color: C.ink2, margin: 0 }}>
+                <strong style={{ color: C.good }}>Strongest page: </strong>{j.inventory.strongestPath}
+                <span style={{ margin: "0 10px", color: C.muted }}>·</span>
+                <strong style={{ color: C.bad }}>Weakest page that matters: </strong>{j.inventory.weakestPath}
+              </p>
+            </Exhibit>
+
+            <Exhibit n={9}
+              title={`${j.personas.length} buyer personas, four journey stages — ${j.grid.filter((g) => g.status === "missing").length} of ${j.grid.length} steps have no page serving them`}
+              soWhat={j.summary}>
+              <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 14 }}>
+                <thead><tr><th style={th}>Persona</th><th style={th}>Share</th><th style={th}>Who they are</th><th style={th}>Buying trigger</th></tr></thead>
+                <tbody>
+                  {j.personas.map((p) => (
+                    <tr key={p.id}>
+                      <td style={tdStrong}>{p.name}</td>
+                      <td style={tdNum}>{p.share}%</td>
+                      <td style={{ ...td, fontSize: 11.5 }}>{p.who}</td>
+                      <td style={{ ...td, fontSize: 11.5 }}>{p.buyingTrigger}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr>
+                    <th style={th}>Journey coverage</th>
+                    {JOURNEY_STAGES.map((s) => <th key={s.key} style={th}>{s.label}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {j.personas.map((p) => (
+                    <tr key={p.id}>
+                      <td style={tdStrong}>{p.name}</td>
+                      {JOURNEY_STAGES.map((s) => {
+                        const cell = j.grid.find((g) => g.personaId === p.id && g.stage === s.key);
+                        const color = cell?.status === "covered" ? C.good : cell?.status === "weak" ? "#996a00" : C.bad;
+                        return (
+                          <td key={s.key} style={{ ...tdNum, color, fontWeight: 700 }}>
+                            {(cell?.status ?? "—").toUpperCase()}
+                            <div style={{ fontWeight: 400, fontSize: 10, color: C.muted }}>
+                              {cell ? `${cell.terms.length} terms · ${cell.pagePaths.length} pages` : ""}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Exhibit>
+
+            <Exhibit n={10}
+              title={`Every audited term routed to a page: ${j.assignments.filter((x) => x.action === "create").length} to create, ${j.assignments.filter((x) => x.action === "optimize").length} to optimize, ${j.assignments.filter((x) => x.action === "consolidate").length} to consolidate`}
+              soWhat={`The ${j.assignments.length} assignments below are the content plan in executable form — the top rows by demand are shown; the full routing table is in the Excel workbook.`}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead><tr><th style={th}>Term</th><th style={th}>Demand/mo</th><th style={th}>Action</th><th style={th}>Target page</th><th style={th}>What to do</th></tr></thead>
+                <tbody>
+                  {j.assignments.slice(0, 18).map((x) => (
+                    <tr key={`${x.term}-${x.targetPath}`}>
+                      <td style={tdStrong}>{x.kind === "prompt" ? `“${x.term}”` : x.term}{x.kind === "prompt" && <div style={{ fontWeight: 400, fontSize: 9.5, color: C.accent }}>AI PROMPT</div>}</td>
+                      <td style={tdNum}>{x.volume > 0 ? fmtNum(x.volume) : ""}{x.aiVolume > 0 ? `${x.volume > 0 ? " + " : ""}${fmtNum(x.aiVolume)} AI` : x.volume === 0 ? "—" : ""}</td>
+                      <td style={{ ...tdNum, fontWeight: 700, color: x.action === "create" ? C.accent : x.action === "consolidate" ? "#996a00" : C.good }}>{x.action.toUpperCase()}</td>
+                      <td style={{ ...td, fontFamily: "IBM Plex Mono, monospace", fontSize: 10.5 }}>{x.targetPath}<div style={{ fontFamily: "IBM Plex Sans, sans-serif", fontSize: 10.5, color: C.muted }}>{x.targetTitle}</div></td>
+                      <td style={{ ...td, fontSize: 11 }}>{x.detail}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Exhibit>
+
+            <Exhibit n={11}
+              title={`The capture ramp: ${fmtUsd(j.forecast.yearOneCumulative.base)} of incremental revenue in year one (base), reaching ${fmtUsd(j.forecast.steadyState.base)}/mo`}
+              soWhat={j.forecast.note || j.forecast.methodology[0]}>
+              <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 10 }}>
+                <thead><tr>
+                  <th style={th}>Scenario</th>
+                  {[2, 5, 8, 11].map((i) => <th key={i} style={th}>{j.forecast.points[i].month}</th>)}
+                  <th style={th}>Steady state</th><th style={th}>Year-one total</th>
+                </tr></thead>
+                <tbody>
+                  {([
+                    ["Conservative", "conservative"],
+                    ["Base", "base"],
+                    ["Aggressive", "aggressive"],
+                  ] as const).map(([label, k]) => (
+                    <tr key={k}>
+                      <td style={k === "base" ? { ...tdStrong } : td}>{label}</td>
+                      {[2, 5, 8, 11].map((i) => (
+                        <td key={i} style={{ ...tdNum, fontWeight: k === "base" ? 700 : 400, color: k === "base" ? C.ink : C.ink2 }}>
+                          {fmtUsd(j.forecast.points[i][k])}
+                        </td>
+                      ))}
+                      <td style={{ ...tdNum, fontWeight: k === "base" ? 700 : 400 }}>{fmtUsd(j.forecast.steadyState[k])}/mo</td>
+                      <td style={{ ...tdNum, fontWeight: k === "base" ? 700 : 400 }}>{fmtUsd(j.forecast.yearOneCumulative[k])}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <ul style={{ margin: 0, paddingLeft: 16 }}>
+                {j.forecast.methodology.map((m) => (
+                  <li key={m} style={{ fontSize: 10.5, lineHeight: 1.6, color: C.muted, marginBottom: 3 }}>{m}</li>
+                ))}
+              </ul>
+            </Exhibit>
+          </>
+        )}
 
         {/* the ask */}
         <section style={{ marginTop: 40, background: C.wash, borderTop: `3px solid ${C.ink}`, padding: "18px 20px" }}>

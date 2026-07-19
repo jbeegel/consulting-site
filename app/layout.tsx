@@ -3,7 +3,7 @@ import { BRAND } from "@/lib/brand";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: `${BRAND.siteName} — Search, AI answers & AI agents for SMBs`,
+  title: `${BRAND.siteName} — Be the answer in AI search`,
   description: BRAND.siteTagline,
 };
 
