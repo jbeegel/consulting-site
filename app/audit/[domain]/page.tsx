@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
-import AuditReport from "@/components/audit-report";
+import AuditExplorer from "@/components/audit-explorer";
 import { buildMarketProfile, normalizeDomain } from "@/lib/core/market";
+import { anthropicConfigured } from "@/lib/audit/analyst";
+import { firecrawlConfigured } from "@/lib/audit/crawl";
 import { dataforseoConfigured } from "@/lib/audit/providers";
 import { buildAuditMaybeLive } from "@/lib/audit/live";
 
@@ -25,5 +27,10 @@ export default async function AuditDomainPage({ params, searchParams }: Props) {
   // moment. ?live=0 forces demo, ?live=1 forces live. Results cache 6h.
   const useLive = live === "0" ? false : live === "1" ? true : dataforseoConfigured();
   const audit = await buildAuditMaybeLive(normalized, useLive);
-  return <AuditReport audit={audit} />;
+  return (
+    <AuditExplorer
+      audit={audit}
+      journeyEnabled={firecrawlConfigured() && anthropicConfigured()}
+    />
+  );
 }
