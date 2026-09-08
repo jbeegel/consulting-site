@@ -147,6 +147,26 @@ def test_claude_valuer_parsing(settings, monkeypatch):
     v = valuer.value({"id": 5, "title": "G) vintage knic knacs", "description": "", "quantity": 1, "pictures": ["u1", "u2", "u3"]})
     assert v.images_used == 3 and isinstance(seen["content"], list) and sum(b["type"] == "image" for b in seen["content"]) == 3
 
+    # cards: the main range must be RAW; a graded number sneaking in is reset to grading.raw_value
+    graded = json.loads(FakeResp.content[1].text)
+    graded.update({"resale_low": 800, "resale_mid": 1200, "resale_high": 1500,
+                   "grading": {"applicable": True, "card": {"year": "1989", "set": "Upper Deck", "card_number": "1", "player_or_subject": "Griffey", "parallel_or_variation": "base", "rookie": True},
+                               "condition": {"centering": "", "corners": "", "edges": "", "surface": "", "notes": "", "photo_quality": "limited"},
+                               "grade_probabilities": {"psa10": 0.05, "psa9": 0.35, "psa8": 0.4, "psa7_or_below": 0.2}, "predicted_grade": "PSA 8",
+                               "graded_comps": [], "pop": {"psa_total": 1, "psa_10": 0, "psa_9": 0, "note": ""}, "raw_value": 35, "recommended_grader": "PSA", "grading_notes": ""}})
+
+    class FakeResp2(FakeResp):
+        content = [FakeBlock("text", json.dumps(graded))]
+
+    class FakeMessages3(FakeMessages):
+        def create(self, **kw):
+            assert kw["tools"][0]["max_uses"] == 5  # cards get the deeper pass
+            return FakeResp2()
+
+    valuer.client = type("C", (), {"messages": FakeMessages3()})()
+    v = valuer.value({"id": 7, "title": "1989 Upper Deck Ken Griffey Jr #1 rookie", "description": "", "quantity": 1})
+    assert v.grading and v.mid == 35 and v.low == 28 and "raw" in v.confidence_reason
+
     # pipeline uses the injected valuer and caches by title
     store = Store(settings.db_path)
     pipe = ValuationPipeline(settings, store, claude_valuer=valuer)

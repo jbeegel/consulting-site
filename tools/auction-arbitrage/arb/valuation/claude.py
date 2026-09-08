@@ -254,6 +254,8 @@ THIS LOT IS A TRADING CARD. Do the full grading analysis (schema field `grading`
    PSA 10 prices. Beckett (BGS 9.5 / Black Label) and SGC where they trade higher for that era.
 6. Give the raw (ungraded) value, the recommended grader, and what to verify in hand before submitting
    (trimming, re-coloring, reprints, print lines that photos hide).
+7. resale_low / resale_mid / resale_high MUST be the RAW (ungraded) sale value of the card as it sits. Never
+   put a graded price in the main range; grading upside lives only in the `grading` field.
 You may use up to 5 web searches for a card."""
 
 
@@ -373,6 +375,12 @@ class ClaudeValuer:
         v.items = [i for i in (data.get("items") or []) if isinstance(i, dict) and i.get("name")]
         g = data.get("grading")
         v.grading = g if isinstance(g, dict) and g.get("applicable") else None
+        # Everything upstream (score, spread, radar) evaluates RAW. If the model slipped a graded price into
+        # the main range, pull it back to its own raw_value and say so.
+        if v.grading and float(v.grading.get("raw_value") or 0) > 0 and v.mid and v.mid > float(v.grading["raw_value"]) * 1.25:
+            raw = float(v.grading["raw_value"])
+            v.low, v.mid, v.high = raw * 0.8, raw, raw * 1.25
+            v.confidence_reason = (v.confidence_reason + " " if v.confidence_reason else "") + "Main range reset to the raw (ungraded) value; graded prices are in the grading section."
         v.standout_item = data.get("standout_item", "") or ""
         lst = data.get("listing")
         if isinstance(lst, dict) and lst.get("title"):
