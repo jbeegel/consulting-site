@@ -1,0 +1,21 @@
+# Triggers a Spread Hunter scan every 15 minutes. Vercel's Hobby plan only allows daily crons, so this
+# workflow provides the frequent cadence. Set two repository secrets:
+#   SPREAD_CRON_URL   e.g. https://your-site.vercel.app/api/spread/cron
+#   CRON_SECRET       the same value as the CRON_SECRET env var on Vercel
+name: spread-hunter-cron
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 7
+    steps:
+      - name: Trigger scan
+        env:
+          URL: ${{ secrets.SPREAD_CRON_URL }}
+          SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$SECRET" ]; then echo "SPREAD_CRON_URL / CRON_SECRET secrets not set; skipping"; exit 0; fi
+          curl -sS --max-time 330 -H "Authorization: Bearer $SECRET" "$URL" | head -c 2000

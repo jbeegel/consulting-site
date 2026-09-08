@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "prebuild": "node scripts/sync-spread-ui.mjs",
+    "spread:sync": "node scripts/sync-spread-ui.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.112.3",

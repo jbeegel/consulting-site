@@ -128,6 +128,13 @@ without polling and is the natural next step if you find yourself refreshing a l
 * Image-based identification (send the lot photo to the model) for vaguely titled lots.
 * Track outcomes: record price realized after close and grade the valuer's calibration over time.
 
+## Hosted version
+
+The same scanner, valuer, scoring and dashboard are ported to TypeScript under `lib/spread/` + `app/api/spread/` in this
+repo and deploy with the consulting site on Vercel (`/spread`). It stores in Supabase, runs on a schedule, and sends
+alerts. Setup is in the root README. This Python CLI stays useful for local, residential-IP scanning if the hosted
+scanner gets blocked, or for cheap bulk experiments.
+
 ## Development
 
 ```bash
