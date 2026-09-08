@@ -223,8 +223,82 @@ def why_upside(lot: dict[str, Any], val: dict[str, Any], sc: dict[str, Any], s: 
         bits.append("Plenty of time left; expect the price to rise near close.")
     if val.get("standout_item"):
         bits.append(f"Standout piece: {val['standout_item']}.")
+    ge = grading_economics(val, sc, s)
+    if ge and ge["upside"] > 0:
+        bits.append(f"Grading upside: expected net ${ge['graded_net']:,.0f} graded vs ${ge['raw_net']:,.0f} raw "
+                    f"(+${ge['upside']:,.0f}, likely {ge['predicted_grade'] or 'PSA 8-9'}), recommendation: {ge['recommendation']}.")
     if val.get("value_drivers"):
         bits.append("Value drivers: " + "; ".join(val["value_drivers"][:3]) + ".")
     if val.get("risks"):
         bits.append("Watch for: " + "; ".join(val["risks"][:2]) + ".")
     return " ".join(bits)
+
+
+# ---------------------------------------------------------------------------
+# Grading economics (trading cards): EV of grading vs. selling raw
+# ---------------------------------------------------------------------------
+
+_GRADE_BUCKETS = ("10", "9", "8", "7-")
+
+
+def _bucket(grade: str) -> str | None:
+    m = re.search(r"(\d+(?:\.\d)?)", str(grade or ""))
+    if not m:
+        return None
+    g = float(m.group(1))
+    return "10" if g >= 9.5 else "9" if g >= 9 else "8" if g >= 8 else "7-"
+
+
+def grading_economics(val: dict[str, Any] | None, sc: dict[str, Any], s: Settings) -> dict[str, Any] | None:
+    """Expected net from grading (grade odds x price by grade, less fees) against the raw net."""
+    g = (val or {}).get("grading")
+    if not s.grading or not g or not g.get("applicable"):
+        return None
+    probs = g.get("grade_probabilities") or {}
+    p = {"10": float(probs.get("psa10") or 0), "9": float(probs.get("psa9") or 0),
+         "8": float(probs.get("psa8") or 0), "7-": float(probs.get("psa7_or_below") or 0)}
+    tot = sum(p.values())
+    if tot <= 0:
+        return None
+    p = {k: v / tot for k, v in p.items()}
+    # median graded price per bucket from the comps (PSA preferred, any grader otherwise)
+    by: dict[str, list[float]] = {b: [] for b in _GRADE_BUCKETS}
+    for c in g.get("graded_comps") or []:
+        b = _bucket(c.get("grade"))
+        if b and float(c.get("price") or 0) > 0:
+            by[b].append(float(c["price"]))
+    raw = float(g.get("raw_value") or (val or {}).get("mid") or 0)
+    prices: dict[str, float | None] = {}
+    for b in _GRADE_BUCKETS:
+        xs = sorted(by[b])
+        prices[b] = xs[len(xs) // 2] if xs else None
+    # fill gaps conservatively: a missing higher grade never exceeds the next known one below it is unknown -> raw
+    if prices["7-"] is None:
+        prices["7-"] = raw
+    if prices["8"] is None:
+        prices["8"] = max(raw, prices["7-"] or raw)
+    if prices["9"] is None:
+        prices["9"] = prices["8"]
+    if prices["10"] is None:
+        prices["10"] = prices["9"]
+    ev_gross = sum(p[b] * float(prices[b] or 0) for b in _GRADE_BUCKETS)
+    fee = s.resale_fee
+    graded_net = ev_gross * (1 - fee) - s.grading_fee - s.grading_ship - s.packaging_cost
+    raw_net = raw * (1 - fee) - s.packaging_cost
+    upside = graded_net - raw_net
+    photo_q = ((g.get("condition") or {}).get("photo_quality") or "limited")
+    if photo_q == "unusable":
+        rec = "inspect in hand"
+    elif upside > max(15.0, 0.25 * max(raw_net, 1.0)):
+        rec = "grade"
+    elif upside > 0 and (p["10"] + p["9"]) >= 0.5:
+        rec = "grade if it looks 9+ in hand"
+    else:
+        rec = "sell raw"
+    return {
+        "probabilities": p, "prices": prices, "ev_gross": ev_gross, "graded_net": graded_net, "raw_value": raw,
+        "raw_net": raw_net, "upside": upside, "grading_fee": s.grading_fee, "grading_ship": s.grading_ship,
+        "days": s.grading_days, "recommendation": rec, "predicted_grade": g.get("predicted_grade"),
+        "recommended_grader": g.get("recommended_grader"), "photo_quality": photo_q,
+        "profit_graded_vs_landed": graded_net - sc["landed_cost"],
+    }

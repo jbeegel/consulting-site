@@ -9,12 +9,26 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 import time
 from typing import Any
 
 import httpx
 
 from .base import Comp, Valuation, title_key
+
+_CARD_WORDS = re.compile(
+    r"\b(topps|bowman|fleer|upper deck|panini|donruss|o-?pee-?chee|leaf|prizm|select|optic|mosaic|chrome|refractor|"
+    r"rookie|\brc\b|psa|bgs|sgc|cgc|pokemon|pokémon|magic the gathering|mtg|yu-?gi-?oh|trading card|baseball card|"
+    r"football card|basketball card|hockey card|sports card|wax pack|graded card|slab)\b", re.I)
+
+
+def is_card(lot: dict[str, Any]) -> bool:
+    """Trading card lot? Title/category keywords; a bare '#123' only counts alongside a card word."""
+    text = f"{lot.get('title', '')} {lot.get('category_path', '')}"
+    if _CARD_WORDS.search(text):
+        return True
+    return bool(re.search(r"\bcards?\b", text, re.I) and re.search(r"\b(19|20)\d\d\b", text))
 
 log = logging.getLogger(__name__)
 
@@ -90,6 +104,41 @@ LISTING_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
+GRADING_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "description": "Trading-card grading analysis. applicable=false (and empty fields) for anything that is not a card.",
+    "properties": {
+        "applicable": {"type": "boolean"},
+        "card": {"type": "object", "properties": {
+            "year": {"type": "string"}, "set": {"type": "string"}, "card_number": {"type": "string"},
+            "player_or_subject": {"type": "string"}, "parallel_or_variation": {"type": "string"}, "rookie": {"type": "boolean"}},
+            "required": ["year", "set", "card_number", "player_or_subject", "parallel_or_variation", "rookie"], "additionalProperties": False},
+        "condition": {"type": "object", "properties": {
+            "centering": {"type": "string", "description": "e.g. '55/45 L/R, 60/40 T/B' or what the photo allows"},
+            "corners": {"type": "string"}, "edges": {"type": "string"}, "surface": {"type": "string"},
+            "notes": {"type": "string"}, "photo_quality": {"type": "string", "enum": ["good", "limited", "unusable"]}},
+            "required": ["centering", "corners", "edges", "surface", "notes", "photo_quality"], "additionalProperties": False},
+        "grade_probabilities": {"type": "object", "description": "probabilities that PSA would return each grade; sum to 1",
+            "properties": {"psa10": {"type": "number"}, "psa9": {"type": "number"}, "psa8": {"type": "number"}, "psa7_or_below": {"type": "number"}},
+            "required": ["psa10", "psa9", "psa8", "psa7_or_below"], "additionalProperties": False},
+        "predicted_grade": {"type": "string"},
+        "graded_comps": {"type": "array", "items": {"type": "object", "properties": {
+            "grader": {"type": "string"}, "grade": {"type": "string"}, "price": {"type": "number"},
+            "source": {"type": "string"}, "url": {"type": "string"}, "date": {"type": "string"}},
+            "required": ["grader", "grade", "price", "source", "url", "date"], "additionalProperties": False}},
+        "pop": {"type": "object", "properties": {
+            "psa_total": {"type": "integer"}, "psa_10": {"type": "integer"}, "psa_9": {"type": "integer"},
+            "note": {"type": "string", "description": "gem rate, pop trend, whether the pop suppresses prices"}},
+            "required": ["psa_total", "psa_10", "psa_9", "note"], "additionalProperties": False},
+        "raw_value": {"type": "number", "description": "what it sells for ungraded, USD"},
+        "recommended_grader": {"type": "string", "enum": ["PSA", "BGS", "SGC", "CGC", "none"]},
+        "grading_notes": {"type": "string", "description": "what to verify in hand before submitting; risks (trimming, print lines, reprints)"},
+    },
+    "required": ["applicable", "card", "condition", "grade_probabilities", "predicted_grade", "graded_comps", "pop",
+                 "raw_value", "recommended_grader", "grading_notes"],
+    "additionalProperties": False,
+}
+
 ITEM_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -111,6 +160,7 @@ SCHEMA: dict[str, Any] = {
         "items": {"type": "array", "items": ITEM_SCHEMA, "description": "every distinct item identified in the lot (one entry for a single-item lot)"},
         "standout_item": {"type": "string", "description": "the single most valuable item in the lot and why, or empty"},
         "listing": LISTING_SCHEMA,
+        "grading": GRADING_SCHEMA,
         "identified_item": {"type": "string"},
         "brand": {"type": "string"},
         "model": {"type": "string"},
@@ -150,7 +200,7 @@ SCHEMA: dict[str, Any] = {
     "required": ["identified_item", "brand", "model", "condition_assumption", "bulk_lot", "unit_count",
                  "resale_low", "resale_mid", "resale_high", "confidence", "confidence_reason", "demand",
                  "days_to_sell", "best_channel", "value_drivers", "risks", "rationale", "comps",
-                 "authenticity_risk", "search_query", "listing", "items", "standout_item"],
+                 "authenticity_risk", "search_query", "listing", "items", "standout_item", "grading"],
     "additionalProperties": False,
 }
 
@@ -185,6 +235,24 @@ def lot_image_urls(lot: dict[str, Any]) -> list[str]:
     return urls
 
 
+CARD_PROMPT = """
+THIS LOT IS A TRADING CARD. Do the full grading analysis (schema field `grading`, applicable=true):
+1. Identify the card exactly: year, set, card number, player/subject, parallel/variation, rookie or not.
+2. Read condition from the photos like a grader: centering (estimate left/right and top/bottom ratios),
+   corners (sharp / soft / dinged / rounded), edges (clean / chipping / rough cut), surface (print lines,
+   scratches, stains, wax, creases, snow). Say when the photo cannot show something.
+3. Turn that into PSA grade probabilities (10 / 9 / 8 / 7-or-below) that sum to 1. Be honest: most raw
+   vintage cards are 5-7s; modern pack-fresh cards split 9/10; print-defect-prone sets rarely gem.
+4. Search deeply for GRADED sales by grade: PSA Auction Prices Realized (psacard.com/auctionprices),
+   SportsCardsPro / PriceCharting (price by grade), 130point.com (eBay sold aggregator), eBay sold filtered
+   by 'PSA 10' / 'PSA 9' / 'PSA 8', Goldin/Heritage for high-end. Record grader, grade, price, source, URL, date.
+5. Check the PSA population report (psacard.com/pop) and note the gem rate and whether a huge pop caps
+   PSA 10 prices. Beckett (BGS 9.5 / Black Label) and SGC where they trade higher for that era.
+6. Give the raw (ungraded) value, the recommended grader, and what to verify in hand before submitting
+   (trimming, re-coloring, reprints, print lines that photos hide).
+You may use up to 5 web searches for a card."""
+
+
 def _lot_prompt(lot: dict[str, Any], comps: list[Comp]) -> str:
     desc = (lot.get("description") or "").strip()
     if len(desc) > 2500:
@@ -204,6 +272,8 @@ def _lot_prompt(lot: dict[str, Any], comps: list[Comp]) -> str:
         for c in comps[:15]:
             parts.append(f"- ${c.price:,.2f} | {c.title} | {c.date} | {c.url}")
     parts.append("Search the web for sold comps if the evidence above is thin or ambiguous, then return the appraisal.")
+    if is_card(lot):
+        parts.append(CARD_PROMPT)
     return "\n".join(parts)
 
 
@@ -229,7 +299,7 @@ class ClaudeValuer:
         self.vision = vision
         self.max_images = max_images
 
-    def _request(self, messages: list[dict[str, Any]]):
+    def _request(self, messages: list[dict[str, Any]], max_searches: int | None = None):
         kwargs: dict[str, Any] = dict(
             model=self.model,
             max_tokens=8000,
@@ -238,7 +308,7 @@ class ClaudeValuer:
             output_config={"effort": self.effort, "format": {"type": "json_schema", "schema": SCHEMA}},
         )
         if self.web_search:
-            kwargs["tools"] = [{"type": "web_search_20260209", "name": "web_search", "max_uses": self.max_searches}]
+            kwargs["tools"] = [{"type": "web_search_20260209", "name": "web_search", "max_uses": max_searches or self.max_searches}]
         return self.client.messages.create(**kwargs)
 
     def value(self, lot: dict[str, Any], comps: list[Comp] | None = None) -> Valuation:
@@ -248,13 +318,14 @@ class ClaudeValuer:
         images = load_images(lot_image_urls(lot), self.max_images) if self.vision else []
         v.images_used = len(images)
         messages: list[dict[str, Any]] = [{"role": "user", "content": _lot_content(lot, comps, images)}]
+        searches = 5 if is_card(lot) else None  # cards get a deeper pass: APR, pop report, price-by-grade
         try:
-            resp = self._request(messages)
+            resp = self._request(messages, searches)
             for _ in range(3):  # server tools can pause a long turn; resume it
                 if resp.stop_reason != "pause_turn":
                     break
                 messages.append({"role": "assistant", "content": resp.content})
-                resp = self._request(messages)
+                resp = self._request(messages, searches)
             if resp.stop_reason == "refusal":
                 v.error = "model declined"
                 v.method = "none"
@@ -296,6 +367,8 @@ class ClaudeValuer:
         v.authenticity_risk = bool(data.get("authenticity_risk"))
         v.search_query = data.get("search_query", "")
         v.items = [i for i in (data.get("items") or []) if isinstance(i, dict) and i.get("name")]
+        g = data.get("grading")
+        v.grading = g if isinstance(g, dict) and g.get("applicable") else None
         v.standout_item = data.get("standout_item", "") or ""
         lst = data.get("listing")
         if isinstance(lst, dict) and lst.get("title"):

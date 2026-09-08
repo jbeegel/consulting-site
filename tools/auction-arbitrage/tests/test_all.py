@@ -189,3 +189,24 @@ def test_api_surface(settings):
         time.sleep(0.1)
     assert c.get("/api/scan/status").json()["status"]["phase"] == "done"
     store.close()
+
+
+def test_card_detection_and_grading_economics(settings):
+    from arb.valuation.claude import is_card
+    from arb.scoring import grading_economics
+    assert is_card({"title": "1989 Upper Deck Ken Griffey Jr #1 Rookie", "category_path": "Collectibles"})
+    assert is_card({"title": "Lot of 1987 Topps baseball cards", "category_path": ""})
+    assert not is_card({"title": "G) Noritake wall pocket", "category_path": "Collectibles > Decorative"})
+    assert not is_card({"title": "Lot 4811 misc tools", "category_path": "Tools"})
+    from arb.demo import DEMO_GRADING
+    g = next(iter(DEMO_GRADING.values()))
+    val = {"mid": 35.0, "grading": g}
+    sc = {"landed_cost": 5.0}
+    ge = grading_economics(val, sc, settings)
+    assert ge and ge["prices"]["10"] == 1180 or ge["prices"]["10"] == 1250
+    assert abs(sum(ge["probabilities"].values()) - 1) < 1e-9
+    ev = sum(ge["probabilities"][b] * ge["prices"][b] for b in ("10", "9", "8", "7-"))
+    assert abs(ge["ev_gross"] - ev) < 1e-6
+    assert ge["graded_net"] == ev * (1 - settings.resale_fee) - settings.grading_fee - settings.grading_ship - settings.packaging_cost
+    assert ge["upside"] > 0 and ge["recommendation"] == "grade"
+    assert grading_economics({"mid": 10.0, "grading": None}, sc, settings) is None

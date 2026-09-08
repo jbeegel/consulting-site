@@ -94,6 +94,39 @@ export interface LotItem {
   note: string;
 }
 
+export interface GradedComp { grader: string; grade: string; price: number; source: string; url: string; date: string }
+
+export interface GradingAnalysis {
+  applicable: boolean;
+  card: { year: string; set: string; card_number: string; player_or_subject: string; parallel_or_variation: string; rookie: boolean };
+  condition: { centering: string; corners: string; edges: string; surface: string; notes: string; photo_quality: "good" | "limited" | "unusable" };
+  grade_probabilities: { psa10: number; psa9: number; psa8: number; psa7_or_below: number };
+  predicted_grade: string;
+  graded_comps: GradedComp[];
+  pop: { psa_total: number; psa_10: number; psa_9: number; note: string };
+  raw_value: number;
+  recommended_grader: "PSA" | "BGS" | "SGC" | "CGC" | "none";
+  grading_notes: string;
+}
+
+export interface GradingEconomics {
+  probabilities: Record<"10" | "9" | "8" | "7-", number>;
+  prices: Record<"10" | "9" | "8" | "7-", number | null>;
+  ev_gross: number;
+  graded_net: number;
+  raw_value: number;
+  raw_net: number;
+  upside: number;
+  grading_fee: number;
+  grading_ship: number;
+  days: number;
+  recommendation: string;
+  predicted_grade: string | null;
+  recommended_grader: string | null;
+  photo_quality: string;
+  profit_graded_vs_landed: number;
+}
+
 export interface PricePoint {
   label: "quick" | "market" | "patient";
   price: number;
@@ -153,6 +186,7 @@ export interface Valuation {
   listing?: ListingPlan | null;
   items?: LotItem[];
   standout_item?: string;
+  grading?: GradingAnalysis | null;
   images_used?: number;
   model_used: string;
   created_at: number;
@@ -187,6 +221,7 @@ export interface Opportunity {
   score: Score;
   why: string;
   listing: ListingEconomics | null;
+  grading: GradingEconomics | null;
 }
 
 export interface ScanParams {

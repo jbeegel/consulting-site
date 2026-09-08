@@ -115,6 +115,9 @@ titles cost nothing. Start with `--max-value 20` and a tight `--hours 6` window 
 * **Dossier drawer** — photo, live bid & countdown, full cost breakdown, valuation range, *Why the upside* paragraph,
   value drivers, risks, comparable sales with links, listing description & photos, **Open on HiBid**, **eBay sold**
   search, **Refresh live**, **Re-value**.
+* **Grading upside** — for trading cards: photo condition read (centering, corners, edges, surface), PSA grade
+  probabilities, graded comps by grade (PSA APR, SportsCardsPro, 130point, eBay sold), pop report, and the
+  expected net of grading vs. selling raw (`ARB_GRADING_*`), with a recommendation.
 * **List it on eBay** — the appraisal also drafts the listing (80-char title, category, condition, item specifics,
   description) and three price points (quick / market / patient) with net after eBay fees (`ARB_EBAY_*`), shipping
   and packaging, and profit vs. landed cost. Copy buttons for the sell form.

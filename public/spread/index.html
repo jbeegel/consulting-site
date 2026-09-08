@@ -163,6 +163,18 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
 .items td.r{text-align:right;font-family:var(--mono);white-space:nowrap}
 .items tr.star td{background:var(--bg);font-weight:600}
 .items .mk{color:var(--ink-3);font-size:11px;display:block;font-weight:400}
+.grade{font-size:10px;background:var(--accent);color:var(--accent-ink);border-radius:3px;padding:1px 5px;margin-left:4px;vertical-align:middle;font-weight:600;font-family:var(--mono)}
+.gbars{display:grid;grid-template-columns:auto 1fr auto auto;gap:4px 10px;align-items:center;font-size:12px;margin-top:6px}
+.gbars .lbl{font-family:var(--mono);color:var(--ink-2)}
+.gbars .bar{height:8px;background:var(--bg-3);border-radius:4px;overflow:hidden}
+.gbars .bar i{display:block;height:100%;background:var(--accent)}
+.gbars .p,.gbars .v{font-family:var(--mono);text-align:right}
+.gev{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.gev .box{border:1px solid var(--line);border-radius:6px;padding:8px 10px;background:var(--bg)}
+.gev .box.rec{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.gev .amt{font-family:var(--mono);font-size:20px;font-weight:600}
+.cond{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:12px;margin-top:6px}
+.cond b{color:var(--ink-3);font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
 .sweet{font-size:10px;background:var(--good);color:#fff;border-radius:3px;padding:1px 5px;margin-left:4px;vertical-align:middle;font-weight:600;letter-spacing:.02em}
 .prices{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
 .price{border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:var(--bg)}
@@ -427,7 +439,7 @@ function renderTable(){
     return `<tr class="row" data-id="${l.id}">
       <td>${s.valued?`<span class="pill ${s.heat}" title="value ${Math.round(s.value_score||0)} × time ${Math.round((s.price_reliability||0)*100)}%">${Math.round(s.score)}</span>`:'<span class="pill unvalued">n/a</span>'}</td>
       <td>${s.valued?`<span class="radar ${radarOf(o)}">${radarOf(o)}</span>`:''}</td>
-      <td class="title"><div class="t">${esc(l.title)}${v.authenticity_risk?'<span class="flag" title="Authenticity risk flagged">auth</span>':''}${s.sweet_spot?'<span class="sweet" title="Penny lot: tiny landed cost, real resale">$→$$</span>':''}</div><div class="s">${esc(v.identified_item&&v.identified_item!==l.title?v.identified_item:'')}${l.bid_count===0?' · no bids':''}${l.estimate?' · est. '+esc(l.estimate):''}</div></td>
+      <td class="title"><div class="t">${esc(l.title)}${v.authenticity_risk?'<span class="flag" title="Authenticity risk flagged">auth</span>':''}${s.sweet_spot?'<span class="sweet" title="Penny lot: tiny landed cost, real resale">$→$$</span>':''}${o.grading&&o.grading.upside>0?`<span class="grade" title="Grading upside: ${esc(o.grading.recommendation)}">grade +${fmt(o.grading.upside)}</span>`:''}</div><div class="s">${esc(v.identified_item&&v.identified_item!==l.title?v.identified_item:'')}${l.bid_count===0?' · no bids':''}${l.estimate?' · est. '+esc(l.estimate):''}</div></td>
       <td>${esc(l.category)}</td>
       <td class="r num">${l.bid_count}</td>
       <td class="r num">${fmt(s.next_bid)}</td>
@@ -486,6 +498,18 @@ function renderDossier(o,loading){
     if(v.risks?.length||v.authenticity_risk)h+=`<h3>Risks</h3><ul>${v.authenticity_risk?'<li><b>Authenticity risk</b>: get it authenticated before relying on this value.</li>':''}${(v.risks||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
     if(v.comps?.length)h+=`<h3>Comparable sales (${v.comps.length})</h3><table class="comps">${v.comps.slice(0,12).map(cp=>`<tr><td>${cp.url?`<a href="${esc(cp.url)}" target="_blank" rel="noopener">${esc(cp.title)}</a>`:esc(cp.title)}${cp.note?`<div class="muted" style="font-size:11px">${esc(cp.note)}</div>`:''}</td><td class="muted" style="white-space:nowrap;font-size:11px">${esc(cp.source||'')}${cp.date?'<br>'+esc(cp.date):''}</td><td class="r">${fmt2(cp.price)}</td></tr>`).join('')}</table>`;
     if(v.error)h+=`<p class="muted">valuation note: ${esc(v.error)}</p>`;
+  }
+  const ge=o.grading,ga=v&&v.grading;
+  if(ge&&ga){
+    const B=[['10','PSA 10'],['9','PSA 9'],['8','PSA 8'],['7-','PSA ≤7']];const cd=ga.card||{},cn=ga.condition||{};
+    h+=`<h3>Grading upside <span class="method">· ${esc(ge.recommended_grader||'PSA')} · likely ${esc(ge.predicted_grade||'?')} · photos ${esc(ge.photo_quality)}</span></h3>`;
+    h+=`<div style="font-size:13px"><b>${esc([cd.year,cd.set,'#'+(cd.card_number||'?'),cd.player_or_subject].filter(Boolean).join(' '))}</b>${cd.parallel_or_variation&&cd.parallel_or_variation!=='base'?' · '+esc(cd.parallel_or_variation):''}${cd.rookie?' · rookie':''}</div>`;
+    h+=`<div class="cond"><b>Centering</b><span>${esc(cn.centering||'—')}</span><b>Corners</b><span>${esc(cn.corners||'—')}</span><b>Edges</b><span>${esc(cn.edges||'—')}</span><b>Surface</b><span>${esc(cn.surface||'—')}</span>${cn.notes?`<b>Notes</b><span>${esc(cn.notes)}</span>`:''}</div>`;
+    h+=`<div class="gbars">`+B.map(([k,l])=>`<span class="lbl">${l}</span><span class="bar"><i style="width:${Math.round((ge.probabilities[k]||0)*100)}%"></i></span><span class="p">${Math.round((ge.probabilities[k]||0)*100)}%</span><span class="v">${ge.prices[k]!=null?fmt(ge.prices[k]):'—'}</span>`).join('')+`</div>`;
+    const grade=ge.recommendation==='grade'||ge.recommendation.startsWith('grade if');
+    h+=`<div class="gev"><div class="box${grade?' rec':''}"><div class="tiny">Graded · ~${ge.days}d</div><div class="amt">${fmt(ge.graded_net)}</div><div class="muted" style="font-size:11px">EV ${fmt(ge.ev_gross)} − fees − ${fmt(ge.grading_fee)} grading − ${fmt(ge.grading_ship)} ship</div></div><div class="box${grade?'':' rec'}"><div class="tiny">Sell raw now</div><div class="amt">${fmt(ge.raw_net)}</div><div class="muted" style="font-size:11px">raw value ${fmt(ge.raw_value)} after fees</div></div></div>`;
+    h+=`<div class="fees"><b>${esc(ge.recommendation.charAt(0).toUpperCase()+ge.recommendation.slice(1))}.</b> Grading ${ge.upside>=0?'adds':'loses'} ${fmt(Math.abs(ge.upside))} expected; ${fmt(ge.profit_graded_vs_landed)} profit vs landed if graded.${ga.pop&&ga.pop.psa_total?` Pop: ${ga.pop.psa_total.toLocaleString()} PSA-graded, ${(ga.pop.psa_10||0).toLocaleString()} tens, ${(ga.pop.psa_9||0).toLocaleString()} nines.`:''}${ga.pop&&ga.pop.note?' '+esc(ga.pop.note):''}${ga.grading_notes?` <b>Before submitting:</b> ${esc(ga.grading_notes)}`:''}</div>`;
+    if(ga.graded_comps&&ga.graded_comps.length)h+=`<table class="comps" style="margin-top:6px">${ga.graded_comps.slice(0,10).map(cp=>`<tr><td><b>${esc(cp.grader)} ${esc(cp.grade)}</b> ${cp.url?`<a href="${esc(cp.url)}" target="_blank" rel="noopener">${esc(cp.source)}</a>`:esc(cp.source)}</td><td class="muted" style="font-size:11px;white-space:nowrap">${esc(cp.date||'')}</td><td class="r">${fmt2(cp.price)}</td></tr>`).join('')}</table>`;
   }
   const le=o.listing,lp=v&&v.listing;
   if(le&&le.points){

@@ -1,6 +1,6 @@
 // Turn (lot, valuation) into an opportunity: landed cost, net resale, spread, multiple, score, heat.
 import type { Config } from "./config";
-import type { ListingEconomics, Lot, PricePoint, Score, Valuation } from "./types";
+import type { GradingEconomics, ListingEconomics, Lot, PricePoint, Score, Valuation } from "./types";
 
 export const TIME_BUCKETS: [string, number][] = [
   ["<1h", 3600], ["1-3h", 3 * 3600], ["3-6h", 6 * 3600], ["6-12h", 12 * 3600],
@@ -103,6 +103,8 @@ export function whyUpside(lot: Lot, val: Valuation | null, sc: Score, c: Config)
     bits.push(`Still ${Math.floor(sc.seconds_left / 86400)}+ days out, so today's bid means little; it stays on the radar and the score climbs as the close approaches.`);
   else bits.push("Plenty of time left; expect the price to rise near close.");
   if (val.standout_item) bits.push(`Standout piece: ${val.standout_item}.`);
+  const ge = gradingEconomics(val, sc, c);
+  if (ge && ge.upside > 0) bits.push(`Grading upside: expected net ${money(ge.graded_net)} graded vs ${money(ge.raw_net)} raw (+${money(ge.upside)}, likely ${ge.predicted_grade || "PSA 8-9"}), recommendation: ${ge.recommendation}.`);
   if (val.value_drivers?.length) bits.push("Value drivers: " + val.value_drivers.slice(0, 3).join("; ") + ".");
   if (val.risks?.length) bits.push("Watch for: " + val.risks.slice(0, 2).join("; ") + ".");
   return bits.join(" ");
@@ -146,5 +148,52 @@ export function listingEconomics(lot: Lot, val: Valuation | null, sc: Score, c: 
     category: cat, fee_rate: ebayFeeRate(cat, c), shipping_cost: ship, buyer_pays_shipping: charged > 0,
     format: lst?.format || "fixed_price", best_offer_floor: lst?.best_offer_floor ?? null, auction_start: lst?.auction_start ?? null,
     points, recommended: "market",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Grading economics (trading cards): EV of grading vs. selling raw
+// ---------------------------------------------------------------------------
+type Bucket = "10" | "9" | "8" | "7-";
+const BUCKETS: Bucket[] = ["10", "9", "8", "7-"];
+
+function bucket(grade: string): Bucket | null {
+  const m = /(\d+(?:\.\d)?)/.exec(String(grade ?? ""));
+  if (!m) return null;
+  const g = Number(m[1]);
+  return g >= 9.5 ? "10" : g >= 9 ? "9" : g >= 8 ? "8" : "7-";
+}
+
+export function gradingEconomics(val: Valuation | null, sc: Score, c: Config): GradingEconomics | null {
+  const g = val?.grading;
+  if (!c.grading || !g || !g.applicable) return null;
+  const pr = g.grade_probabilities ?? { psa10: 0, psa9: 0, psa8: 0, psa7_or_below: 0 };
+  let p: Record<Bucket, number> = { "10": +pr.psa10 || 0, "9": +pr.psa9 || 0, "8": +pr.psa8 || 0, "7-": +pr.psa7_or_below || 0 };
+  const tot = BUCKETS.reduce((a, b) => a + p[b], 0);
+  if (tot <= 0) return null;
+  p = { "10": p["10"] / tot, "9": p["9"] / tot, "8": p["8"] / tot, "7-": p["7-"] / tot };
+  const by: Record<Bucket, number[]> = { "10": [], "9": [], "8": [], "7-": [] };
+  for (const cmp of g.graded_comps ?? []) {
+    const b = bucket(cmp.grade);
+    if (b && +cmp.price > 0) by[b].push(+cmp.price);
+  }
+  const raw = +g.raw_value || val?.mid || 0;
+  const prices: Record<Bucket, number | null> = { "10": null, "9": null, "8": null, "7-": null };
+  for (const b of BUCKETS) { const xs = by[b].sort((x, y) => x - y); prices[b] = xs.length ? xs[Math.floor(xs.length / 2)] : null; }
+  if (prices["7-"] === null) prices["7-"] = raw;
+  if (prices["8"] === null) prices["8"] = Math.max(raw, prices["7-"] ?? raw);
+  if (prices["9"] === null) prices["9"] = prices["8"];
+  if (prices["10"] === null) prices["10"] = prices["9"];
+  const evGross = BUCKETS.reduce((a, b) => a + p[b] * (prices[b] ?? 0), 0);
+  const gradedNet = evGross * (1 - c.resaleFee) - c.gradingFee - c.gradingShip - c.packagingCost;
+  const rawNet = raw * (1 - c.resaleFee) - c.packagingCost;
+  const upside = gradedNet - rawNet;
+  const photoQ = g.condition?.photo_quality ?? "limited";
+  const rec = photoQ === "unusable" ? "inspect in hand" : upside > Math.max(15, 0.25 * Math.max(rawNet, 1)) ? "grade" : upside > 0 && p["10"] + p["9"] >= 0.5 ? "grade if it looks 9+ in hand" : "sell raw";
+  return {
+    probabilities: p, prices, ev_gross: evGross, graded_net: gradedNet, raw_value: raw, raw_net: rawNet, upside,
+    grading_fee: c.gradingFee, grading_ship: c.gradingShip, days: c.gradingDays, recommendation: rec,
+    predicted_grade: g.predicted_grade ?? null, recommended_grader: g.recommended_grader ?? null, photo_quality: photoQ,
+    profit_graded_vs_landed: gradedNet - sc.landed_cost,
   };
 }

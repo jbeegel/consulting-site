@@ -1,7 +1,33 @@
 // Independent valuation with Claude + server-side web search. One request per lot. The lot's current
 // bid is deliberately NOT shown to the model so the estimate can't anchor on it.
 import Anthropic from "@anthropic-ai/sdk";
-import type { Comp, ListingPlan, LotItem, Lot, Valuation } from "../types";
+import type { Comp, GradingAnalysis, ListingPlan, LotItem, Lot, Valuation } from "../types";
+
+const CARD_WORDS = /\b(topps|bowman|fleer|upper deck|panini|donruss|o-?pee-?chee|leaf|prizm|select|optic|mosaic|chrome|refractor|rookie|rc|psa|bgs|sgc|cgc|pokemon|pokémon|magic the gathering|mtg|yu-?gi-?oh|trading card|baseball card|football card|basketball card|hockey card|sports card|wax pack|graded card|slab)\b/i;
+
+/** Trading card lot? Title/category keywords; a bare year only counts alongside the word "card". */
+export function isCard(lot: Lot): boolean {
+  const text = `${lot.title ?? ""} ${lot.category_path ?? ""}`;
+  if (CARD_WORDS.test(text)) return true;
+  return /\bcards?\b/i.test(text) && /\b(19|20)\d\d\b/.test(text);
+}
+
+const CARD_PROMPT = `
+THIS LOT IS A TRADING CARD. Do the full grading analysis (schema field \`grading\`, applicable=true):
+1. Identify the card exactly: year, set, card number, player/subject, parallel/variation, rookie or not.
+2. Read condition from the photos like a grader: centering (estimate left/right and top/bottom ratios),
+   corners (sharp / soft / dinged / rounded), edges (clean / chipping / rough cut), surface (print lines,
+   scratches, stains, wax, creases, snow). Say when the photo cannot show something.
+3. Turn that into PSA grade probabilities (10 / 9 / 8 / 7-or-below) that sum to 1. Be honest: most raw
+   vintage cards are 5-7s; modern pack-fresh cards split 9/10; print-defect-prone sets rarely gem.
+4. Search deeply for GRADED sales by grade: PSA Auction Prices Realized (psacard.com/auctionprices),
+   SportsCardsPro / PriceCharting (price by grade), 130point.com (eBay sold aggregator), eBay sold filtered
+   by 'PSA 10' / 'PSA 9' / 'PSA 8', Goldin/Heritage for high-end. Record grader, grade, price, source, URL, date.
+5. Check the PSA population report (psacard.com/pop) and note the gem rate and whether a huge pop caps
+   PSA 10 prices. Beckett (BGS 9.5 / Black Label) and SGC where they trade higher for that era.
+6. Give the raw (ungraded) value, the recommended grader, and what to verify in hand before submitting
+   (trimming, re-coloring, reprints, print lines that photos hide).
+You may use up to 5 web searches for a card.`;
 import { emptyValuation } from "./base";
 
 const SYSTEM = `You are a veteran secondary-market appraiser and reseller (eBay power seller, estate liquidator,
@@ -73,6 +99,25 @@ const LISTING_SCHEMA = {
   additionalProperties: false,
 } as const;
 
+const GRADING_SCHEMA = {
+  type: "object",
+  description: "Trading-card grading analysis. applicable=false (and empty fields) for anything that is not a card.",
+  properties: {
+    applicable: { type: "boolean" },
+    card: { type: "object", properties: { year: { type: "string" }, set: { type: "string" }, card_number: { type: "string" }, player_or_subject: { type: "string" }, parallel_or_variation: { type: "string" }, rookie: { type: "boolean" } }, required: ["year", "set", "card_number", "player_or_subject", "parallel_or_variation", "rookie"], additionalProperties: false },
+    condition: { type: "object", properties: { centering: { type: "string", description: "e.g. '55/45 L/R, 60/40 T/B' or what the photo allows" }, corners: { type: "string" }, edges: { type: "string" }, surface: { type: "string" }, notes: { type: "string" }, photo_quality: { type: "string", enum: ["good", "limited", "unusable"] } }, required: ["centering", "corners", "edges", "surface", "notes", "photo_quality"], additionalProperties: false },
+    grade_probabilities: { type: "object", description: "probabilities that PSA would return each grade; sum to 1", properties: { psa10: { type: "number" }, psa9: { type: "number" }, psa8: { type: "number" }, psa7_or_below: { type: "number" } }, required: ["psa10", "psa9", "psa8", "psa7_or_below"], additionalProperties: false },
+    predicted_grade: { type: "string" },
+    graded_comps: { type: "array", items: { type: "object", properties: { grader: { type: "string" }, grade: { type: "string" }, price: { type: "number" }, source: { type: "string" }, url: { type: "string" }, date: { type: "string" } }, required: ["grader", "grade", "price", "source", "url", "date"], additionalProperties: false } },
+    pop: { type: "object", properties: { psa_total: { type: "integer" }, psa_10: { type: "integer" }, psa_9: { type: "integer" }, note: { type: "string", description: "gem rate, pop trend, whether the pop suppresses prices" } }, required: ["psa_total", "psa_10", "psa_9", "note"], additionalProperties: false },
+    raw_value: { type: "number", description: "what it sells for ungraded, USD" },
+    recommended_grader: { type: "string", enum: ["PSA", "BGS", "SGC", "CGC", "none"] },
+    grading_notes: { type: "string", description: "what to verify in hand before submitting; risks (trimming, print lines, reprints)" },
+  },
+  required: ["applicable", "card", "condition", "grade_probabilities", "predicted_grade", "graded_comps", "pop", "raw_value", "recommended_grader", "grading_notes"],
+  additionalProperties: false,
+} as const;
+
 const ITEM_SCHEMA = {
   type: "object",
   properties: {
@@ -94,6 +139,7 @@ const SCHEMA = {
     items: { type: "array", items: ITEM_SCHEMA, description: "every distinct item identified in the lot (one entry for a single-item lot)" },
     standout_item: { type: "string", description: "the single most valuable item in the lot and why, or empty" },
     listing: LISTING_SCHEMA,
+    grading: GRADING_SCHEMA,
     identified_item: { type: "string" },
     brand: { type: "string" },
     model: { type: "string" },
@@ -123,7 +169,7 @@ const SCHEMA = {
     authenticity_risk: { type: "boolean" },
     search_query: { type: "string", description: "best eBay sold-listings search string for this item" },
   },
-  required: ["identified_item", "brand", "model", "condition_assumption", "bulk_lot", "unit_count", "resale_low", "resale_mid", "resale_high", "confidence", "confidence_reason", "demand", "days_to_sell", "best_channel", "value_drivers", "risks", "rationale", "comps", "authenticity_risk", "search_query", "listing", "items", "standout_item"],
+  required: ["identified_item", "brand", "model", "condition_assumption", "bulk_lot", "unit_count", "resale_low", "resale_mid", "resale_high", "confidence", "confidence_reason", "demand", "days_to_sell", "best_channel", "value_drivers", "risks", "rationale", "comps", "authenticity_risk", "search_query", "listing", "items", "standout_item", "grading"],
   additionalProperties: false,
 } as const;
 
@@ -176,6 +222,7 @@ function lotPrompt(lot: Lot, comps: Comp[]): string {
     for (const c of comps.slice(0, 15)) parts.push(`- $${c.price.toFixed(2)} | ${c.title} | ${c.source}${c.note ? " (" + c.note + ")" : ""} | ${c.date} | ${c.url}`);
   }
   parts.push("Search the web for sold comps if the evidence above is thin or ambiguous, then return the appraisal.");
+  if (isCard(lot)) parts.push(CARD_PROMPT);
   return parts.join("\n");
 }
 
@@ -183,7 +230,7 @@ export class ClaudeValuer {
   private client = new Anthropic();
   constructor(private model: string, private webSearch = true, private maxSearches = 3, private vision = true, private maxImages = 4) {}
 
-  private request(messages: Anthropic.MessageParam[]) {
+  private request(messages: Anthropic.MessageParam[], maxSearches = this.maxSearches) {
     const params: Anthropic.MessageCreateParamsNonStreaming = {
       model: this.model,
       max_tokens: 8000,
@@ -191,7 +238,7 @@ export class ClaudeValuer {
       messages,
       output_config: { effort: "medium", format: { type: "json_schema", schema: SCHEMA as unknown as Record<string, unknown> } },
     };
-    if (this.webSearch) params.tools = [{ type: "web_search_20260209", name: "web_search", max_uses: this.maxSearches }];
+    if (this.webSearch) params.tools = [{ type: "web_search_20260209", name: "web_search", max_uses: maxSearches }];
     return this.client.messages.create(params);
   }
 
@@ -207,11 +254,12 @@ export class ClaudeValuer {
     const messages: Anthropic.MessageParam[] = [{ role: "user", content }];
     let data: Record<string, unknown>;
     let searched = false;
+    const searches = isCard(lot) ? 5 : this.maxSearches; // cards get a deeper pass: APR, pop report, price-by-grade
     try {
-      let resp = await this.request(messages);
+      let resp = await this.request(messages, searches);
       for (let i = 0; i < 3 && resp.stop_reason === "pause_turn"; i++) {
         messages.push({ role: "assistant", content: resp.content });
-        resp = await this.request(messages);
+        resp = await this.request(messages, searches);
       }
       if (resp.stop_reason === "refusal") {
         v.error = "model declined";
@@ -246,6 +294,8 @@ export class ClaudeValuer {
     v.search_query = s("search_query");
     v.items = Array.isArray(data.items) ? (data.items as LotItem[]).filter((i) => i && typeof i === "object" && i.name) : [];
     v.standout_item = s("standout_item");
+    const g = data.grading as GradingAnalysis | undefined;
+    v.grading = g && typeof g === "object" && g.applicable ? g : null;
     const lst = data.listing as ListingPlan | undefined;
     if (lst && typeof lst === "object" && lst.title) v.listing = { ...lst, title: String(lst.title).slice(0, 80) };
     v.method = this.webSearch && searched ? "claude+web" : "claude";

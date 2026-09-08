@@ -82,8 +82,31 @@ CATALOG: list[tuple] = [
     ("G) VINTAGE Metal Calendar Bank - CITIZENS BANK", "Collectibles > Advertising", 20, 45, "medium", ["Advertising still banks with working calendar are a niche", "Local bank collectors"], ["Missing key, stuck calendar"], False, ""),
     ("G) cast plaster native wall hanging 1940's", "Collectibles > Decorative", 25, 60, "medium", ["1940s chalkware wall plaques sold in pairs do well"], ["Chips in plaster are hard to hide"], False, ""),
     ("G) YOUNG Folks SPEAKER 1882 Hardcover", "Books > Antiquarian & Collectible", 15, 35, "low", ["Decorative Victorian binding"], ["Foxing, loose hinges"], False, ""),
+    ("1989 Upper Deck Ken Griffey Jr. #1 Rookie Card RC raw", "Collectibles > Trading Cards > Baseball", 25, 45, "high", ["The iconic junk-wax rookie; liquid at every grade", "Pack-fresh copies gem at a low rate but PSA 10s clear $1,000+"], ["Massive population; only a 9 or 10 moves the needle", "Counterfeits and trimmed copies exist"], False, ""),
     ("G) vintage antique knic knacs", "Collectibles > Decorative", 70, 120, "medium", ["One Deruta Italy hand-painted majolica mini vase carries the lot", "Delft and drip-glaze miniatures sell in groups"], ["Chips on the black glass vase feet", "Shell-art souvenir is near worthless"], False, ""),
 ]
+
+DEMO_GRADING = {
+    "1989 Upper Deck Ken Griffey Jr. #1 Rookie Card RC raw": {
+        "applicable": True,
+        "card": {"year": "1989", "set": "Upper Deck", "card_number": "1", "player_or_subject": "Ken Griffey Jr.", "parallel_or_variation": "base", "rookie": True},
+        "condition": {"centering": "~55/45 L/R, ~60/40 T/B from the front scan", "corners": "sharp at 3; top-left slightly soft", "edges": "clean, no chipping visible", "surface": "no print lines visible; gloss intact; back not shown", "notes": "Back photo needed to rule out the common back-centering issue.", "photo_quality": "limited"},
+        "grade_probabilities": {"psa10": 0.04, "psa9": 0.33, "psa8": 0.40, "psa7_or_below": 0.23},
+        "predicted_grade": "PSA 8",
+        "graded_comps": [
+            {"grader": "PSA", "grade": "10", "price": 1250, "source": "PSA APR (demo)", "url": "https://www.psacard.com/auctionprices", "date": "Aug 2026"},
+            {"grader": "PSA", "grade": "10", "price": 1180, "source": "eBay sold (demo)", "url": "https://www.ebay.com/sch/i.html?_nkw=1989+upper+deck+griffey+psa+10&LH_Sold=1&LH_Complete=1", "date": "Aug 2026"},
+            {"grader": "PSA", "grade": "9", "price": 115, "source": "130point (demo)", "url": "https://130point.com/sales/", "date": "Aug 2026"},
+            {"grader": "PSA", "grade": "9", "price": 105, "source": "eBay sold (demo)", "url": "https://www.ebay.com/sch/i.html?_nkw=1989+upper+deck+griffey+psa+9&LH_Sold=1&LH_Complete=1", "date": "Jul 2026"},
+            {"grader": "PSA", "grade": "8", "price": 48, "source": "SportsCardsPro (demo)", "url": "https://www.sportscardspro.com/", "date": "Aug 2026"},
+            {"grader": "PSA", "grade": "7", "price": 30, "source": "eBay sold (demo)", "url": "https://www.ebay.com/sch/i.html?_nkw=1989+upper+deck+griffey+psa+7&LH_Sold=1&LH_Complete=1", "date": "Aug 2026"},
+        ],
+        "pop": {"psa_total": 118000, "psa_10": 4600, "psa_9": 46000, "note": "Gem rate ~4%; enormous pop caps PSA 9 at ~$110 but PSA 10 holds four figures on demand."},
+        "raw_value": 35,
+        "recommended_grader": "PSA",
+        "grading_notes": "Check back centering and for the '1989' print snow; measure for trimming (2.5 x 3.5 in); confirm the hologram on the back.",
+    }
+}
 
 DEMO_ITEMS = {
     "G) vintage antique knic knacs": [
@@ -179,6 +202,7 @@ def make_demo(seed: int = 7, now: float | None = None) -> tuple[list[dict[str, A
                 "comps": comps, "search_query": title, "authenticity_risk": auth, "bulk_lot": False, "unit_count": 1,
                 "sources_consulted": ["ebay_sold (demo)"], "model_used": "demo", "created_at": now, "error": "",
                 "items": DEMO_ITEMS.get(title, []),
+                "grading": DEMO_GRADING.get(title),
                 "standout_item": DEMO_ITEMS[title][0]["name"] if title in DEMO_ITEMS else "",
                 "images_used": 3 if title in DEMO_ITEMS else 0,
                 "listing": {
