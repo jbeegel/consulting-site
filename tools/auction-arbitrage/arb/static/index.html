@@ -1,0 +1,452 @@
+<title>Spread Hunter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f5f4ef; --bg-2:#ffffff; --bg-3:#ecebe4; --line:#d9d7cd; --line-2:#c4c1b4;
+  --ink:#1b1a17; --ink-2:#55534b; --ink-3:#8b887c;
+  --accent:#2c5c8a; --accent-ink:#ffffff; --accent-soft:#dbe7f3;
+  --heat-0:#efeee7; --heat-1:#fbe4bf; --heat-2:#f4b459; --heat-3:#dd7a19; --heat-4:#9c3f0a;
+  --good:#1f7a4d; --warn:#b3690c; --bad:#b3362b;
+  --shadow:0 12px 40px rgba(27,26,23,.18);
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#15161a; --bg-2:#1d1f24; --bg-3:#24272d; --line:#33363d; --line-2:#474b54;
+    --ink:#ecebe4; --ink-2:#b4b2a8; --ink-3:#7f7d74;
+    --accent:#6ea3d8; --accent-ink:#0f1a26; --accent-soft:#22324a;
+    --heat-0:#262830; --heat-1:#5b4626; --heat-2:#9a6a1f; --heat-3:#e0852a; --heat-4:#ffb15c;
+    --good:#4fc082; --warn:#e3a13a; --bad:#ef7a6c;
+    --shadow:0 12px 40px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#15161a; --bg-2:#1d1f24; --bg-3:#24272d; --line:#33363d; --line-2:#474b54;
+  --ink:#ecebe4; --ink-2:#b4b2a8; --ink-3:#7f7d74;
+  --accent:#6ea3d8; --accent-ink:#0f1a26; --accent-soft:#22324a;
+  --heat-0:#262830; --heat-1:#5b4626; --heat-2:#9a6a1f; --heat-3:#e0852a; --heat-4:#ffb15c;
+  --good:#4fc082; --warn:#e3a13a; --bad:#ef7a6c;
+  --shadow:0 12px 40px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans);-webkit-font-smoothing:antialiased}
+a{color:var(--accent)}
+button,input,select{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.muted{color:var(--ink-2)}
+.tiny{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+
+/* ---------- top bar */
+header{position:sticky;top:0;z-index:20;background:var(--bg-2);border-bottom:1px solid var(--line)}
+.bar{display:flex;align-items:center;gap:20px;padding:10px 20px;flex-wrap:wrap}
+.brand{display:flex;align-items:baseline;gap:10px}
+.brand h1{margin:0;font-size:17px;font-weight:700;letter-spacing:-.01em}
+.brand span{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.kpis{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap}
+.kpi{padding:6px 12px;border:1px solid var(--line);border-radius:6px;background:var(--bg);min-width:96px}
+.kpi b{display:block;font-family:var(--mono);font-size:18px;font-weight:600;line-height:1.1}
+.kpi small{display:block;font-size:11px;color:var(--ink-3);margin-top:2px}
+.scan{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.scan input,.scan select{background:var(--bg);border:1px solid var(--line-2);border-radius:5px;padding:5px 8px;width:92px}
+.scan input.wide{width:160px}
+.btn{border:1px solid var(--line-2);background:var(--bg);border-radius:5px;padding:6px 12px;font-weight:500}
+.btn:hover{border-color:var(--accent)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn:disabled{opacity:.5;cursor:default}
+.status{font-family:var(--mono);font-size:12px;color:var(--ink-2);flex-basis:100%;display:flex;gap:14px;align-items:center;min-height:18px}
+.status .dot{width:8px;height:8px;border-radius:50%;background:var(--ink-3);display:inline-block;margin-right:6px}
+.status .dot.live{background:var(--good);animation:pulse 1.2s infinite}
+@keyframes pulse{50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){.status .dot.live{animation:none}}
+.banner{background:var(--accent-soft);color:var(--ink);padding:8px 20px;font-size:13px;border-bottom:1px solid var(--line)}
+
+/* ---------- layout */
+.wrap{display:grid;grid-template-columns:230px 1fr;gap:0;min-height:calc(100vh - 60px)}
+aside{border-right:1px solid var(--line);padding:16px;background:var(--bg-2)}
+main{padding:16px 20px;min-width:0}
+.filters h3{margin:14px 0 6px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:5px}
+.chip{border:1px solid var(--line-2);background:var(--bg);border-radius:999px;padding:3px 9px;font-size:12px;display:inline-flex;align-items:center;gap:6px}
+.chip.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.chip .n{font-family:var(--mono);font-size:10px;opacity:.7}
+.chip .hot{width:7px;height:7px;border-radius:50%;background:var(--heat-3);display:inline-block}
+.range{display:flex;align-items:center;gap:8px}
+.range input{flex:1}
+.search{width:100%;background:var(--bg);border:1px solid var(--line-2);border-radius:5px;padding:6px 8px}
+.toggle{display:flex;align-items:center;gap:8px;font-size:13px;margin-top:8px}
+.legend{display:flex;gap:4px;align-items:center;margin-top:10px;font-size:11px;color:var(--ink-3)}
+.legend i{width:16px;height:10px;display:inline-block;border-radius:2px}
+
+/* ---------- viz row */
+.viz{display:grid;grid-template-columns:minmax(320px,1fr) minmax(360px,1.3fr);gap:16px;margin-bottom:16px}
+@media (max-width:1100px){.viz{grid-template-columns:1fr}.wrap{grid-template-columns:1fr}aside{border-right:0;border-bottom:1px solid var(--line)}}
+.panel{background:var(--bg-2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}
+.panel h2{margin:0 0 2px;font-size:13px;font-weight:600}
+.panel p.sub{margin:0 0 10px;font-size:12px;color:var(--ink-3)}
+.hm{overflow-x:auto}
+.hm table{border-collapse:separate;border-spacing:3px;width:100%}
+.hm th{font-size:11px;font-weight:500;color:var(--ink-3);text-align:center;padding:2px 0;font-family:var(--mono)}
+.hm th.row{text-align:left;white-space:nowrap;max-width:150px;overflow:hidden;text-overflow:ellipsis;font-family:var(--sans);color:var(--ink-2)}
+.hm td{height:30px;text-align:center;border-radius:4px;font-family:var(--mono);font-size:11px;cursor:pointer;color:var(--ink);border:1px solid transparent}
+.hm td:hover{border-color:var(--ink)}
+.hm td.sel{outline:2px solid var(--accent);outline-offset:-2px}
+.hm td.h4,.hm td.h3{color:#fff}
+:root[data-theme="dark"] .hm td.h4,:root[data-theme="dark"] .hm td.h3{color:#15161a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .hm td.h4,:root:not([data-theme="light"]) .hm td.h3{color:#15161a}}
+.h0{background:var(--heat-0)}.h1{background:var(--heat-1)}.h2{background:var(--heat-2)}.h3{background:var(--heat-3)}.h4{background:var(--heat-4)}
+svg{display:block;width:100%;height:auto}
+.sc text{font-family:var(--mono);font-size:10px;fill:var(--ink-3)}
+.sc .axis{stroke:var(--line-2)}
+.sc .grid{stroke:var(--line);stroke-dasharray:2 3}
+.sc .guide{stroke:var(--ink-3);stroke-width:1;stroke-dasharray:4 4;opacity:.6}
+.sc .glabel{fill:var(--ink-2);font-size:10px}
+.sc circle{stroke:var(--bg-2);stroke-width:1.5;cursor:pointer}
+.sc circle:hover{stroke:var(--ink);stroke-width:2}
+.tip{position:fixed;z-index:30;pointer-events:none;background:var(--ink);color:var(--bg);padding:8px 10px;border-radius:6px;font-size:12px;max-width:280px;box-shadow:var(--shadow);display:none}
+.tip b{display:block;margin-bottom:3px}
+.tip .num{opacity:.85}
+
+/* ---------- table */
+.tbl{background:var(--bg-2);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.tbl .head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.tbl .head h2{margin:0;font-size:13px;font-weight:600}
+.tscroll{overflow-x:auto}
+table.opps{width:100%;border-collapse:collapse;font-size:13px}
+table.opps th{position:sticky;top:0;background:var(--bg-3);font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);font-weight:600;text-align:left;padding:7px 10px;white-space:nowrap;cursor:pointer;user-select:none}
+table.opps th.r,table.opps td.r{text-align:right}
+table.opps th.sorted{color:var(--ink)}
+table.opps td{padding:7px 10px;border-top:1px solid var(--line);vertical-align:middle;white-space:nowrap}
+table.opps tr.row{cursor:pointer}
+table.opps tr.row:hover td{background:var(--bg-3)}
+table.opps td.title{white-space:normal;min-width:260px;max-width:420px}
+table.opps td.title .t{font-weight:500}
+table.opps td.title .s{font-size:11px;color:var(--ink-3)}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:4px;padding:2px 7px;font-family:var(--mono);font-size:12px;font-weight:600;min-width:52px;justify-content:center}
+.pill.hot{background:var(--heat-4);color:#fff}
+.pill.warm{background:var(--heat-3);color:#fff}
+.pill.mild{background:var(--heat-1);color:var(--ink)}
+.pill.cold{background:var(--heat-0);color:var(--ink-2)}
+.pill.unvalued{background:transparent;border:1px dashed var(--line-2);color:var(--ink-3);font-weight:500}
+:root[data-theme="dark"] .pill.hot,:root[data-theme="dark"] .pill.warm{color:#15161a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .pill.hot,:root:not([data-theme="light"]) .pill.warm{color:#15161a}}
+.cd{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.cd.soon{color:var(--bad);font-weight:600}
+.cd.today{color:var(--warn)}
+.conf{display:inline-block;width:46px;height:6px;background:var(--bg-3);border-radius:3px;vertical-align:middle;overflow:hidden}
+.conf i{display:block;height:100%;background:var(--accent)}
+.flag{font-size:10px;border:1px solid var(--warn);color:var(--warn);border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle}
+.empty{padding:40px;text-align:center;color:var(--ink-3)}
+
+/* ---------- drawer */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:40;display:none}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:min(640px,100%);background:var(--bg-2);z-index:50;transform:translateX(100%);transition:transform .2s ease;overflow-y:auto;box-shadow:var(--shadow);border-left:1px solid var(--line)}
+.drawer.open{transform:none}
+@media (prefers-reduced-motion:reduce){.drawer{transition:none}}
+.drawer .inner{padding:20px 22px 40px}
+.drawer .top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.drawer h2{margin:0;font-size:18px;line-height:1.25;text-wrap:balance}
+.drawer .close{border:0;background:transparent;font-size:22px;line-height:1;color:var(--ink-3);padding:0 4px}
+.drawer .meta{font-size:12px;color:var(--ink-3);margin:6px 0 14px;font-family:var(--mono)}
+.hero{display:grid;grid-template-columns:150px 1fr;gap:16px;align-items:start}
+.hero img{width:150px;height:150px;object-fit:cover;border-radius:6px;background:var(--bg-3);border:1px solid var(--line)}
+.hero .noimg{width:150px;height:150px;border-radius:6px;background:var(--bg-3);display:grid;place-items:center;color:var(--ink-3);font-size:12px;border:1px solid var(--line)}
+.big{font-family:var(--mono);font-size:28px;font-weight:600;line-height:1.05}
+.big small{font-size:12px;font-weight:500;color:var(--ink-3);font-family:var(--sans);display:block;margin-top:2px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;margin-top:10px}
+.kv{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dotted var(--line);padding:4px 0;font-size:13px}
+.kv span:last-child{font-family:var(--mono);font-variant-numeric:tabular-nums}
+.why{margin:16px 0;padding:12px 14px;border-left:3px solid var(--heat-3);background:var(--bg);border-radius:0 6px 6px 0;line-height:1.5}
+.drawer h3{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);margin:18px 0 6px;font-weight:600}
+.drawer ul{margin:0;padding-left:18px}
+.drawer li{margin:3px 0}
+.comps{width:100%;border-collapse:collapse;font-size:12px}
+.comps td{padding:4px 6px;border-top:1px solid var(--line);vertical-align:top}
+.comps td.r{text-align:right;font-family:var(--mono);white-space:nowrap}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.desc{font-size:13px;color:var(--ink-2);white-space:pre-wrap;max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:10px;background:var(--bg)}
+.pics{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.pics img{width:72px;height:72px;object-fit:cover;border-radius:4px;border:1px solid var(--line)}
+.method{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+</style>
+
+<header>
+  <div class="bar">
+    <div class="brand"><h1>Spread Hunter</h1><span id="src">hibid.com</span></div>
+    <form class="scan" id="scanForm" onsubmit="return false">
+      <select id="fStatus" title="HiBid status filter"><option value="OPEN">Open</option><option value="CLOSING_TODAY">Closing today</option><option value="HOT">Hot lots</option><option value="UPCOMING">Upcoming</option></select>
+      <input id="fHours" type="number" min="0" step="1" value="24" title="Only lots closing within N hours (0 = all)"> <span class="muted">h</span>
+      <input id="fSearch" class="wide" placeholder="search text (optional)" title="HiBid search text">
+      <input id="fZip" placeholder="zip" title="zip code" style="width:70px">
+      <input id="fMiles" type="number" placeholder="miles" title="radius in miles" style="width:70px">
+      <input id="fMaxValue" type="number" value="40" min="0" title="Max lots to send for valuation this scan"> <span class="muted">to value</span>
+      <button class="btn primary" id="btnScan">Scan HiBid</button>
+      <button class="btn" id="btnRefresh" title="Re-pull live bid & time left for what is on screen">Refresh live</button>
+    </form>
+    <div class="kpis" id="kpis"></div>
+    <div class="status"><span><i class="dot" id="dot"></i><span id="statusText">idle</span></span><span id="lastScan"></span><span id="valuer"></span></div>
+  </div>
+</header>
+<div class="banner" id="banner" hidden></div>
+
+<div class="wrap">
+  <aside>
+    <div class="filters">
+      <input class="search" id="q" placeholder="Filter by title or auction…">
+      <h3>Minimum score <span class="num" id="minScoreLbl">0</span></h3>
+      <div class="range"><input type="range" id="minScore" min="0" max="90" step="5" value="0"></div>
+      <label class="toggle"><input type="checkbox" id="noBids"> No bids yet only</label>
+      <label class="toggle"><input type="checkbox" id="hideUnvalued" checked> Hide unvalued lots</label>
+      <h3>Closes within</h3>
+      <div class="chips" id="bucketChips"></div>
+      <h3>Categories</h3>
+      <div class="chips" id="catChips"></div>
+      <div class="legend"><span>score</span><i class="h0"></i><i class="h1"></i><i class="h2"></i><i class="h3"></i><i class="h4"></i><span>hot</span></div>
+      <p class="muted" style="font-size:11px;margin-top:14px;line-height:1.4">Score blends the resale multiple, dollar spread, valuation confidence, and how close the lot is to closing (a bid with 3 days left says little). Landed cost = next bid × (1 + buyer's premium) × (1 + tax) + pickup. Net resale = mid estimate less selling fees.</p>
+    </div>
+  </aside>
+
+  <main>
+    <div class="viz">
+      <div class="panel">
+        <h2>Where the heat is</h2>
+        <p class="sub">Best score per category × time-to-close. Cell shows lots at warm or better. Click a cell to focus.</p>
+        <div class="hm" id="heatmap"></div>
+      </div>
+      <div class="panel">
+        <h2>Landed cost vs. net resale</h2>
+        <p class="sub">Each dot is a lot; above the 2× and 5× lines is where money is made. Size = dollar spread. Hover for detail, click to open.</p>
+        <div class="sc" id="scatter"></div>
+      </div>
+    </div>
+
+    <div class="tbl">
+      <div class="head"><h2>Opportunities <span class="muted num" id="count"></span></h2><span class="muted" style="font-size:12px">click a row for the dossier</span></div>
+      <div class="tscroll"><table class="opps"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
+    </div>
+  </main>
+</div>
+
+<div class="tip" id="tip"></div>
+<div class="scrim" id="scrim"></div>
+<div class="drawer" id="drawer"><div class="inner" id="drawerInner"></div></div>
+
+<script>
+(function(){
+const $=s=>document.querySelector(s);
+const state={opps:[],cats:[],config:{},status:{},filters:{cats:new Set(),buckets:new Set(),minScore:0,q:'',noBids:false,hideUnvalued:true},sort:{key:'score',dir:-1},embedded:false,pollTimer:null};
+const BUCKETS=['<1h','1-3h','3-6h','6-12h','12-24h','1-3d','3d+'];
+const fmt=n=>n==null?'—':'$'+Math.round(n).toLocaleString();
+const fmt2=n=>n==null?'—':'$'+n.toLocaleString(undefined,{maximumFractionDigits:0});
+const fmtK=n=>n>=1e6?'$'+(n/1e6).toFixed(n%1e6?1:0)+'M':n>=1000?'$'+(n/1000).toFixed(n%1000?1:0)+'k':'$'+Math.round(n);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function heatClass(score){return score>=60?'h4':score>=40?'h3':score>=20?'h2':score>0?'h1':'h0'}
+function heatColor(score){return getComputedStyle(document.documentElement).getPropertyValue('--'+({h0:'heat-0',h1:'heat-1',h2:'heat-2',h3:'heat-3',h4:'heat-4'}[heatClass(score)])).trim()}
+function secsLeft(o){const e=o.lot.ends_at;return e?Math.max(0,e-Date.now()/1000):o.score.seconds_left}
+function bucketOf(s){if(s==null)return 'unknown';const h=s/3600;return h<1?'<1h':h<3?'1-3h':h<6?'3-6h':h<12?'6-12h':h<24?'12-24h':h<72?'1-3d':'3d+'}
+function cdText(s){if(s==null)return '—';s=Math.floor(s);if(s<=0)return 'closed';const d=Math.floor(s/86400),h=Math.floor(s%86400/3600),m=Math.floor(s%3600/60),sec=s%60;if(d>0)return `${d}d ${h}h`;if(h>0)return `${h}h ${String(m).padStart(2,'0')}m`;return `${m}:${String(sec).padStart(2,'0')}`}
+function cdClass(s){return s==null?'':s<3600?'cd soon':s<86400?'cd today':'cd'}
+
+// ---------------------------------------------------------------- data
+async function api(path,opts){const r=await fetch(path,Object.assign({headers:{'content-type':'application/json'}},opts||{}));if(!r.ok){let m='';try{m=(await r.json()).detail||''}catch(e){}throw new Error(m||r.statusText)}return r.json()}
+async function load(){
+  try{
+    const [cfg,opps,cats,st]=await Promise.all([api('/api/config'),api('/api/opportunities'),api('/api/categories'),api('/api/scan/status')]);
+    state.config=cfg;state.opps=opps.opportunities;state.cats=cats;state.status=st;state.embedded=false;
+  }catch(e){
+    if(window.__ARB_DATA__){const d=window.__ARB_DATA__;state.config=d.config;state.opps=d.opportunities;state.cats=d.categories;state.status=d.status||{};state.embedded=true;
+      $('#banner').hidden=false;$('#banner').innerHTML='<b>Demo snapshot.</b> This page is a static export with example lots (synthetic data). Run <code>python -m arb serve</code> locally to scan hibid.com live, refresh bids, and re-value lots.';
+      ['#btnScan','#btnRefresh'].forEach(s=>$(s).disabled=true);
+    }else{$('#banner').hidden=false;$('#banner').textContent='Could not reach the API: '+e.message;}
+  }
+  renderAll();
+}
+function renderAll(){renderStatus();renderKpis();renderChips();renderHeatmap();renderScatter();renderTable()}
+
+// ---------------------------------------------------------------- filters
+function visible(){
+  const f=state.filters;const ql=f.q.toLowerCase();
+  return state.opps.filter(o=>{
+    const s=secsLeft(o);if(s!=null&&s<=0)return false;
+    if(f.hideUnvalued&&!o.score.valued)return false;
+    if(o.score.valued&&o.score.score<f.minScore)return false;
+    if(f.noBids&&o.lot.bid_count>0)return false;
+    if(f.cats.size&&!f.cats.has(o.lot.category))return false;
+    if(f.buckets.size&&!f.buckets.has(bucketOf(s)))return false;
+    if(ql&&!((o.lot.title||'')+' '+(o.lot.auction_name||'')+' '+(o.valuation?.identified_item||'')).toLowerCase().includes(ql))return false;
+    return true;
+  });
+}
+function renderChips(){
+  const bc=$('#bucketChips');bc.innerHTML='';
+  BUCKETS.forEach(b=>{const n=state.opps.filter(o=>bucketOf(secsLeft(o))===b).length;const el=document.createElement('button');el.className='chip'+(state.filters.buckets.has(b)?' on':'');el.innerHTML=`${b} <span class="n">${n}</span>`;el.onclick=()=>{toggleSet(state.filters.buckets,b);renderChips();renderHeatmap();renderScatter();renderTable()};bc.appendChild(el)});
+  const cc=$('#catChips');cc.innerHTML='';
+  const all=document.createElement('button');all.className='chip'+(state.filters.cats.size?'':' on');all.textContent='All';all.onclick=()=>{state.filters.cats.clear();renderChips();renderHeatmap();renderScatter();renderTable()};cc.appendChild(all);
+  state.cats.forEach(c=>{const el=document.createElement('button');el.className='chip'+(state.filters.cats.has(c.category)?' on':'');el.innerHTML=`${c.hot?'<i class="hot"></i>':''}${esc(c.category)} <span class="n">${c.lots}</span>`;el.title=`${c.valued}/${c.lots} valued · best score ${Math.round(c.best_score)}`;el.onclick=()=>{toggleSet(state.filters.cats,c.category);renderChips();renderHeatmap();renderScatter();renderTable()};cc.appendChild(el)});
+}
+function toggleSet(set,v){set.has(v)?set.delete(v):set.add(v)}
+
+// ---------------------------------------------------------------- KPIs / status
+function renderKpis(){
+  const v=state.opps.filter(o=>o.score.valued);
+  const hot=v.filter(o=>o.score.heat==='hot'),warm=v.filter(o=>o.score.heat==='warm');
+  const soon=v.filter(o=>{const s=secsLeft(o);return s!=null&&s<3*3600&&o.score.score>=40});
+  const spread=hot.concat(warm).reduce((a,o)=>a+Math.max(0,o.score.spread||0),0);
+  $('#kpis').innerHTML=[[state.opps.length,'lots tracked'],[v.length,'valued'],[hot.length,'hot'],[warm.length,'warm'],[soon.length,'≥warm, <3h'],[fmt(spread),'spread in hot+warm']].map(([b,s])=>`<div class="kpi"><b>${b}</b><small>${s}</small></div>`).join('');
+}
+function renderStatus(){
+  const st=state.status.status||{};const ls=state.status.last_scan;
+  $('#dot').className='dot'+(st.running?' live':'');
+  let t='idle';if(st.running){t=st.phase==='pulling'?'pulling lots from HiBid…':`valuing ${st.lots_valued}/${st.lots_to_value}${st.message?' · '+st.message:''}`}else if(st.error){t='last scan failed: '+st.error}else if(st.phase==='done'){t=`last scan: ${st.lots_seen} lots in window, ${st.lots_valued} newly valued`}
+  $('#statusText').textContent=t;
+  $('#lastScan').textContent=ls&&ls.finished_at?('finished '+new Date(ls.finished_at*1000).toLocaleString()):'';
+  const c=state.config;$('#valuer').textContent=c.model?`valuer: ${c.claude_enabled?c.model+' + web search':'no API key → eBay sold comps / auctioneer estimate'}${c.ebay_sold?' · eBay sold':''}`:'';
+  $('#src').textContent=(c.hibid||'hibid.com').replace(/^https?:\/\//,'');
+}
+
+// ---------------------------------------------------------------- heatmap
+function renderHeatmap(){
+  const rows=state.cats.map(c=>c.category);
+  const f=state.filters;
+  const base=state.opps.filter(o=>o.score.valued&&(!f.q||visible().includes(o)));
+  const cell={};rows.forEach(r=>cell[r]={});
+  base.forEach(o=>{const b=bucketOf(secsLeft(o));const r=o.lot.category;if(!cell[r])return;const c=cell[r][b]||(cell[r][b]={best:0,n:0,warm:0});c.n++;c.best=Math.max(c.best,o.score.score);if(o.score.score>=40)c.warm++});
+  let h='<table><thead><tr><th class="row"></th>'+BUCKETS.map(b=>`<th>${b}</th>`).join('')+'</tr></thead><tbody>';
+  rows.forEach(r=>{h+=`<tr><th class="row" title="${esc(r)}">${esc(r)}</th>`+BUCKETS.map(b=>{const c=cell[r][b];const sel=f.cats.has(r)&&f.buckets.has(b);return `<td class="${c?heatClass(c.best):'h0'}${sel?' sel':''}" data-r="${esc(r)}" data-b="${b}" title="${c?`${c.n} lots · best score ${Math.round(c.best)}`:'no valued lots'}">${c&&c.warm?c.warm:''}</td>`}).join('')+'</tr>'});
+  h+='</tbody></table>';
+  const el=$('#heatmap');el.innerHTML=rows.length?h:'<div class="empty">No valued lots yet.</div>';
+  el.querySelectorAll('td').forEach(td=>td.onclick=()=>{const r=td.dataset.r,b=td.dataset.b;const on=f.cats.has(r)&&f.buckets.has(b);f.cats.clear();f.buckets.clear();if(!on){f.cats.add(r);f.buckets.add(b)}renderChips();renderHeatmap();renderScatter();renderTable()});
+}
+
+// ---------------------------------------------------------------- scatter
+function renderScatter(){
+  const pts=visible().filter(o=>o.score.valued&&o.score.landed_cost>0&&o.score.net_resale>0);
+  const W=640,H=340,m={l:46,r:14,t:10,b:34};
+  const el=$('#scatter');
+  if(!pts.length){el.innerHTML='<div class="empty">Nothing to plot with the current filters.</div>';return}
+  const xs=pts.map(o=>o.score.landed_cost),ys=pts.map(o=>o.score.net_resale);
+  const lo=Math.max(1,Math.min(...xs,...ys)*0.8),hi=Math.max(...xs,...ys)*1.25;
+  const L=v=>Math.log10(Math.max(v,1));
+  const x=v=>m.l+(L(v)-L(lo))/(L(hi)-L(lo))*(W-m.l-m.r);
+  const y=v=>H-m.b-(L(v)-L(lo))/(L(hi)-L(lo))*(H-m.t-m.b);
+  const ticks=[];for(let p=Math.floor(L(lo));p<=Math.ceil(L(hi));p++)[1,2,5].forEach(k=>{const v=k*10**p;if(v>=lo&&v<=hi)ticks.push(v)});
+  const maxSpread=Math.max(...pts.map(o=>o.score.spread||0),1);
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Scatter of landed cost against net resale value">`;
+  ticks.forEach(v=>{const lbl=/^[15]/.test(String(v));s+=`<line class="grid" x1="${x(v)}" x2="${x(v)}" y1="${m.t}" y2="${H-m.b}"/><line class="grid" x1="${m.l}" x2="${W-m.r}" y1="${y(v)}" y2="${y(v)}"/>`+(lbl?`<text x="${x(v)}" y="${H-m.b+14}" text-anchor="middle">${fmtK(v)}</text><text x="${m.l-5}" y="${y(v)+3}" text-anchor="end">${fmtK(v)}</text>`:'')});
+  [[1,'1×'],[2,'2×'],[5,'5×'],[10,'10×']].forEach(([k,lbl])=>{const x1=lo,y1=lo*k,x2=hi/k,y2=hi;if(y1>hi||x2<lo)return;s+=`<line class="guide" x1="${x(x1)}" y1="${y(y1)}" x2="${x(x2)}" y2="${y(y2)}"/><text class="glabel" x="${x(x2)-4}" y="${y(y2)+11}" text-anchor="end">${lbl}</text>`});
+  s+=`<line class="axis" x1="${m.l}" x2="${W-m.r}" y1="${H-m.b}" y2="${H-m.b}"/><line class="axis" x1="${m.l}" x2="${m.l}" y1="${m.t}" y2="${H-m.b}"/>`;
+  s+=`<text x="${W-m.r}" y="${H-4}" text-anchor="end">landed cost at next bid →</text><text transform="rotate(-90)" x="${-m.t}" y="10" text-anchor="end">net resale (mid) →</text>`;
+  pts.sort((a,b)=>a.score.score-b.score.score).forEach(o=>{const r=4+10*Math.sqrt(Math.max(0,o.score.spread)/maxSpread);s+=`<circle data-id="${o.lot.id}" cx="${x(o.score.landed_cost).toFixed(1)}" cy="${y(o.score.net_resale).toFixed(1)}" r="${r.toFixed(1)}" fill="${heatColor(o.score.score)}" fill-opacity="0.9"/>`});
+  s+='</svg>';el.innerHTML=s;
+  const tip=$('#tip');
+  el.querySelectorAll('circle').forEach(c=>{const o=state.opps.find(z=>z.lot.id==c.dataset.id);
+    c.addEventListener('mousemove',e=>{tip.style.display='block';tip.style.left=(e.clientX+14)+'px';tip.style.top=(e.clientY+14)+'px';tip.innerHTML=`<b>${esc(o.lot.title)}</b><span class="num">score ${Math.round(o.score.score)} · ${o.score.ratio.toFixed(1)}× · spread ${fmt(o.score.spread)}</span><br><span class="num">landed ${fmt(o.score.landed_cost)} → net ${fmt(o.score.net_resale)}</span><br>${cdText(secsLeft(o))} left · ${o.lot.bid_count} bids`});
+    c.addEventListener('mouseleave',()=>tip.style.display='none');c.addEventListener('click',()=>openDrawer(o.lot.id))});
+}
+
+// ---------------------------------------------------------------- table
+const COLS=[['score','Score',''],['title','Item',''],['category','Category',''],['bids','Bids','r'],['next','Next bid','r'],['landed','Landed','r'],['resale','Est. resale','r'],['net','Net','r'],['ratio','Multiple','r'],['spread','Spread','r'],['conf','Conf.',''],['closes','Closes','r'],['auction','Auction','']];
+function sortVal(o,k){const s=o.score,l=o.lot,v=o.valuation||{};switch(k){case 'score':return s.score;case 'title':return l.title||'';case 'category':return l.category||'';case 'bids':return l.bid_count;case 'next':return s.next_bid;case 'landed':return s.landed_cost;case 'resale':return v.mid||0;case 'net':return s.net_resale||0;case 'ratio':return s.ratio||0;case 'spread':return s.spread||0;case 'conf':return s.confidence||0;case 'closes':return secsLeft(o)??1e12;case 'auction':return l.auction_name||''}}
+function renderTable(){
+  const rows=visible();const{key,dir}=state.sort;
+  rows.sort((a,b)=>{const x=sortVal(a,key),y=sortVal(b,key);return (typeof x==='string'?x.localeCompare(y):x-y)*dir});
+  $('#thead').innerHTML='<tr>'+COLS.map(([k,l,c])=>`<th class="${c}${key===k?' sorted':''}" data-k="${k}">${l}${key===k?(dir<0?' ▾':' ▴'):''}</th>`).join('')+'</tr>';
+  $('#thead').querySelectorAll('th').forEach(th=>th.onclick=()=>{const k=th.dataset.k;if(state.sort.key===k)state.sort.dir*=-1;else state.sort={key:k,dir:['title','category','auction'].includes(k)?1:-1};renderTable()});
+  $('#count').textContent=`(${rows.length})`;
+  if(!rows.length){$('#tbody').innerHTML=`<tr><td colspan="${COLS.length}" class="empty">${state.opps.length?'No lots match these filters.':'No lots yet. Set a window and click “Scan HiBid”.'}</td></tr>`;return}
+  $('#tbody').innerHTML=rows.map(o=>{const l=o.lot,s=o.score,v=o.valuation||{};const sl=secsLeft(o);
+    return `<tr class="row" data-id="${l.id}">
+      <td>${s.valued?`<span class="pill ${s.heat}">${Math.round(s.score)}</span>`:'<span class="pill unvalued">n/a</span>'}</td>
+      <td class="title"><div class="t">${esc(l.title)}${v.authenticity_risk?'<span class="flag" title="Authenticity risk flagged">auth</span>':''}</div><div class="s">${esc(v.identified_item&&v.identified_item!==l.title?v.identified_item:'')}${l.bid_count===0?' · no bids':''}${l.estimate?' · est. '+esc(l.estimate):''}</div></td>
+      <td>${esc(l.category)}</td>
+      <td class="r num">${l.bid_count}</td>
+      <td class="r num">${fmt(s.next_bid)}</td>
+      <td class="r num">${fmt(s.landed_cost)}</td>
+      <td class="r num">${s.valued?`${fmt(v.low)}–${fmt(v.high)}`:'—'}</td>
+      <td class="r num">${fmt(s.net_resale)}</td>
+      <td class="r num">${s.ratio?s.ratio.toFixed(1)+'×':'—'}</td>
+      <td class="r num" style="${s.spread>0?'':'color:var(--bad)'}">${s.valued?fmt(s.spread):'—'}</td>
+      <td><span class="conf" title="${Math.round((s.confidence||0)*100)}% confidence"><i style="width:${Math.round((s.confidence||0)*100)}%"></i></span></td>
+      <td class="r ${cdClass(sl)}" data-ends="${l.ends_at||''}">${cdText(sl)}</td>
+      <td class="muted" style="max-width:220px;overflow:hidden;text-overflow:ellipsis" title="${esc(l.auction_name)}">${esc(l.auctioneer||l.auction_name||'')}</td>
+    </tr>`}).join('');
+  $('#tbody').querySelectorAll('tr.row').forEach(tr=>tr.onclick=()=>openDrawer(+tr.dataset.id));
+}
+setInterval(()=>{document.querySelectorAll('[data-ends]').forEach(td=>{const e=+td.dataset.ends;if(!e)return;const s=Math.max(0,e-Date.now()/1000);td.textContent=cdText(s);td.className=td.className.replace(/\bcd( soon| today)?\b/g,'').trim()+' r '+cdClass(s)})},1000);
+
+// ---------------------------------------------------------------- drawer / dossier
+async function openDrawer(id){
+  let o=state.opps.find(z=>z.lot.id===id);
+  $('#drawer').classList.add('open');$('#scrim').style.display='block';
+  renderDossier(o,true);
+  if(!state.embedded){try{o=await api(`/api/lot/${id}?enrich=1`);Object.assign(state.opps.find(z=>z.lot.id===id)||{},o);renderDossier(o,false)}catch(e){}}
+}
+function closeDrawer(){$('#drawer').classList.remove('open');$('#scrim').style.display='none'}
+$('#scrim').onclick=closeDrawer;document.addEventListener('keydown',e=>{if(e.key==='Escape')closeDrawer()});
+function renderDossier(o,loading){
+  if(!o){$('#drawerInner').innerHTML='<p class="empty">Lot not found.</p>';return}
+  const l=o.lot,s=o.score,v=o.valuation,c=state.config;const sl=secsLeft(o);
+  const prem=Math.round((l.buyer_premium_rate??c.buyer_premium??0.15)*100);
+  const pics=(l.pictures||[]).filter(Boolean).slice(0,8);
+  let h=`<div class="top"><h2>${esc(l.title)}</h2><button class="close" aria-label="Close" onclick="document.getElementById('scrim').click()">×</button></div>
+  <div class="meta">Lot ${esc(l.lot_number||'')} · ${esc(l.category_path||l.category)} · ${esc(l.auctioneer||'')}${l.city?' · '+esc(l.city)+', '+esc(l.state||''):''}${l.shipping_offered?' · ships':' · pickup'}</div>
+  <div class="hero">${l.image?`<img src="${esc(l.image)}" alt="">`:'<div class="noimg">no photo cached</div>'}
+    <div>
+      <div class="big">${s.valued?`<span class="pill ${s.heat}" style="font-size:22px;padding:4px 10px">${Math.round(s.score)}</span> <span style="font-size:20px">${s.ratio.toFixed(1)}×</span>`:'<span class="pill unvalued">not valued</span>'}<small>${s.valued?`${fmt(s.spread)} spread at the mid case · ${fmt(s.spread_low)} at the low case`:'run a valuation to score this lot'}</small></div>
+      <div class="grid2">
+        <div class="kv"><span>Current bid</span><span>${fmt(l.high_bid)} <span class="muted">(${l.bid_count} bids)</span></span></div>
+        <div class="kv"><span>Closes in</span><span class="${cdClass(sl)}" data-ends="${l.ends_at||''}">${cdText(sl)}</span></div>
+        <div class="kv"><span>Next bid</span><span>${fmt(s.next_bid)}</span></div>
+        <div class="kv"><span>Landed (+${prem}% BP${c.sales_tax?` +${Math.round(c.sales_tax*100)}% tax`:''})</span><span>${fmt(s.landed_cost)}</span></div>
+        <div class="kv"><span>Resale est.</span><span>${v?`${fmt(v.low)} – ${fmt(v.high)}`:'—'}</span></div>
+        <div class="kv"><span>Net after ${Math.round((c.resale_fee||0)*100)}% fees</span><span>${fmt(s.net_resale)}</span></div>
+      </div>
+    </div></div>`;
+  if(o.why)h+=`<div class="why"><b>Why the upside.</b> ${esc(o.why)}</div>`;
+  h+=`<div class="actions"><a class="btn primary" href="${esc(l.url)}" target="_blank" rel="noopener">Open on HiBid ↗</a>${l.auction_url?`<a class="btn" href="${esc(l.auction_url)}" target="_blank" rel="noopener">Auction catalog</a>`:''}<a class="btn" href="https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(v?.search_query||l.title)}&LH_Sold=1&LH_Complete=1&_sop=13" target="_blank" rel="noopener">eBay sold ↗</a>${state.embedded?'':`<button class="btn" id="dRefresh">Refresh live</button><button class="btn" id="dRevalue">Re-value</button>`}</div>`;
+  if(v){
+    h+=`<h3>Valuation <span class="method">· ${esc(v.method)}${v.model_used?' · '+esc(v.model_used):''} · confidence ${Math.round((v.confidence||0)*100)}%${v.cache_hit?' · cached':''}</span></h3>`;
+    h+=`<div class="grid2"><div class="kv"><span>Identified as</span><span style="font-family:var(--sans);text-align:right">${esc(v.identified_item||'—')}</span></div><div class="kv"><span>Demand</span><span>${esc(v.demand||'—')}${v.days_to_sell?` · ~${v.days_to_sell}d to sell`:''}</span></div><div class="kv"><span>Best channel</span><span style="font-family:var(--sans)">${esc(v.best_channel||'—')}</span></div><div class="kv"><span>Condition assumed</span><span style="font-family:var(--sans);text-align:right">${esc(v.condition_assumption||'—')}</span></div></div>`;
+    if(v.rationale)h+=`<p style="margin:10px 0 0;line-height:1.5">${esc(v.rationale)}</p>`;
+    if(v.confidence_reason)h+=`<p class="muted" style="margin:6px 0 0;font-size:12px">${esc(v.confidence_reason)}</p>`;
+    if(v.value_drivers?.length)h+=`<h3>Value drivers</h3><ul>${v.value_drivers.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+    if(v.risks?.length||v.authenticity_risk)h+=`<h3>Risks</h3><ul>${v.authenticity_risk?'<li><b>Authenticity risk</b>: get it authenticated before relying on this value.</li>':''}${(v.risks||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+    if(v.comps?.length)h+=`<h3>Comparable sales (${v.comps.length})</h3><table class="comps">${v.comps.slice(0,12).map(cp=>`<tr><td>${cp.url?`<a href="${esc(cp.url)}" target="_blank" rel="noopener">${esc(cp.title)}</a>`:esc(cp.title)}${cp.note?`<div class="muted" style="font-size:11px">${esc(cp.note)}</div>`:''}</td><td class="muted" style="white-space:nowrap;font-size:11px">${esc(cp.source||'')}${cp.date?'<br>'+esc(cp.date):''}</td><td class="r">${fmt2(cp.price)}</td></tr>`).join('')}</table>`;
+    if(v.error)h+=`<p class="muted">valuation note: ${esc(v.error)}</p>`;
+  }
+  h+=`<h3>Listing</h3>${pics.length?`<div class="pics">${pics.map(p=>`<img src="${esc(p)}" alt="">`).join('')}</div>`:''}<div class="desc" style="margin-top:8px">${esc(l.description||'(no description cached)')}</div>`;
+  if(l.estimate)h+=`<p class="muted" style="font-size:12px">Auctioneer estimate: ${esc(l.estimate)}${l.buyer_premium_text?' · Buyer\'s premium: '+esc(l.buyer_premium_text):''}</p>`;
+  if(loading&&!state.embedded)h+='<p class="muted" style="font-size:12px">fetching full listing…</p>';
+  $('#drawerInner').innerHTML=h;
+  const r=$('#dRefresh');if(r)r.onclick=async()=>{r.disabled=true;r.textContent='refreshing…';try{const n=await api(`/api/lot/${l.id}/refresh`,{method:'POST'});Object.assign(state.opps.find(z=>z.lot.id===l.id)||{},n);renderDossier(n,false);renderTable();renderScatter()}catch(e){r.textContent='failed: '+e.message}};
+  const rv=$('#dRevalue');if(rv)rv.onclick=async()=>{rv.disabled=true;rv.textContent='valuing… (10–60s)';try{const n=await api(`/api/lot/${l.id}/revalue`,{method:'POST'});Object.assign(state.opps.find(z=>z.lot.id===l.id)||{},n);renderDossier(n,false);renderAll()}catch(e){rv.textContent='failed: '+e.message}};
+}
+
+// ---------------------------------------------------------------- scan controls
+$('#btnScan').onclick=async()=>{
+  const body={status:$('#fStatus').value,hours:+$('#fHours').value||null,search_text:$('#fSearch').value||null,zip:$('#fZip').value||null,miles:+$('#fMiles').value||null,max_value:+$('#fMaxValue').value,value:+$('#fMaxValue').value>0};
+  try{await api('/api/scan',{method:'POST',body:JSON.stringify(body)});poll()}catch(e){$('#statusText').textContent='scan not started: '+e.message}
+};
+$('#btnRefresh').onclick=async()=>{const ids=visible().slice(0,60).map(o=>o.lot.id);if(!ids.length)return;$('#btnRefresh').disabled=true;try{await api('/api/refresh',{method:'POST',body:JSON.stringify({ids})});const opps=await api('/api/opportunities');state.opps=opps.opportunities;renderAll()}catch(e){$('#statusText').textContent='refresh failed: '+e.message}$('#btnRefresh').disabled=false};
+async function poll(){
+  clearTimeout(state.pollTimer);
+  try{state.status=await api('/api/scan/status');renderStatus();
+    if(state.status.status.running){state.pollTimer=setTimeout(poll,2000)}else{const [opps,cats]=await Promise.all([api('/api/opportunities'),api('/api/categories')]);state.opps=opps.opportunities;state.cats=cats;renderAll()}
+  }catch(e){state.pollTimer=setTimeout(poll,4000)}
+}
+// ---------------------------------------------------------------- filter inputs
+$('#q').oninput=e=>{state.filters.q=e.target.value;renderHeatmap();renderScatter();renderTable()};
+$('#minScore').oninput=e=>{state.filters.minScore=+e.target.value;$('#minScoreLbl').textContent=e.target.value;renderScatter();renderTable()};
+$('#noBids').onchange=e=>{state.filters.noBids=e.target.checked;renderScatter();renderTable()};
+$('#hideUnvalued').onchange=e=>{state.filters.hideUnvalued=e.target.checked;renderTable()};
+
+load().then(()=>{if(!state.embedded){poll()}});
+})();
+</script>

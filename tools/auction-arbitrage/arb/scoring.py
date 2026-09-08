@@ -1,0 +1,138 @@
+"""Turn (lot, valuation) into an opportunity: landed cost, net resale, spread, ratio, score, heat."""
+from __future__ import annotations
+
+import math
+import time
+from typing import Any
+
+from .config import Settings
+
+TIME_BUCKETS = [  # (label, max_seconds)
+    ("<1h", 3600), ("1-3h", 3 * 3600), ("3-6h", 6 * 3600), ("6-12h", 12 * 3600),
+    ("12-24h", 24 * 3600), ("1-3d", 3 * 86400), ("3d+", math.inf),
+]
+
+
+def time_bucket(seconds: float | None) -> str:
+    if seconds is None:
+        return "unknown"
+    for label, cap in TIME_BUCKETS:
+        if seconds < cap:
+            return label
+    return "3d+"
+
+
+def price_reliability(seconds: float | None) -> float:
+    """How much the current bid tells you about the final price. Bids move late."""
+    if seconds is None:
+        return 0.4
+    if seconds < 3600:
+        return 1.0
+    if seconds < 6 * 3600:
+        return 0.85
+    if seconds < 24 * 3600:
+        return 0.65
+    if seconds < 3 * 86400:
+        return 0.45
+    return 0.3
+
+
+def heat(score: float) -> str:
+    if score >= 60:
+        return "hot"
+    if score >= 40:
+        return "warm"
+    if score >= 20:
+        return "mild"
+    return "cold"
+
+
+def landed_cost(bid: float, lot: dict[str, Any], s: Settings) -> float:
+    premium = lot.get("buyer_premium_rate")
+    if premium is None:
+        premium = s.default_buyer_premium
+    cost = bid * (1 + premium) * (1 + s.sales_tax)
+    return cost + s.pickup_cost
+
+
+def score_lot(lot: dict[str, Any], val: dict[str, Any] | None, s: Settings, *, now: float | None = None) -> dict[str, Any]:
+    now = now or time.time()
+    ends_at = lot.get("ends_at")
+    secs_left = (ends_at - now) if ends_at else lot.get("time_left_seconds")
+    if secs_left is not None:
+        secs_left = max(0.0, secs_left)
+    high_bid = float(lot.get("high_bid") or 0)
+    min_bid = lot.get("min_bid")
+    # The price you'd pay if you won at the next required bid (or opening bid if untouched).
+    next_bid = float(min_bid) if min_bid else (high_bid * 1.1 if high_bid else 0.0)
+    if next_bid <= 0:
+        next_bid = 1.0
+    qty = float(lot.get("quantity") or 1)
+    per_each = (lot.get("bid_amount_type") or "").upper().endswith("EACH") and qty > 1
+    if per_each:
+        next_bid *= qty
+
+    out: dict[str, Any] = {
+        "lot_id": lot["id"],
+        "seconds_left": secs_left,
+        "time_bucket": time_bucket(secs_left),
+        "next_bid": next_bid,
+        "landed_cost": landed_cost(next_bid, lot, s),
+        "price_reliability": price_reliability(secs_left),
+        "valued": bool(val and val.get("mid")),
+    }
+    if not out["valued"]:
+        out.update({"net_resale": None, "spread": None, "ratio": None, "score": 0.0, "heat": "unvalued",
+                    "confidence": 0.0})
+        return out
+
+    mid = float(val["mid"])
+    net = mid * (1 - s.resale_fee) - s.resale_shipping
+    net_low = float(val.get("low") or mid) * (1 - s.resale_fee) - s.resale_shipping
+    cost = out["landed_cost"]
+    spread = net - cost
+    ratio = net / cost if cost > 0 else 0.0
+    conf = float(val.get("confidence") or 0)
+
+    ratio_component = max(0.0, min(1.0, (ratio - 1.0) / 4.0))  # 5x = full marks
+    dollar_component = max(0.0, min(1.0, spread / 400.0))      # $400 net spread = full marks
+    raw = 0.5 * ratio_component + 0.5 * dollar_component
+    score = 100 * raw * (0.5 + 0.5 * conf) * (0.5 + 0.5 * out["price_reliability"])
+    if spread <= 0:
+        score = 0.0
+    if val.get("authenticity_risk"):
+        score *= 0.75
+    out.update({
+        "net_resale": net, "net_resale_low": net_low, "spread": spread, "spread_low": net_low - cost,
+        "ratio": ratio, "confidence": conf, "score": round(score, 1), "heat": heat(score),
+    })
+    return out
+
+
+def why_upside(lot: dict[str, Any], val: dict[str, Any], sc: dict[str, Any], s: Settings) -> str:
+    """One-paragraph plain-English explanation of where the spread comes from."""
+    if not sc.get("valued"):
+        return "Not yet valued."
+    bits = []
+    ratio = sc["ratio"]
+    bits.append(
+        f"Next bid ${sc['next_bid']:,.0f} lands at about ${sc['landed_cost']:,.0f} all-in "
+        f"(buyer's premium {int(round((lot.get('buyer_premium_rate') or s.default_buyer_premium) * 100))}%"
+        + (f", tax {int(round(s.sales_tax * 100))}%" if s.sales_tax else "") + ")."
+    )
+    bits.append(
+        f"Independent resale estimate is ${val['low']:,.0f}–${val['high']:,.0f} (mid ${val['mid']:,.0f}); "
+        f"after {int(round(s.resale_fee * 100))}% selling fees that nets about ${sc['net_resale']:,.0f}, "
+        f"a {ratio:.1f}x return and ${sc['spread']:,.0f} of headroom at the mid case."
+    )
+    if lot.get("bid_count", 0) == 0:
+        bits.append("No bids yet, so the opening bid is the price today.")
+    elif sc["seconds_left"] is not None and sc["seconds_left"] < 6 * 3600:
+        bits.append(f"Closing in under {max(1, int(sc['seconds_left'] // 3600) + 1)}h with {lot.get('bid_count')} bids, so the current price is close to final.")
+    else:
+        bits.append("Plenty of time left; expect the price to rise near close.")
+    if val.get("value_drivers"):
+        bits.append("Value drivers: " + "; ".join(val["value_drivers"][:3]) + ".")
+    if val.get("risks"):
+        bits.append("Watch for: " + "; ".join(val["risks"][:2]) + ".")
+    return " ".join(bits)
