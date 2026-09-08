@@ -51,8 +51,8 @@ class Settings:
     sweet_spot_min_net: float = field(default_factory=lambda: _f("ARB_SWEET_MIN_NET", 15.0))
     # grading economics (trading cards)
     grading: bool = field(default_factory=lambda: _b("ARB_GRADING", True))
-    grading_fee: float = field(default_factory=lambda: _f("ARB_GRADING_FEE", 25.0))  # PSA/SGC/BGS value tier per card
-    grading_ship: float = field(default_factory=lambda: _f("ARB_GRADING_SHIP", 8.0))  # your share of round-trip shipping/insurance
+    grading_fee: float = field(default_factory=lambda: _f("ARB_GRADING_FEE", 75.0))  # PSA regular-tier per card; economy/bulk is lower but slow
+    grading_ship: float = field(default_factory=lambda: _f("ARB_GRADING_SHIP", 15.0))  # round-trip shipping/insurance share (all-in ~ $90)
     grading_days: int = field(default_factory=lambda: int(_f("ARB_GRADING_DAYS", 60)))
     # eBay fee model (see scoring.listing_economics)
     ebay_fvf: float = field(default_factory=lambda: _f("ARB_EBAY_FVF", 0.136))

@@ -241,8 +241,12 @@ THIS LOT IS A TRADING CARD. Do the full grading analysis (schema field `grading`
 2. Read condition from the photos like a grader: centering (estimate left/right and top/bottom ratios),
    corners (sharp / soft / dinged / rounded), edges (clean / chipping / rough cut), surface (print lines,
    scratches, stains, wax, creases, snow). Say when the photo cannot show something.
-3. Turn that into PSA grade probabilities (10 / 9 / 8 / 7-or-below) that sum to 1. Be honest: most raw
-   vintage cards are 5-7s; modern pack-fresh cards split 9/10; print-defect-prone sets rarely gem.
+3. Turn that into PSA grade probabilities (10 / 9 / 8 / 7-or-below) that sum to 1. TENS ARE RARE: use the
+   set's PSA gem rate (pop 10 / total pop) as your prior for a 10 and only go above it with clear photo
+   evidence of razor corners, dead centering and a flawless surface; most raw vintage cards are 5-7s;
+   print-defect-prone sets almost never gem; modern pack-fresh cards can gem but rarely above 30%.
+   Grading costs roughly $90 all-in per card and takes ~2 months, so the analysis must show whether the
+   EXPECTED value (not the best case) clears that cost.
 4. Search deeply for GRADED sales by grade: PSA Auction Prices Realized (psacard.com/auctionprices),
    SportsCardsPro / PriceCharting (price by grade), 130point.com (eBay sold aggregator), eBay sold filtered
    by 'PSA 10' / 'PSA 9' / 'PSA 8', Goldin/Heritage for high-end. Record grader, grade, price, source, URL, date.

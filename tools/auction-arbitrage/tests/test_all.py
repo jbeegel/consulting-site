@@ -208,5 +208,18 @@ def test_card_detection_and_grading_economics(settings):
     ev = sum(ge["probabilities"][b] * ge["prices"][b] for b in ("10", "9", "8", "7-"))
     assert abs(ge["ev_gross"] - ev) < 1e-6
     assert ge["graded_net"] == ev * (1 - settings.resale_fee) - settings.grading_fee - settings.grading_ship - settings.packaging_cost
-    assert ge["upside"] > 0 and ge["recommendation"] == "grade"
+    assert ge["grading_cost"] == settings.grading_fee + settings.grading_ship + settings.packaging_cost
+    # a common Griffey with a 4% gem rate does not clear ~$90 of grading cost
+    assert ge["upside"] < 25 and ge["recommendation"] == "sell raw"
+    # a card whose 9 alone clears the cost gets "grade"; one that needs the 10 is flagged speculative
+    strong = dict(g, grade_probabilities={"psa10": 0.10, "psa9": 0.55, "psa8": 0.30, "psa7_or_below": 0.05},
+                  graded_comps=[{"grader": "PSA", "grade": "10", "price": 900, "source": "", "url": "", "date": ""},
+                                {"grader": "PSA", "grade": "9", "price": 300, "source": "", "url": "", "date": ""},
+                                {"grader": "PSA", "grade": "8", "price": 120, "source": "", "url": "", "date": ""}], raw_value=60)
+    assert grading_economics({"mid": 60.0, "grading": strong}, sc, settings)["recommendation"] == "grade"
+    lottery = dict(strong, grade_probabilities={"psa10": 0.12, "psa9": 0.30, "psa8": 0.40, "psa7_or_below": 0.18},
+                   graded_comps=[{"grader": "PSA", "grade": "10", "price": 2500, "source": "", "url": "", "date": ""},
+                                 {"grader": "PSA", "grade": "9", "price": 90, "source": "", "url": "", "date": ""},
+                                 {"grader": "PSA", "grade": "8", "price": 50, "source": "", "url": "", "date": ""}], raw_value=40)
+    assert grading_economics({"mid": 40.0, "grading": lottery}, sc, settings)["recommendation"].startswith("speculative")
     assert grading_economics({"mid": 10.0, "grading": None}, sc, settings) is None

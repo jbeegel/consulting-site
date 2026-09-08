@@ -42,8 +42,8 @@ export const config = {
   sweetMaxLanded: num("SPREAD_SWEET_MAX_LANDED", 6),
   sweetMinNet: num("SPREAD_SWEET_MIN_NET", 15),
   grading: bool("SPREAD_GRADING", true),
-  gradingFee: num("SPREAD_GRADING_FEE", 25),
-  gradingShip: num("SPREAD_GRADING_SHIP", 8),
+  gradingFee: num("SPREAD_GRADING_FEE", 75), // PSA regular tier; all-in with shipping ~ $90
+  gradingShip: num("SPREAD_GRADING_SHIP", 15),
   gradingDays: Math.floor(num("SPREAD_GRADING_DAYS", 60)),
   ebayFvf: num("SPREAD_EBAY_FVF", 0.136),
   ebayFvfMedia: num("SPREAD_EBAY_FVF_MEDIA", 0.153),

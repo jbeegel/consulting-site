@@ -117,6 +117,10 @@ export interface GradingEconomics {
   raw_value: number;
   raw_net: number;
   upside: number;
+  graded_net_no10: number;
+  upside_no10: number;
+  grading_cost: number;
+  hurdle: number;
   grading_fee: number;
   grading_ship: number;
   days: number;

@@ -104,7 +104,10 @@ export function whyUpside(lot: Lot, val: Valuation | null, sc: Score, c: Config)
   else bits.push("Plenty of time left; expect the price to rise near close.");
   if (val.standout_item) bits.push(`Standout piece: ${val.standout_item}.`);
   const ge = gradingEconomics(val, sc, c);
-  if (ge && ge.upside > 0) bits.push(`Grading upside: expected net ${money(ge.graded_net)} graded vs ${money(ge.raw_net)} raw (+${money(ge.upside)}, likely ${ge.predicted_grade || "PSA 8-9"}), recommendation: ${ge.recommendation}.`);
+  if (ge) {
+    if (ge.upside > 0) bits.push(`Grading: expected net ${money(ge.graded_net)} graded vs ${money(ge.raw_net)} raw after ~${money(ge.grading_cost)} to grade (+${money(ge.upside)}, likely ${ge.predicted_grade || "PSA 8-9"}); recommendation: ${ge.recommendation}.`);
+    else bits.push(`Grading does not pay: ~${money(ge.grading_cost)} to grade against an expected ${money(ge.ev_gross)} graded sale; sell raw.`);
+  }
   if (val.value_drivers?.length) bits.push("Value drivers: " + val.value_drivers.slice(0, 3).join("; ") + ".");
   if (val.risks?.length) bits.push("Watch for: " + val.risks.slice(0, 2).join("; ") + ".");
   return bits.join(" ");
@@ -185,13 +188,26 @@ export function gradingEconomics(val: Valuation | null, sc: Score, c: Config): G
   if (prices["9"] === null) prices["9"] = prices["8"];
   if (prices["10"] === null) prices["10"] = prices["9"];
   const evGross = BUCKETS.reduce((a, b) => a + p[b] * (prices[b] ?? 0), 0);
-  const gradedNet = evGross * (1 - c.resaleFee) - c.gradingFee - c.gradingShip - c.packagingCost;
+  const cost = c.gradingFee + c.gradingShip + c.packagingCost;
+  const gradedNet = evGross * (1 - c.resaleFee) - cost;
   const rawNet = raw * (1 - c.resaleFee) - c.packagingCost;
   const upside = gradedNet - rawNet;
+  // Robustness: what if the 10 never comes? Move its probability onto the 9. A plan that only works in
+  // the gem case is a lottery ticket.
+  const pNo10: Record<Bucket, number> = { ...p, "9": p["9"] + p["10"], "10": 0 };
+  const evNo10 = BUCKETS.reduce((a, b) => a + pNo10[b] * (prices[b] ?? 0), 0);
+  const gradedNetNo10 = evNo10 * (1 - c.resaleFee) - cost;
+  const upsideNo10 = gradedNetNo10 - rawNet;
   const photoQ = g.condition?.photo_quality ?? "limited";
-  const rec = photoQ === "unusable" ? "inspect in hand" : upside > Math.max(15, 0.25 * Math.max(rawNet, 1)) ? "grade" : upside > 0 && p["10"] + p["9"] >= 0.5 ? "grade if it looks 9+ in hand" : "sell raw";
+  const hurdle = Math.max(25, 0.3 * cost, 0.25 * Math.max(rawNet, 1)); // must clear the ~$90 outlay with margin
+  const rec = photoQ === "unusable" ? "inspect in hand"
+    : upside > hurdle && upsideNo10 > 0 ? "grade"
+    : upside > hurdle ? "speculative: pays only if it gems"
+    : upside > 0 && p["10"] + p["9"] >= 0.5 ? "grade if it looks 9+ in hand"
+    : "sell raw";
   return {
     probabilities: p, prices, ev_gross: evGross, graded_net: gradedNet, raw_value: raw, raw_net: rawNet, upside,
+    graded_net_no10: gradedNetNo10, upside_no10: upsideNo10, grading_cost: cost, hurdle,
     grading_fee: c.gradingFee, grading_ship: c.gradingShip, days: c.gradingDays, recommendation: rec,
     predicted_grade: g.predicted_grade ?? null, recommended_grader: g.recommended_grader ?? null, photo_quality: photoQ,
     profit_graded_vs_landed: gradedNet - sc.landed_cost,

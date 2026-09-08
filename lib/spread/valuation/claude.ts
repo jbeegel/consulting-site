@@ -18,8 +18,21 @@ THIS LOT IS A TRADING CARD. Do the full grading analysis (schema field \`grading
 2. Read condition from the photos like a grader: centering (estimate left/right and top/bottom ratios),
    corners (sharp / soft / dinged / rounded), edges (clean / chipping / rough cut), surface (print lines,
    scratches, stains, wax, creases, snow). Say when the photo cannot show something.
-3. Turn that into PSA grade probabilities (10 / 9 / 8 / 7-or-below) that sum to 1. Be honest: most raw
-   vintage cards are 5-7s; modern pack-fresh cards split 9/10; print-defect-prone sets rarely gem.
+    assert ge["graded_net"] == ev * (1 - settings.resale_fee) - settings.grading_fee - settings.grading_ship - settings.packaging_cost
+    assert ge["grading_cost"] == settings.grading_fee + settings.grading_ship + settings.packaging_cost
+    # a common Griffey with a 4% gem rate does not clear ~$90 of grading cost
+    assert ge["upside"] < 25 and ge["recommendation"] == "sell raw"
+    # a card whose 9 alone clears the cost gets "grade"; one that needs the 10 is flagged speculative
+    strong = dict(g, grade_probabilities={"psa10": 0.10, "psa9": 0.55, "psa8": 0.30, "psa7_or_below": 0.05},
+                  graded_comps=[{"grader": "PSA", "grade": "10", "price": 900, "source": "", "url": "", "date": ""},
+                                {"grader": "PSA", "grade": "9", "price": 300, "source": "", "url": "", "date": ""},
+                                {"grader": "PSA", "grade": "8", "price": 120, "source": "", "url": "", "date": ""}], raw_value=60)
+    assert grading_economics({"mid": 60.0, "grading": strong}, sc, settings)["recommendation"] == "grade"
+    lottery = dict(strong, grade_probabilities={"psa10": 0.12, "psa9": 0.30, "psa8": 0.40, "psa7_or_below": 0.18},
+                   graded_comps=[{"grader": "PSA", "grade": "10", "price": 2500, "source": "", "url": "", "date": ""},
+                                 {"grader": "PSA", "grade": "9", "price": 90, "source": "", "url": "", "date": ""},
+                                 {"grader": "PSA", "grade": "8", "price": 50, "source": "", "url": "", "date": ""}], raw_value=40)
+    assert grading_economics({"mid": 40.0, "grading": lottery}, sc, settings)["recommendation"].startswith("speculative")
 4. Search deeply for GRADED sales by grade: PSA Auction Prices Realized (psacard.com/auctionprices),
    SportsCardsPro / PriceCharting (price by grade), 130point.com (eBay sold aggregator), eBay sold filtered
    by 'PSA 10' / 'PSA 9' / 'PSA 8', Goldin/Heritage for high-end. Record grader, grade, price, source, URL, date.

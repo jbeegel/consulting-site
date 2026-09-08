@@ -224,9 +224,12 @@ def why_upside(lot: dict[str, Any], val: dict[str, Any], sc: dict[str, Any], s: 
     if val.get("standout_item"):
         bits.append(f"Standout piece: {val['standout_item']}.")
     ge = grading_economics(val, sc, s)
-    if ge and ge["upside"] > 0:
-        bits.append(f"Grading upside: expected net ${ge['graded_net']:,.0f} graded vs ${ge['raw_net']:,.0f} raw "
-                    f"(+${ge['upside']:,.0f}, likely {ge['predicted_grade'] or 'PSA 8-9'}), recommendation: {ge['recommendation']}.")
+    if ge:
+        if ge["upside"] > 0:
+            bits.append(f"Grading: expected net ${ge['graded_net']:,.0f} graded vs ${ge['raw_net']:,.0f} raw after ~${ge['grading_cost']:,.0f} to grade "
+                        f"(+${ge['upside']:,.0f}, likely {ge['predicted_grade'] or 'PSA 8-9'}); recommendation: {ge['recommendation']}.")
+        else:
+            bits.append(f"Grading does not pay: ~${ge['grading_cost']:,.0f} to grade against an expected ${ge['ev_gross']:,.0f} graded sale; sell raw.")
     if val.get("value_drivers"):
         bits.append("Value drivers: " + "; ".join(val["value_drivers"][:3]) + ".")
     if val.get("risks"):
@@ -283,21 +286,32 @@ def grading_economics(val: dict[str, Any] | None, sc: dict[str, Any], s: Setting
         prices["10"] = prices["9"]
     ev_gross = sum(p[b] * float(prices[b] or 0) for b in _GRADE_BUCKETS)
     fee = s.resale_fee
-    graded_net = ev_gross * (1 - fee) - s.grading_fee - s.grading_ship - s.packaging_cost
+    cost = s.grading_fee + s.grading_ship + s.packaging_cost
+    graded_net = ev_gross * (1 - fee) - cost
     raw_net = raw * (1 - fee) - s.packaging_cost
     upside = graded_net - raw_net
+    # Robustness: what if the 10 never comes? Move the 10's probability onto the 9. Tens are rare and
+    # a recommendation that only works in the gem case is a lottery ticket, not a plan.
+    p_no10 = dict(p, **{"9": p["9"] + p["10"], "10": 0.0})
+    ev_no10 = sum(p_no10[b] * float(prices[b] or 0) for b in _GRADE_BUCKETS)
+    graded_net_no10 = ev_no10 * (1 - fee) - cost
+    upside_no10 = graded_net_no10 - raw_net
     photo_q = ((g.get("condition") or {}).get("photo_quality") or "limited")
+    hurdle = max(25.0, 0.3 * cost, 0.25 * max(raw_net, 1.0))  # must clear the ~$90 outlay with margin
     if photo_q == "unusable":
         rec = "inspect in hand"
-    elif upside > max(15.0, 0.25 * max(raw_net, 1.0)):
+    elif upside > hurdle and upside_no10 > 0:
         rec = "grade"
+    elif upside > hurdle:
+        rec = "speculative: pays only if it gems"
     elif upside > 0 and (p["10"] + p["9"]) >= 0.5:
         rec = "grade if it looks 9+ in hand"
     else:
         rec = "sell raw"
     return {
         "probabilities": p, "prices": prices, "ev_gross": ev_gross, "graded_net": graded_net, "raw_value": raw,
-        "raw_net": raw_net, "upside": upside, "grading_fee": s.grading_fee, "grading_ship": s.grading_ship,
+        "raw_net": raw_net, "upside": upside, "graded_net_no10": graded_net_no10, "upside_no10": upside_no10,
+        "grading_cost": cost, "hurdle": hurdle, "grading_fee": s.grading_fee, "grading_ship": s.grading_ship,
         "days": s.grading_days, "recommendation": rec, "predicted_grade": g.get("predicted_grade"),
         "recommended_grader": g.get("recommended_grader"), "photo_quality": photo_q,
         "profit_graded_vs_landed": graded_net - sc["landed_cost"],
