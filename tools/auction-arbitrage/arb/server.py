@@ -61,6 +61,7 @@ def create_app(settings: Settings | None = None, store: Store | None = None, sca
             "valuer": s.valuer, "claude_enabled": s.anthropic_available and s.valuer in ("auto", "claude"),
             "ebay_sold": s.ebay_sold, "hibid": s.hibid_site, "time_buckets": [b[0] for b in TIME_BUCKETS],
             "sweet_spot": {"max_landed": s.sweet_spot_max_landed, "min_net": s.sweet_spot_min_net},
+            "vision": s.vision, "radar_levels": ["strike", "watch", "track", "scan"],
             "ebay_fees": {"fvf": s.ebay_fvf, "fvf_media": s.ebay_fvf_media, "per_order": s.ebay_per_order, "packaging": s.packaging_cost},
         }
 

@@ -40,7 +40,7 @@ class Scanner:
         self.store = store
         self.client = client or HiBidClient(settings.hibid_graphql, site_url=settings.hibid_site,
                                             delay=settings.request_delay)
-        self.pipeline = pipeline or ValuationPipeline(settings, store)
+        self.pipeline = pipeline or ValuationPipeline(settings, store, picture_fetcher=self.pictures_for)
         self.status = ScanStatus()
 
     # ------------------------------------------------------------------ pull
@@ -143,6 +143,11 @@ class Scanner:
             if self.refresh_lot(lid):
                 n += 1
         return n
+
+    def pictures_for(self, lot: dict[str, Any]) -> list[str]:
+        """Full-size photo URLs for a lot (one GetLotDetails call; cached on the stored lot)."""
+        fresh = self.enrich_lot(int(lot["id"]))
+        return list((fresh or {}).get("pictures") or [])
 
     def enrich_lot(self, lot_id: int) -> dict[str, Any] | None:
         """Pull full details (description, all pictures) for the dossier."""

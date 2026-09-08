@@ -1,7 +1,7 @@
 // Independent valuation with Claude + server-side web search. One request per lot. The lot's current
 // bid is deliberately NOT shown to the model so the estimate can't anchor on it.
 import Anthropic from "@anthropic-ai/sdk";
-import type { Comp, ListingPlan, Lot, Valuation } from "../types";
+import type { Comp, ListingPlan, LotItem, Lot, Valuation } from "../types";
 import { emptyValuation } from "./base";
 
 const SYSTEM = `You are a veteran secondary-market appraiser and reseller (eBay power seller, estate liquidator,
@@ -17,12 +17,32 @@ Rules:
 - For bulk lots, value the lot as a whole (what one buyer would pay), not the retail sum of parts.
 - Flag authenticity risk for luxury brands, precious metals/coins, autographs, designer goods.
 - Be conservative on obscure items, art, and collectibles; be precise on commodity electronics/tools.
+- PHOTOS ARE THE EVIDENCE. Auction titles are often useless ("vintage knic knacs"); the value hides in a
+  backstamp, a signature, a label, a pattern, or one piece among ten. Study every photo: read maker's marks,
+  country-of-origin stamps, model numbers, hallmarks, edition numbers. For multi-item lots identify EACH
+  distinct item, value each one, name the standout piece, and make the lot range the realistic total a
+  reseller would net selling the good pieces individually and the rest as a group.
 - Report prices in USD. Never exceed 3 web searches per item; stop early when you have 3+ solid comps.
-- Also draft the eBay listing you would post: an 80-character keyword-dense title (brand, what it is, era,
-  maker marks, size, key search words; no filler like "LOOK" or "WOW"), the best eBay category, condition,
-  item specifics buyers filter on, an honest 3-6 sentence description, three price points (quick sale =
-  around the 25th percentile of sold comps, market = median, patient = 75th percentile), a best-offer floor,
-  and a shipping estimate (weight class and packaging).`;
+- Also draft the eBay listing you would post, with three price points (quick sale = around the 25th
+  percentile of sold comps, market = median, patient = 75th percentile), a best-offer floor, and a shipping
+  estimate (weight class and packaging).
+- The eBay listing must be written for eBay's search ranking (Best Match), not for a human editor:
+  * TITLE (max 80 chars): front-load the highest-volume search terms buyers actually type (brand/maker,
+    what it is, model/pattern, era, size, color, material, country). Use all 80 characters when possible.
+    No filler ("L@@K", "WOW", "RARE!!" unless the item is verifiably rare), no punctuation runs, no ALL CAPS.
+    Give two alternate titles that target different search phrasings.
+  * CATEGORY: the leaf category where the sold comps actually live (browse the comps' categories).
+  * ITEM SPECIFICS: fill every specific buyers filter on in that category (Brand, Type, Material, Color,
+    Era/Decade, Country/Region of Manufacture, Original/Reproduction, Theme, Pattern, Style, Size, Features,
+    Occasion, Character, Franchise, Set, Year, Model, MPN/UPC when known). Unfilled specifics cost ranking.
+  * CONDITION: the eBay condition value, plus a one-line condition description that names every flaw.
+  * DESCRIPTION: 4-8 short sentences; repeat the key terms naturally; what it is, marks, measurements,
+    condition, what is included, shipping/handling promise. No walls of text, no HTML tricks.
+  * PRICE/FORMAT: fixed price with Best Offer for items with steady sold comps; 7-day auction ending
+    Sunday evening for scarce/collector items with bidding competition. Price at the comps, not at hope.
+  * PHOTOS: list the exact shots to take (front, back, base/backstamp, close-up of marks, any damage, scale).
+  * PROMOTED LISTINGS: suggest an ad rate (0 for commodity items with many sellers, 2-5% for competitive
+    categories) and the best day/time to list.`;
 
 const LISTING_SCHEMA = {
   type: "object",
@@ -42,14 +62,37 @@ const LISTING_SCHEMA = {
     packaging: { type: "string", description: "padded mailer | small box | medium box | large box | freight" },
     shipping_cost_estimate: { type: "number", description: "what it will cost you to ship domestically, USD" },
     keywords: { type: "array", items: { type: "string" } },
+    alt_titles: { type: "array", items: { type: "string" }, description: "two alternate 80-char titles targeting other search phrasings" },
+    condition_description: { type: "string", description: "one line naming every flaw" },
+    photo_checklist: { type: "array", items: { type: "string" }, description: "exact shots to take" },
+    seo_notes: { type: "string", description: "why these terms/category/specifics rank; what buyers search" },
+    promoted_rate: { type: "number", description: "suggested promoted listing ad rate as a fraction, 0 if none" },
+    best_time_to_list: { type: "string" },
   },
-  required: ["title", "category", "condition", "item_specifics", "description", "format", "price_quick", "price_market", "price_patient", "best_offer_floor", "auction_start", "shipping_weight_oz", "packaging", "shipping_cost_estimate", "keywords"],
+  required: ["title", "category", "condition", "item_specifics", "description", "format", "price_quick", "price_market", "price_patient", "best_offer_floor", "auction_start", "shipping_weight_oz", "packaging", "shipping_cost_estimate", "keywords", "alt_titles", "condition_description", "photo_checklist", "seo_notes", "promoted_rate", "best_time_to_list"],
+  additionalProperties: false,
+} as const;
+
+const ITEM_SCHEMA = {
+  type: "object",
+  properties: {
+    name: { type: "string", description: "what the item is, precisely" },
+    maker_or_mark: { type: "string", description: "maker, backstamp, label or hallmark read from the photos, or 'unmarked'" },
+    era: { type: "string" },
+    est_low: { type: "number" },
+    est_high: { type: "number" },
+    confidence: { type: "number" },
+    note: { type: "string", description: "why it is worth that; condition observations" },
+  },
+  required: ["name", "maker_or_mark", "era", "est_low", "est_high", "confidence", "note"],
   additionalProperties: false,
 } as const;
 
 const SCHEMA = {
   type: "object",
   properties: {
+    items: { type: "array", items: ITEM_SCHEMA, description: "every distinct item identified in the lot (one entry for a single-item lot)" },
+    standout_item: { type: "string", description: "the single most valuable item in the lot and why, or empty" },
     listing: LISTING_SCHEMA,
     identified_item: { type: "string" },
     brand: { type: "string" },
@@ -80,9 +123,40 @@ const SCHEMA = {
     authenticity_risk: { type: "boolean" },
     search_query: { type: "string", description: "best eBay sold-listings search string for this item" },
   },
-  required: ["identified_item", "brand", "model", "condition_assumption", "bulk_lot", "unit_count", "resale_low", "resale_mid", "resale_high", "confidence", "confidence_reason", "demand", "days_to_sell", "best_channel", "value_drivers", "risks", "rationale", "comps", "authenticity_risk", "search_query", "listing"],
+  required: ["identified_item", "brand", "model", "condition_assumption", "bulk_lot", "unit_count", "resale_low", "resale_mid", "resale_high", "confidence", "confidence_reason", "demand", "days_to_sell", "best_channel", "value_drivers", "risks", "rationale", "comps", "authenticity_risk", "search_query", "listing", "items", "standout_item"],
   additionalProperties: false,
 } as const;
+
+const MAX_IMAGE_BYTES = 4_500_000;
+type ImageBlock = { type: "image"; source: { type: "base64"; media_type: "image/jpeg" | "image/png" | "image/webp" | "image/gif"; data: string } };
+
+export function lotImageUrls(lot: Lot): string[] {
+  const urls = [...(lot.pictures ?? [])];
+  for (const u of [lot.image_full, lot.image]) if (u && !urls.includes(u)) urls.push(u);
+  return urls.filter(Boolean);
+}
+
+/** Download lot photos as Claude image blocks. Failures are skipped silently: photos are a bonus, never a blocker. */
+export async function loadImages(urls: string[], maxImages = 4): Promise<ImageBlock[]> {
+  const out: ImageBlock[] = [];
+  for (const url of urls.slice(0, maxImages)) {
+    try {
+      const res = await fetch(url, { headers: { "user-agent": "spread-hunter/0.1" }, signal: AbortSignal.timeout(15000), cache: "no-store" });
+      if (!res.ok) continue;
+      const buf = Buffer.from(await res.arrayBuffer());
+      if (buf.length > MAX_IMAGE_BYTES || buf.length === 0) continue;
+      let type = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+      if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(type)) {
+        type = buf[0] === 0xff && buf[1] === 0xd8 ? "image/jpeg" : buf[0] === 0x89 && buf[1] === 0x50 ? "image/png" : buf.subarray(8, 12).toString() === "WEBP" ? "image/webp" : "";
+        if (!type) continue;
+      }
+      out.push({ type: "image", source: { type: "base64", media_type: type as ImageBlock["source"]["media_type"], data: buf.toString("base64") } });
+    } catch {
+      /* skip */
+    }
+  }
+  return out;
+}
 
 function lotPrompt(lot: Lot, comps: Comp[]): string {
   let desc = (lot.description || "").trim();
@@ -107,7 +181,7 @@ function lotPrompt(lot: Lot, comps: Comp[]): string {
 
 export class ClaudeValuer {
   private client = new Anthropic();
-  constructor(private model: string, private webSearch = true, private maxSearches = 3) {}
+  constructor(private model: string, private webSearch = true, private maxSearches = 3, private vision = true, private maxImages = 4) {}
 
   private request(messages: Anthropic.MessageParam[]) {
     const params: Anthropic.MessageCreateParamsNonStreaming = {
@@ -124,7 +198,13 @@ export class ClaudeValuer {
   async value(lot: Lot, comps: Comp[] = []): Promise<Valuation> {
     const v = emptyValuation(lot);
     v.model_used = this.model;
-    const messages: Anthropic.MessageParam[] = [{ role: "user", content: lotPrompt(lot, comps) }];
+    const images = this.vision ? await loadImages(lotImageUrls(lot), this.maxImages) : [];
+    v.images_used = images.length;
+    const text = lotPrompt(lot, comps);
+    const content: Anthropic.MessageParam["content"] = images.length
+      ? [{ type: "text", text: `Photos of the lot (${images.length} attached). Read every mark and label you can.` }, ...images, { type: "text", text }]
+      : text;
+    const messages: Anthropic.MessageParam[] = [{ role: "user", content }];
     let data: Record<string, unknown>;
     let searched = false;
     try {
@@ -164,6 +244,8 @@ export class ClaudeValuer {
     for (const c of comps.slice(0, 10)) if (!v.comps.some((x) => x.url === c.url)) v.comps.push({ ...c, note: c.note || `raw ${c.source} pull` });
     v.authenticity_risk = !!data.authenticity_risk;
     v.search_query = s("search_query");
+    v.items = Array.isArray(data.items) ? (data.items as LotItem[]).filter((i) => i && typeof i === "object" && i.name) : [];
+    v.standout_item = s("standout_item");
     const lst = data.listing as ListingPlan | undefined;
     if (lst && typeof lst === "object" && lst.title) v.listing = { ...lst, title: String(lst.title).slice(0, 80) };
     v.method = this.webSearch && searched ? "claude+web" : "claude";

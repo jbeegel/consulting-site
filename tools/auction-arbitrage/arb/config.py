@@ -36,6 +36,8 @@ class Settings:
     ebay_sold: bool = field(default_factory=lambda: _b("ARB_EBAY_SOLD", True))
     valuation_ttl_days: float = field(default_factory=lambda: _f("ARB_VALUATION_TTL_DAYS", 7))
     valuation_workers: int = field(default_factory=lambda: int(_f("ARB_VALUATION_WORKERS", 4)))
+    vision: bool = field(default_factory=lambda: _b("ARB_VISION", True))  # send lot photos to the model
+    max_images: int = field(default_factory=lambda: int(_f("ARB_MAX_IMAGES", 4)))
 
     # --- cost model (fractions, not percents)
     default_buyer_premium: float = field(default_factory=lambda: _f("ARB_BUYER_PREMIUM", 0.15))

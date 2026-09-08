@@ -18,7 +18,7 @@ export class Scanner {
   readonly pipeline: ValuationPipeline;
   constructor(readonly c: Config = config, readonly store: Store = getStore(), client?: HiBidClient) {
     this.client = client ?? new HiBidClient(c.hibidGraphql, c.hibidSite, c.requestDelayMs);
-    this.pipeline = new ValuationPipeline(c, store);
+    this.pipeline = new ValuationPipeline(c, store, undefined, (lot) => this.picturesFor(lot));
   }
 
   async pull(p: ScanParams): Promise<Lot[]> {
@@ -116,6 +116,12 @@ export class Scanner {
     let n = 0;
     for (const id of ids) if (await this.refreshLot(id)) n++;
     return n;
+  }
+
+  /** Full-size photo URLs for a lot (one GetLotDetails call; cached on the stored lot). */
+  async picturesFor(lot: Lot): Promise<string[]> {
+    const fresh = await this.enrichLot(lot.id);
+    return fresh?.pictures ?? [];
   }
 
   async enrichLot(lotId: number): Promise<Lot | null> {

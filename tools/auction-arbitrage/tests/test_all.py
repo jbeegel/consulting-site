@@ -53,9 +53,12 @@ def test_scoring_math(settings):
     assert sc["spread"] > 0 and sc["ratio"] > 4 and sc["heat"] in ("hot", "warm")
     assert sc["time_bucket"] == "<1h" and sc["price_reliability"] == 1.0
     assert "Next bid $45" in why_upside(lot, val, sc, settings)
-    # far-out lots get discounted
+    # far-out lots get discounted hard, but keep their value score and stay on the radar
     far = score_lot(dict(lot, ends_at=now + 5 * 86400), val, settings, now=now)
-    assert far["score"] < sc["score"]
+    assert far["score"] < sc["score"] * 0.3 and far["value_score"] == sc["value_score"]
+    assert sc["radar"] == "strike" and far["radar"] == "scan"
+    assert score_lot(dict(lot, ends_at=now + 5 * 3600), val, settings, now=now)["radar"] == "watch"
+    assert score_lot(dict(lot, ends_at=now + 30 * 3600), val, settings, now=now)["radar"] == "track"
     # penny lot: $1 bid that nets $25 is a sweet spot and scores hot
     penny = score_lot(dict(lot, high_bid=1.0, min_bid=1.0), {"mid": 30.0, "low": 20.0, "high": 45.0, "confidence": 0.7}, settings, now=now)
     assert penny["sweet_spot"] and penny["heat"] == "hot"
@@ -126,8 +129,23 @@ def test_claude_valuer_parsing(settings, monkeypatch):
     valuer = cv.ClaudeValuer.__new__(cv.ClaudeValuer)
     import anthropic
     valuer._anthropic, valuer.client, valuer.model, valuer.web_search, valuer.max_searches, valuer.effort = anthropic, FakeClient(), "test-model", True, 3, "medium"
+    valuer.vision, valuer.max_images = True, 4
     v = valuer.value({"id": 5, "title": "DeWalt DCD996 drill", "description": "", "quantity": 1})
     assert v.usable and v.method == "claude+web" and v.mid == 110 and v.comps[0]["price"] == 105
+    assert v.images_used == 0
+
+    # with photos: image blocks are attached ahead of the text
+    seen = {}
+
+    class FakeMessages2(FakeMessages):
+        def create(self, **kw):
+            seen["content"] = kw["messages"][0]["content"]
+            return FakeResp()
+
+    valuer.client = type("C", (), {"messages": FakeMessages2()})()
+    monkeypatch.setattr(cv, "load_images", lambda urls, n=4, timeout=15.0: [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": "AAAA"}} for _ in urls[:n]])
+    v = valuer.value({"id": 5, "title": "G) vintage knic knacs", "description": "", "quantity": 1, "pictures": ["u1", "u2", "u3"]})
+    assert v.images_used == 3 and isinstance(seen["content"], list) and sum(b["type"] == "image" for b in seen["content"]) == 3
 
     # pipeline uses the injected valuer and caches by title
     store = Store(settings.db_path)

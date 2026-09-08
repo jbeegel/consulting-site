@@ -24,18 +24,44 @@ def time_bucket(seconds: float | None) -> str:
 
 
 def price_reliability(seconds: float | None) -> float:
-    """How much the current bid tells you about the final price. Bids move late."""
+    """How much the current bid tells you about the final price. A $1 bid with a week left is noise;
+    the same $1 with an hour left is the price. This multiplies the value score directly."""
     if seconds is None:
-        return 0.4
-    if seconds < 3600:
+        return 0.3
+    h = seconds / 3600
+    if h < 1:
         return 1.0
-    if seconds < 6 * 3600:
-        return 0.85
-    if seconds < 24 * 3600:
+    if h < 2:
+        return 0.95
+    if h < 6:
+        return 0.8
+    if h < 12:
         return 0.65
-    if seconds < 3 * 86400:
-        return 0.45
-    return 0.3
+    if h < 24:
+        return 0.5
+    if h < 48:
+        return 0.35
+    if h < 7 * 24:
+        return 0.2
+    return 0.1
+
+
+RADAR_LEVELS = ("strike", "watch", "track", "scan")
+
+
+def radar_level(seconds: float | None, value_score: float) -> str:
+    """Radar = disparity x time. STRIKE: act now. WATCH: refresh often. TRACK: valued, closing within
+    two days. SCAN: identified as valuable but too far out for the bid to mean anything yet."""
+    if seconds is None or value_score < 20:
+        return "scan"
+    h = seconds / 3600
+    if h < 2:
+        return "strike"
+    if h < 12:
+        return "watch"
+    if h < 48:
+        return "track"
+    return "scan"
 
 
 def heat(score: float) -> str:
@@ -83,8 +109,8 @@ def score_lot(lot: dict[str, Any], val: dict[str, Any] | None, s: Settings, *, n
         "valued": bool(val and val.get("mid")),
     }
     if not out["valued"]:
-        out.update({"net_resale": None, "spread": None, "ratio": None, "score": 0.0, "heat": "unvalued",
-                    "confidence": 0.0})
+        out.update({"net_resale": None, "spread": None, "ratio": None, "score": 0.0, "value_score": 0.0,
+                    "heat": "unvalued", "confidence": 0.0, "radar": "scan"})
         return out
 
     mid = float(val["mid"])
@@ -103,16 +129,20 @@ def score_lot(lot: dict[str, Any], val: dict[str, Any] | None, s: Settings, *, n
     if sweet:  # a $1-$3 buy that nets $15+ is the bread and butter; don't let small dollars bury it
         dollar_component = max(dollar_component, 0.5)
     raw = 0.6 * ratio_component + 0.4 * dollar_component
-    score = 100 * raw * (0.5 + 0.5 * conf) * (0.5 + 0.5 * out["price_reliability"])
+    # value_score: how big the disparity is at today's price, ignoring the clock
+    value_score = 100 * raw * (0.5 + 0.5 * conf)
     if spread <= 0:
-        score = 0.0
+        value_score = 0.0
     elif spread < s.min_spread:  # a 10x on $2 of headroom is not worth the gas
-        score *= spread / s.min_spread
+        value_score *= spread / s.min_spread
     if val.get("authenticity_risk"):
-        score *= 0.75
+        value_score *= 0.75
+    # score: the disparity discounted by how much the current bid can be trusted (time left)
+    score = value_score * out["price_reliability"]
     out.update({
         "net_resale": net, "net_resale_low": net_low, "spread": spread, "spread_low": net_low - cost,
-        "ratio": ratio, "confidence": conf, "score": round(score, 1), "heat": heat(score), "sweet_spot": sweet,
+        "ratio": ratio, "confidence": conf, "value_score": round(value_score, 1), "score": round(score, 1),
+        "heat": heat(score), "sweet_spot": sweet, "radar": radar_level(secs_left, value_score),
     })
     return out
 
@@ -128,13 +158,14 @@ def ebay_fee_rate(category: str, s: Settings) -> float:
     return s.ebay_fvf_media if _MEDIA.search(category or "") else s.ebay_fvf
 
 
-def net_out(price: float, *, category: str, shipping_cost: float, s: Settings, shipping_charged: float = 0.0) -> dict[str, Any]:
+def net_out(price: float, *, category: str, shipping_cost: float, s: Settings, shipping_charged: float = 0.0,
+            promoted_rate: float | None = None) -> dict[str, Any]:
     """Net cash after eBay final value fee, per-order fee, promoted-listing ad, shipping and packaging."""
     gross = price + shipping_charged
     rate = ebay_fee_rate(category, s)
     fvf = gross * rate
     per_order = s.ebay_per_order_small if gross <= 10 else s.ebay_per_order
-    promoted = gross * s.ebay_promoted
+    promoted = gross * (s.ebay_promoted if promoted_rate is None else promoted_rate)
     net = gross - fvf - per_order - promoted - shipping_cost - s.packaging_cost
     return {"price": price, "shipping_charged": shipping_charged, "fvf": fvf, "fvf_rate": rate, "per_order": per_order,
             "promoted": promoted, "shipping_cost": shipping_cost, "packaging": s.packaging_cost, "net": net}
@@ -152,9 +183,10 @@ def listing_economics(lot: dict[str, Any], val: dict[str, Any] | None, sc: dict[
     patient = float(lst.get("price_patient") or val.get("high") or val["mid"] * 1.2)
     # Buyer pays shipping on cheap items (free shipping on a $20 item eats the margin); seller absorbs on pricey ones.
     charged = ship if market < 60 else 0.0
+    promo = s.ebay_promoted or max(0.0, min(0.2, float(lst.get("promoted_rate") or 0)))
     pts = []
     for label, price, days in (("quick", quick, 7), ("market", market, 21), ("patient", patient, 45)):
-        e = net_out(price, category=cat, shipping_cost=ship, s=s, shipping_charged=charged)
+        e = net_out(price, category=cat, shipping_cost=ship, s=s, shipping_charged=charged, promoted_rate=promo)
         e.update({"label": label, "expected_days": days, "profit": e["net"] - sc["landed_cost"],
                   "roi": (e["net"] - sc["landed_cost"]) / sc["landed_cost"] if sc["landed_cost"] > 0 else None})
         pts.append(e)
@@ -185,8 +217,12 @@ def why_upside(lot: dict[str, Any], val: dict[str, Any], sc: dict[str, Any], s: 
         bits.append("No bids yet, so the opening bid is the price today.")
     elif sc["seconds_left"] is not None and sc["seconds_left"] < 6 * 3600:
         bits.append(f"Closing in under {max(1, int(sc['seconds_left'] // 3600) + 1)}h with {lot.get('bid_count')} bids, so the current price is close to final.")
+    elif sc["seconds_left"] is not None and sc["seconds_left"] > 48 * 3600:
+        bits.append(f"Still {int(sc['seconds_left'] // 86400)}+ days out, so today's bid means little; it stays on the radar and the score climbs as the close approaches.")
     else:
         bits.append("Plenty of time left; expect the price to rise near close.")
+    if val.get("standout_item"):
+        bits.append(f"Standout piece: {val['standout_item']}.")
     if val.get("value_drivers"):
         bits.append("Value drivers: " + "; ".join(val["value_drivers"][:3]) + ".")
     if val.get("risks"):

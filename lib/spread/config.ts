@@ -26,6 +26,8 @@ export const config = {
   ebaySold: bool("SPREAD_EBAY_SOLD", true),
   valuationTtlDays: num("SPREAD_VALUATION_TTL_DAYS", 7),
   valuationWorkers: Math.max(1, Math.floor(num("SPREAD_VALUATION_WORKERS", 4))),
+  vision: bool("SPREAD_VISION", true), // send lot photos to the model so it can read marks and split multi-item lots
+  maxImages: Math.max(0, Math.floor(num("SPREAD_MAX_IMAGES", 4))),
   valuePerRun: Math.floor(num("SPREAD_VALUE_PER_RUN", 12)),
   dailyValuationCap: Math.floor(num("SPREAD_DAILY_VALUATION_CAP", 150)),
   runBudgetMs: num("SPREAD_RUN_BUDGET_MS", 240_000), // stay under Vercel's maxDuration

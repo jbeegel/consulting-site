@@ -9,6 +9,8 @@ import { valueFromEstimate } from "./estimate";
 
 const HOT_WORDS = /\b(dewalt|milwaukee|makita|bosch|snap-?on|festool|stihl|husqvarna|honda|yamaha|generac|kohler|john deere|kubota|caterpillar|toro|ego\b|ryobi|yeti|weber|traeger|big green egg|stanley|bailey|griswold|wagner|rolex|omega|seiko|tag heuer|breitling|cartier|tiffany|bulova|accutron|elgin|waltham|hamilton|pocket watch|gold|silver|sterling|platinum|diamond|karat|\d+k\b|gold filled|bullion|coin|morgan|eagle|krugerrand|cameo|bakelite|trifari|weiss|coro|monet|napier|costume jewelry|louis vuitton|gucci|coach|prada|chanel|hermes|dooney|lego|nintendo|playstation|ps5|xbox|switch|pokemon|magic the gathering|funko|matchbox|hot wheels|lionel|marx|tonka|buddy l|barbie|g\.?i\.? joe|star wars|pez|topps|bowman|fleer|upper deck|panini|donruss|psa|bgs|rookie|autograph|signed|baseball card|football card|sports card|basketball card|hockey card|trading card|wax pack|apple|iphone|ipad|macbook|imac|samsung|sony|canon|nikon|leica|kodak|polaroid|brownie|bose|sonos|dyson|kitchenaid|vitamix|gibson|fender|martin|taylor|roland|marshall|zenith|philco|typewriter|rotary phone|herman miller|aeron|steelcase|eames|knoll|mid.?century|art deco|art nouveau|victorian|primitive|folk art|occupied japan|noritake|kewpie|bisque|chalkware|hummel|lladro|roseville|mccoy|hull|fenton|fiesta|depression glass|carnival glass|milk glass|wedgwood|jasperware|lenox|royal doulton|limoges|haviland|stoneware|crock|redware|ironstone|pyrex|corning|majolica|cloisonne|satsuma|imari|nippon|wall pocket|salt and pepper|shakers|figurine|advertising|tin sign|porcelain sign|coca.?cola|pepsi|still bank|mechanical bank|calendar bank|letter opener|inkwell|fountain pen|parker|sheaffer|waterman|zippo|lighter|pocket knife|case xx|buck knife|humidor|tobacco|oil lamp|aladdin|kerosene|lantern|railroad|insulator|marbles|license plate|milk bottle|whiskey bottle|decanter|jim beam|ezra brooks|singer|featherweight|seth thomas|ansonia|clock|first edition|1st edition|antique book|primer|mcguffey|yearbook|program|pennant|comic|boy scouts|bsa\b|girl scouts|chip hilton|hardy boys|nancy drew|big little book|lp\b|vinyl|record|45 rpm|78 rpm|vintage|antique|rare|native|indian|wall hanging|trek|specialized|cannondale|giant|peloton|schwinn|garmin|dji|gopro|oculus|quest)\b/gi;
 
+let VISION = true; // set from config by ValuationPipeline
+
 /** Cheap heuristic: which lots are worth spending a valuation call on, highest first. */
 export function triageScore(lot: Lot): number {
   const title = lot.title || "";
@@ -18,20 +20,22 @@ export function triageScore(lot: Lot): number {
   if ((lot.bid_count || 0) === 0) s += 1;
   if (lot.estimate) s += 0.5;
   if (lot.time_left_seconds !== null && lot.time_left_seconds < 6 * 3600) s += 1;
-  if (/\b(box of|misc|assorted|miscellaneous|contents of|shelf lot)\b/i.test(title)) s -= 1.5;
+  if (/\b(box of|misc|assorted|miscellaneous|contents of|shelf lot|knic ?knac|knick ?knack|bric.a.brac|smalls)\b/i.test(title))
+    s += (lot.picture_count ?? 0) >= 1 && VISION ? 0.5 : -1.5; // with photos, vague titles are where unnoticed value hides
   if ((lot.min_bid || lot.high_bid || 0) <= 5) s += 0.5; // penny lots are the bread and butter
   return s;
 }
 
 export class ValuationPipeline {
   private claude: ClaudeValuer | null | undefined;
-  constructor(private c: Config, private store: Store, claude?: ClaudeValuer | null) {
+  constructor(private c: Config, private store: Store, claude?: ClaudeValuer | null, private pictureFetcher?: (lot: Lot) => Promise<string[]>) {
     this.claude = claude;
+    VISION = c.vision;
   }
 
   private getClaude(): ClaudeValuer | null {
     if (this.claude !== undefined) return this.claude;
-    this.claude = this.c.claudeEnabled ? new ClaudeValuer(this.c.model, this.c.webSearch) : null;
+    this.claude = this.c.claudeEnabled ? new ClaudeValuer(this.c.model, this.c.webSearch, 3, this.c.vision, this.c.maxImages) : null;
     return this.claude;
   }
 
@@ -54,6 +58,14 @@ export class ValuationPipeline {
     let val: Valuation | null = null;
     const claude = this.c.valuer === "auto" || this.c.valuer === "claude" ? this.getClaude() : null;
     if (claude) {
+      if (this.c.vision && !lot.pictures?.length && this.pictureFetcher) {
+        try {
+          const pics = await this.pictureFetcher(lot);
+          if (pics.length) lot = { ...lot, pictures: pics };
+        } catch (e) {
+          console.info("picture fetch failed for", lot.id, e);
+        }
+      }
       val = await claude.value(lot, comps);
       if (!usable(val)) val = null;
     }

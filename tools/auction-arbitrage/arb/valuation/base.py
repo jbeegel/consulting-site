@@ -65,6 +65,9 @@ class Valuation:
     unit_count: int = 1
     sources_consulted: list[str] = field(default_factory=list)
     listing: dict[str, Any] | None = None  # ready-to-post eBay listing plan (see claude.LISTING_SCHEMA)
+    items: list[dict[str, Any]] = field(default_factory=list)  # per-item breakdown for multi-item lots (from photos)
+    standout_item: str = ""
+    images_used: int = 0
     model_used: str = ""
     created_at: float = field(default_factory=time.time)
     error: str = ""

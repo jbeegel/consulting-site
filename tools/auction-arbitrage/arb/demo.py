@@ -82,7 +82,22 @@ CATALOG: list[tuple] = [
     ("G) VINTAGE Metal Calendar Bank - CITIZENS BANK", "Collectibles > Advertising", 20, 45, "medium", ["Advertising still banks with working calendar are a niche", "Local bank collectors"], ["Missing key, stuck calendar"], False, ""),
     ("G) cast plaster native wall hanging 1940's", "Collectibles > Decorative", 25, 60, "medium", ["1940s chalkware wall plaques sold in pairs do well"], ["Chips in plaster are hard to hide"], False, ""),
     ("G) YOUNG Folks SPEAKER 1882 Hardcover", "Books > Antiquarian & Collectible", 15, 35, "low", ["Decorative Victorian binding"], ["Foxing, loose hinges"], False, ""),
+    ("G) vintage antique knic knacs", "Collectibles > Decorative", 70, 120, "medium", ["One Deruta Italy hand-painted majolica mini vase carries the lot", "Delft and drip-glaze miniatures sell in groups"], ["Chips on the black glass vase feet", "Shell-art souvenir is near worthless"], False, ""),
 ]
+
+DEMO_ITEMS = {
+    "G) vintage antique knic knacs": [
+        {"name": "Hand-painted majolica miniature vase, 'Deruta Italy' on base", "maker_or_mark": "DERUTA ITALY (painted mark, read from the base)", "era": "1950s-70s", "est_low": 40, "est_high": 50, "confidence": 0.75, "note": "Deruta majolica miniatures with a clear mark sell steadily; check the foot rim for chips."},
+        {"name": "Blue-and-white Delft miniature vase, windmill scene", "maker_or_mark": "Delft-style, likely Holland stamp", "era": "mid-century", "est_low": 8, "est_high": 15, "confidence": 0.6, "note": "Common souvenir size; sells best paired."},
+        {"name": "Brown/blue drip-glaze miniature vase", "maker_or_mark": "unmarked, Japan-style glaze", "era": "1960s", "est_low": 8, "est_high": 15, "confidence": 0.5, "note": "Attractive glaze; unmarked keeps it modest."},
+        {"name": "Souvenir stein with mountain transfer and chain", "maker_or_mark": "unread transfer", "era": "1950s", "est_low": 8, "est_high": 15, "confidence": 0.5, "note": "Souvenir ware; chain intact helps."},
+        {"name": "Bird in glass dome paperweight/box", "maker_or_mark": "unmarked", "era": "1960s", "est_low": 6, "est_high": 12, "confidence": 0.4, "note": "Novelty; condition of the dome matters."},
+        {"name": "Black glass footed miniature vase", "maker_or_mark": "unmarked", "era": "1930s-50s", "est_low": 5, "est_high": 10, "confidence": 0.5, "note": "Possible chip on one foot."},
+        {"name": "White porcelain figurine (dog/bear)", "maker_or_mark": "unmarked", "era": "mid-century", "est_low": 4, "est_high": 8, "confidence": 0.4, "note": ""},
+        {"name": "Pale blue miniature pitcher", "maker_or_mark": "unmarked", "era": "mid-century", "est_low": 3, "est_high": 6, "confidence": 0.4, "note": ""},
+        {"name": "Shell-encrusted Florida souvenir vase", "maker_or_mark": "Florida souvenir label", "era": "1950s", "est_low": 2, "est_high": 5, "confidence": 0.5, "note": "Near worthless; include as a bonus in a group listing."},
+    ]
+}
 
 AUCTIONS = [
     (775586, "SEPT 13 - UNCLAIMED PROPERTY / POLICE SEIZURES / GOV SURPLUS", "Washington Surplus Inc", "Tacoma", "WA", 0.15),
@@ -163,6 +178,9 @@ def make_demo(seed: int = 7, now: float | None = None) -> tuple[list[dict[str, A
                              f"Demand is {demand}.",
                 "comps": comps, "search_query": title, "authenticity_risk": auth, "bulk_lot": False, "unit_count": 1,
                 "sources_consulted": ["ebay_sold (demo)"], "model_used": "demo", "created_at": now, "error": "",
+                "items": DEMO_ITEMS.get(title, []),
+                "standout_item": DEMO_ITEMS[title][0]["name"] if title in DEMO_ITEMS else "",
+                "images_used": 3 if title in DEMO_ITEMS else 0,
                 "listing": {
                     "title": (title.replace("G) ", "") + " " + " ".join(cat_path.split(" > ")[-1:]))[:80],
                     "category": cat_path, "condition": "Used",
@@ -173,6 +191,12 @@ def make_demo(seed: int = 7, now: float | None = None) -> tuple[list[dict[str, A
                     "shipping_weight_oz": 12 if mid < 100 else 80, "packaging": "small box" if mid < 100 else "medium box",
                     "shipping_cost_estimate": 6.5 if mid < 60 else 14.0 if mid < 500 else 0.0,
                     "keywords": [w for w in title.replace("G) ", "").split() if len(w) > 3][:6],
+                    "alt_titles": [(" ".join(cat_path.split(" > ")[-1:]) + " " + title.replace("G) ", ""))[:80], (title.replace("G) ", "") + " " + ("Vintage" if "intage" in title or "ntique" in title else "Used"))[:80]],
+                    "condition_description": "Used; light surface wear consistent with age, no cracks or repairs noted.",
+                    "photo_checklist": ["Front, straight on, neutral background", "Back", "Base or backstamp close-up", "Any flaw close-up", "Scale shot with ruler"],
+                    "seo_notes": f"Buyers search '{title.replace('G) ', '').split(',')[0]}' plus the maker; the {cat_path.split(' > ')[-1]} leaf category is where the sold comps sit. Fill Brand, Type, Era and Country specifics; they are search filters.",
+                    "promoted_rate": 0.0 if mid > 300 else 0.03,
+                    "best_time_to_list": "Sunday 6-9pm ET" if mid > 100 else "Any evening; fixed price with Best Offer",
                 },
             })
     return lots, vals

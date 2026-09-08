@@ -144,6 +144,18 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
 .conf{display:inline-block;width:46px;height:6px;background:var(--bg-3);border-radius:3px;vertical-align:middle;overflow:hidden}
 .conf i{display:block;height:100%;background:var(--accent)}
 .flag{font-size:10px;border:1px solid var(--warn);color:var(--warn);border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle}
+.radar{font-size:10px;border-radius:3px;padding:1px 6px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-family:var(--mono);display:inline-block}
+.radar.strike{background:var(--bad);color:#fff}
+.radar.watch{background:var(--heat-3);color:#fff}
+.radar.track{background:var(--accent-soft);color:var(--ink)}
+.radar.scan{background:var(--bg-3);color:var(--ink-3)}
+:root[data-theme="dark"] .radar.watch{color:#15161a}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .radar.watch{color:#15161a}}
+.items{width:100%;border-collapse:collapse;font-size:12px;margin-top:4px}
+.items td{padding:5px 6px;border-top:1px solid var(--line);vertical-align:top}
+.items td.r{text-align:right;font-family:var(--mono);white-space:nowrap}
+.items tr.star td{background:var(--bg);font-weight:600}
+.items .mk{color:var(--ink-3);font-size:11px;display:block;font-weight:400}
 .sweet{font-size:10px;background:var(--good);color:#fff;border-radius:3px;padding:1px 5px;margin-left:4px;vertical-align:middle;font-weight:600;letter-spacing:.02em}
 .prices{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
 .price{border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:var(--bg)}
@@ -224,12 +236,14 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
       <label class="toggle"><input type="checkbox" id="noBids"> No bids yet only</label>
       <label class="toggle"><input type="checkbox" id="sweetOnly"> Sweet spots only <span class="muted" id="sweetDef" style="font-size:11px">(≤$6 landed, ≥$15 net)</span></label>
       <label class="toggle"><input type="checkbox" id="hideUnvalued" checked> Hide unvalued lots</label>
+      <h3>Radar level</h3>
+      <div class="chips" id="radarChips"></div>
       <h3>Closes within</h3>
       <div class="chips" id="bucketChips"></div>
       <h3>Categories</h3>
       <div class="chips" id="catChips"></div>
       <div class="legend"><span>score</span><i class="h0"></i><i class="h1"></i><i class="h2"></i><i class="h3"></i><i class="h4"></i><span>hot</span></div>
-      <p class="muted" style="font-size:11px;margin-top:14px;line-height:1.4">Score blends the resale multiple, dollar spread, valuation confidence, and how close the lot is to closing (a bid with 3 days left says little). Landed cost = next bid × (1 + buyer's premium) × (1 + tax) + pickup. Net resale = mid estimate less selling fees.</p>
+      <p class="muted" style="font-size:11px;margin-top:14px;line-height:1.4">Score = value score (resale multiple, dollar spread, confidence) × time factor (100% under 1h, 50% at a day, 10% at a week: a $1 bid with a week left says nothing). Radar levels separate act-now from keep-watching. Landed cost = next bid × (1 + buyer's premium) × (1 + tax) + pickup. Net resale = mid estimate less selling fees.</p>
     </div>
   </aside>
 
@@ -262,8 +276,10 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
 (function(){
 const $=s=>document.querySelector(s);
 const API=window.__ARB_API__||'/api';
-const state={opps:[],cats:[],config:{},status:{},filters:{cats:new Set(),buckets:new Set(),minScore:0,q:'',noBids:false,sweetOnly:false,hideUnvalued:true},sort:{key:'score',dir:-1},embedded:false,pollTimer:null};
+const state={opps:[],cats:[],config:{},status:{},filters:{cats:new Set(),buckets:new Set(),radar:new Set(),minScore:0,q:'',noBids:false,sweetOnly:false,hideUnvalued:true},sort:{key:'score',dir:-1},embedded:false,pollTimer:null};
 const BUCKETS=['<1h','1-3h','3-6h','6-12h','12-24h','1-3d','3d+'];
+const RADAR=[['strike','Strike','< 2h, act now'],['watch','Watch','2–12h, refresh often'],['track','Track','12–48h'],['scan','Scan','far out: valued, waiting on the clock']];
+function radarOf(o){const s=secsLeft(o);const v=o.score.value_score||0;if(s==null||v<20)return 'scan';const h=s/3600;return h<2?'strike':h<12?'watch':h<48?'track':'scan'}
 const fmt=n=>n==null?'—':'$'+Math.round(n).toLocaleString();
 const fmt2=n=>n==null?'—':'$'+n.toLocaleString(undefined,{maximumFractionDigits:0});
 const fmtK=n=>n>=1e6?'$'+(n/1e6).toFixed(n%1e6?1:0)+'M':n>=1000?'$'+(n/1000).toFixed(n%1000?1:0)+'k':'$'+Math.round(n);
@@ -304,6 +320,7 @@ function visible(){
     if(o.score.valued&&o.score.score<f.minScore)return false;
     if(f.noBids&&o.lot.bid_count>0)return false;
     if(f.sweetOnly&&!o.score.sweet_spot)return false;
+    if(f.radar.size&&!f.radar.has(radarOf(o)))return false;
     if(f.cats.size&&!f.cats.has(o.lot.category))return false;
     if(f.buckets.size&&!f.buckets.has(bucketOf(s)))return false;
     if(ql&&!((o.lot.title||'')+' '+(o.lot.auction_name||'')+' '+(o.valuation?.identified_item||'')).toLowerCase().includes(ql))return false;
@@ -311,6 +328,8 @@ function visible(){
   });
 }
 function renderChips(){
+  const rc=$('#radarChips');rc.innerHTML='';
+  RADAR.forEach(([k,l,t])=>{const n=state.opps.filter(o=>o.score.valued&&radarOf(o)===k).length;const el=document.createElement('button');el.className='chip'+(state.filters.radar.has(k)?' on':'');el.title=t;el.innerHTML=`<span class="radar ${k}">${l}</span> <span class="n">${n}</span>`;el.onclick=()=>{toggleSet(state.filters.radar,k);renderChips();renderHeatmap();renderScatter();renderTable()};rc.appendChild(el)});
   const bc=$('#bucketChips');bc.innerHTML='';
   BUCKETS.forEach(b=>{const n=state.opps.filter(o=>bucketOf(secsLeft(o))===b).length;const el=document.createElement('button');el.className='chip'+(state.filters.buckets.has(b)?' on':'');el.innerHTML=`${b} <span class="n">${n}</span>`;el.onclick=()=>{toggleSet(state.filters.buckets,b);renderChips();renderHeatmap();renderScatter();renderTable()};bc.appendChild(el)});
   const cc=$('#catChips');cc.innerHTML='';
@@ -325,8 +344,9 @@ function renderKpis(){
   const hot=v.filter(o=>o.score.heat==='hot'),warm=v.filter(o=>o.score.heat==='warm');
   const soon=v.filter(o=>{const s=secsLeft(o);return s!=null&&s<3*3600&&o.score.score>=40});
   const sweet=v.filter(o=>o.score.sweet_spot);
+  const strike=v.filter(o=>radarOf(o)==='strike'&&o.score.score>=40);
   const spread=hot.concat(warm).reduce((a,o)=>a+Math.max(0,o.score.spread||0),0);
-  $('#kpis').innerHTML=[[state.opps.length,'lots tracked'],[v.length,'valued'],[hot.length,'hot'],[warm.length,'warm'],[soon.length,'≥warm, <3h'],[sweet.length,'sweet spots'],[fmt(spread),'spread in hot+warm']].map(([b,s])=>`<div class="kpi"><b>${b}</b><small>${s}</small></div>`).join('');
+  $('#kpis').innerHTML=[[strike.length,'strike now'],[hot.length,'hot'],[warm.length,'warm'],[sweet.length,'sweet spots'],[v.length,'valued'],[state.opps.length,'lots tracked'],[fmt(spread),'spread in hot+warm']].map(([b,s])=>`<div class="kpi"><b>${b}</b><small>${s}</small></div>`).join('');
 }
 function renderStatus(){
   const st=state.status.status||{};const ls=state.status.last_scan;
@@ -379,8 +399,8 @@ function renderScatter(){
 }
 
 // ---------------------------------------------------------------- table
-const COLS=[['score','Score',''],['title','Item',''],['category','Category',''],['bids','Bids','r'],['next','Next bid','r'],['landed','Landed','r'],['resale','Est. resale','r'],['net','Net','r'],['ratio','Multiple','r'],['spread','Spread','r'],['conf','Conf.',''],['closes','Closes','r'],['auction','Auction','']];
-function sortVal(o,k){const s=o.score,l=o.lot,v=o.valuation||{};switch(k){case 'score':return s.score;case 'title':return l.title||'';case 'category':return l.category||'';case 'bids':return l.bid_count;case 'next':return s.next_bid;case 'landed':return s.landed_cost;case 'resale':return v.mid||0;case 'net':return s.net_resale||0;case 'ratio':return s.ratio||0;case 'spread':return s.spread||0;case 'conf':return s.confidence||0;case 'closes':return secsLeft(o)??1e12;case 'auction':return l.auction_name||''}}
+const COLS=[['score','Score',''],['radar','Radar',''],['title','Item',''],['category','Category',''],['bids','Bids','r'],['next','Next bid','r'],['landed','Landed','r'],['resale','Est. resale','r'],['net','Net','r'],['ratio','Multiple','r'],['spread','Spread','r'],['conf','Conf.',''],['closes','Closes','r'],['auction','Auction','']];
+function sortVal(o,k){const s=o.score,l=o.lot,v=o.valuation||{};switch(k){case 'score':return s.score;case 'radar':return ['strike','watch','track','scan'].indexOf(radarOf(o))*-1;case 'title':return l.title||'';case 'category':return l.category||'';case 'bids':return l.bid_count;case 'next':return s.next_bid;case 'landed':return s.landed_cost;case 'resale':return v.mid||0;case 'net':return s.net_resale||0;case 'ratio':return s.ratio||0;case 'spread':return s.spread||0;case 'conf':return s.confidence||0;case 'closes':return secsLeft(o)??1e12;case 'auction':return l.auction_name||''}}
 function renderTable(){
   const rows=visible();const{key,dir}=state.sort;
   rows.sort((a,b)=>{const x=sortVal(a,key),y=sortVal(b,key);return (typeof x==='string'?x.localeCompare(y):x-y)*dir});
@@ -390,7 +410,8 @@ function renderTable(){
   if(!rows.length){$('#tbody').innerHTML=`<tr><td colspan="${COLS.length}" class="empty">${state.opps.length?'No lots match these filters.':'No lots yet. Set a window and click “Scan HiBid”.'}</td></tr>`;return}
   $('#tbody').innerHTML=rows.map(o=>{const l=o.lot,s=o.score,v=o.valuation||{};const sl=secsLeft(o);
     return `<tr class="row" data-id="${l.id}">
-      <td>${s.valued?`<span class="pill ${s.heat}">${Math.round(s.score)}</span>`:'<span class="pill unvalued">n/a</span>'}</td>
+      <td>${s.valued?`<span class="pill ${s.heat}" title="value ${Math.round(s.value_score||0)} × time ${Math.round((s.price_reliability||0)*100)}%">${Math.round(s.score)}</span>`:'<span class="pill unvalued">n/a</span>'}</td>
+      <td>${s.valued?`<span class="radar ${radarOf(o)}">${radarOf(o)}</span>`:''}</td>
       <td class="title"><div class="t">${esc(l.title)}${v.authenticity_risk?'<span class="flag" title="Authenticity risk flagged">auth</span>':''}${s.sweet_spot?'<span class="sweet" title="Penny lot: tiny landed cost, real resale">$→$$</span>':''}</div><div class="s">${esc(v.identified_item&&v.identified_item!==l.title?v.identified_item:'')}${l.bid_count===0?' · no bids':''}${l.estimate?' · est. '+esc(l.estimate):''}</div></td>
       <td>${esc(l.category)}</td>
       <td class="r num">${l.bid_count}</td>
@@ -423,10 +444,10 @@ function renderDossier(o,loading){
   const prem=Math.round((l.buyer_premium_rate??c.buyer_premium??0.15)*100);
   const pics=(l.pictures||[]).filter(Boolean).slice(0,8);
   let h=`<div class="top"><h2>${esc(l.title)}</h2><button class="close" aria-label="Close" onclick="document.getElementById('scrim').click()">×</button></div>
-  <div class="meta">${s.sweet_spot?'<span class="sweet">SWEET SPOT</span> ':''}Lot ${esc(l.lot_number||'')} · ${esc(l.category_path||l.category)} · ${esc(l.auctioneer||'')}${l.city?' · '+esc(l.city)+', '+esc(l.state||''):''}${l.shipping_offered?' · ships':' · pickup'}</div>
+  <div class="meta">${s.valued?`<span class="radar ${radarOf(o)}">${radarOf(o)}</span> `:''}${s.sweet_spot?'<span class="sweet">SWEET SPOT</span> ':''}Lot ${esc(l.lot_number||'')} · ${esc(l.category_path||l.category)} · ${esc(l.auctioneer||'')}${l.city?' · '+esc(l.city)+', '+esc(l.state||''):''}${l.shipping_offered?' · ships':' · pickup'}</div>
   <div class="hero">${l.image?`<img src="${esc(l.image)}" alt="">`:'<div class="noimg">no photo cached</div>'}
     <div>
-      <div class="big">${s.valued?`<span class="pill ${s.heat}" style="font-size:22px;padding:4px 10px">${Math.round(s.score)}</span> <span style="font-size:20px">${s.ratio.toFixed(1)}×</span>`:'<span class="pill unvalued">not valued</span>'}<small>${s.valued?`${fmt(s.spread)} spread at the mid case · ${fmt(s.spread_low)} at the low case`:'run a valuation to score this lot'}</small></div>
+      <div class="big">${s.valued?`<span class="pill ${s.heat}" style="font-size:22px;padding:4px 10px">${Math.round(s.score)}</span> <span style="font-size:20px">${s.ratio.toFixed(1)}×</span>`:'<span class="pill unvalued">not valued</span>'}<small>${s.valued?`${fmt(s.spread)} spread at the mid case · ${fmt(s.spread_low)} at the low case · value ${Math.round(s.value_score||0)} × time ${Math.round((s.price_reliability||0)*100)}%`:'run a valuation to score this lot'}</small></div>
       <div class="grid2">
         <div class="kv"><span>Current bid</span><span>${fmt(l.high_bid)} <span class="muted">(${l.bid_count} bids)</span></span></div>
         <div class="kv"><span>Closes in</span><span class="${cdClass(sl)}" data-ends="${l.ends_at||''}">${cdText(sl)}</span></div>
@@ -439,9 +460,12 @@ function renderDossier(o,loading){
   if(o.why)h+=`<div class="why"><b>Why the upside.</b> ${esc(o.why)}</div>`;
   h+=`<div class="actions"><a class="btn primary" href="${esc(l.url)}" target="_blank" rel="noopener">Open on HiBid ↗</a>${l.auction_url?`<a class="btn" href="${esc(l.auction_url)}" target="_blank" rel="noopener">Auction catalog</a>`:''}<a class="btn" href="https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(v?.search_query||l.title)}&LH_Sold=1&LH_Complete=1&_sop=13" target="_blank" rel="noopener">eBay sold ↗</a>${state.embedded?'':`<button class="btn" id="dRefresh">Refresh live</button><button class="btn" id="dRevalue">Re-value</button>`}</div>`;
   if(v){
-    h+=`<h3>Valuation <span class="method">· ${esc(v.method)}${v.model_used?' · '+esc(v.model_used):''} · confidence ${Math.round((v.confidence||0)*100)}%${v.cache_hit?' · cached':''}</span></h3>`;
+    h+=`<h3>Valuation <span class="method">· ${esc(v.method)}${v.model_used?' · '+esc(v.model_used):''} · confidence ${Math.round((v.confidence||0)*100)}%${v.images_used?' · '+v.images_used+' photos read':''}${v.cache_hit?' · cached':''}</span></h3>`;
     h+=`<div class="grid2"><div class="kv"><span>Identified as</span><span style="font-family:var(--sans);text-align:right">${esc(v.identified_item||'—')}</span></div><div class="kv"><span>Demand</span><span>${esc(v.demand||'—')}${v.days_to_sell?` · ~${v.days_to_sell}d to sell`:''}</span></div><div class="kv"><span>Best channel</span><span style="font-family:var(--sans)">${esc(v.best_channel||'—')}</span></div><div class="kv"><span>Condition assumed</span><span style="font-family:var(--sans);text-align:right">${esc(v.condition_assumption||'—')}</span></div></div>`;
     if(v.rationale)h+=`<p style="margin:10px 0 0;line-height:1.5">${esc(v.rationale)}</p>`;
+    if(v.items&&v.items.length){const so=(v.standout_item||'').toLowerCase().slice(0,30);
+      h+=`<h3>What's in the lot <span class="method">· ${v.items.length} item${v.items.length>1?'s':''} identified${v.images_used?' from '+v.images_used+' photo'+(v.images_used>1?'s':''):''}</span></h3><table class="items">${v.items.map(it=>{const star=so&&it.name.toLowerCase().slice(0,30)===so||(v.standout_item&&v.standout_item.toLowerCase().includes(it.name.toLowerCase().slice(0,24)));return `<tr class="${star?'star':''}"><td>${star?'★ ':''}${esc(it.name)}<span class="mk">${esc(it.maker_or_mark||'')}${it.era?' · '+esc(it.era):''}${it.note?' · '+esc(it.note):''}</span></td><td class="r">${fmt(it.est_low)}–${fmt(it.est_high)}</td><td class="r muted">${Math.round((it.confidence||0)*100)}%</td></tr>`}).join('')}</table>`;
+      if(v.standout_item)h+=`<p class="muted" style="font-size:12px;margin:6px 0 0">Standout: ${esc(v.standout_item)}</p>`;}
     if(v.confidence_reason)h+=`<p class="muted" style="margin:6px 0 0;font-size:12px">${esc(v.confidence_reason)}</p>`;
     if(v.value_drivers?.length)h+=`<h3>Value drivers</h3><ul>${v.value_drivers.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
     if(v.risks?.length||v.authenticity_risk)h+=`<h3>Risks</h3><ul>${v.authenticity_risk?'<li><b>Authenticity risk</b>: get it authenticated before relying on this value.</li>':''}${(v.risks||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
@@ -456,9 +480,12 @@ function renderDossier(o,loading){
     h+=`<div class="fees">At the market price: ${fmt(m.price)}${m.shipping_charged?' + '+fmt(m.shipping_charged)+' shipping charged':''} − ${fmt(m.fvf)} eBay fee − ${fmt2(m.per_order)} per-order${m.promoted?' − '+fmt(m.promoted)+' promoted':''} − ${fmt(m.shipping_cost)} shipping − ${fmt(m.packaging)} packaging = <b>${fmt(m.net)} in pocket</b> vs ${fmt(s.landed_cost)} landed.${le.best_offer_floor?` Accept offers down to ${fmt(le.best_offer_floor)}.`:''}${le.auction_start?` If auction: start at ${fmt(le.auction_start)}.`:''}</div>`;
     if(lp){
       h+=`<div class="listbox"><div class="row"><span class="lbl">Title <span class="cnt">${lp.title.length}/80</span></span><button class="copy" data-copy="${esc(lp.title)}">Copy</button></div><div class="ttl">${esc(lp.title)}</div>
-        <div class="row" style="margin-top:8px"><span class="lbl">Category · condition</span></div><div style="font-size:13px">${esc(lp.category)} · ${esc(lp.condition)}${lp.packaging?` · ships in ${esc(lp.packaging)} (~${Math.round(lp.shipping_weight_oz||0)} oz)`:''}</div>
+        ${lp.alt_titles&&lp.alt_titles.length?`<div class="row" style="margin-top:6px"><span class="lbl">Alternate titles</span></div>${lp.alt_titles.map(t=>`<div style="font-size:12px;display:flex;justify-content:space-between;gap:8px;align-items:center"><span>${esc(t)}</span><button class="copy" data-copy="${esc(t)}">Copy</button></div>`).join('')}`:''}
+        <div class="row" style="margin-top:8px"><span class="lbl">Category · condition</span></div><div style="font-size:13px">${esc(lp.category)} · ${esc(lp.condition)}${lp.condition_description?`<div class="muted" style="font-size:12px">${esc(lp.condition_description)}</div>`:''}${lp.packaging?`<div class="muted" style="font-size:12px">ships in ${esc(lp.packaging)} (~${Math.round(lp.shipping_weight_oz||0)} oz)</div>`:''}</div>
         ${lp.item_specifics&&lp.item_specifics.length?`<div class="row" style="margin-top:8px"><span class="lbl">Item specifics</span><button class="copy" data-copy="${esc(lp.item_specifics.map(x=>x.name+': '+x.value).join('\n'))}">Copy</button></div><div class="specs">${lp.item_specifics.map(x=>`<span><b>${esc(x.name)}</b>: ${esc(x.value)}</span>`).join('')}</div>`:''}
         <div class="row" style="margin-top:8px"><span class="lbl">Description</span><button class="copy" data-copy="${esc(lp.description)}">Copy</button></div><div style="font-size:13px;line-height:1.5;white-space:pre-wrap">${esc(lp.description)}</div>
+        ${lp.photo_checklist&&lp.photo_checklist.length?`<div class="row" style="margin-top:8px"><span class="lbl">Photos to take</span></div><div class="specs">${lp.photo_checklist.map(x=>`<span>${esc(x)}</span>`).join('')}</div>`:''}
+        ${lp.seo_notes?`<div class="row" style="margin-top:8px"><span class="lbl">Why this ranks</span></div><div style="font-size:12px;line-height:1.5;color:var(--ink-2)">${esc(lp.seo_notes)}${lp.best_time_to_list?` <b>List:</b> ${esc(lp.best_time_to_list)}.`:''}${lp.promoted_rate?` <b>Promote:</b> ${Math.round(lp.promoted_rate*100)}% ad rate.`:' <b>Promote:</b> not needed.'}</div>`:''}
         <div class="actions" style="margin-top:10px"><a class="btn primary" href="https://www.ebay.com/sl/sell" target="_blank" rel="noopener">Open eBay sell form ↗</a><button class="copy" style="padding:6px 12px" data-copy="${esc(`${lp.title}\n\n${lp.description}\n\nCategory: ${lp.category}\nCondition: ${lp.condition}\nPrice: $${Math.round(m.price)} (offers to $${Math.round(le.best_offer_floor||m.price*0.85)})\n${(lp.item_specifics||[]).map(x=>x.name+': '+x.value).join('\n')}`)}">Copy whole listing</button></div></div>`;
     }
   }

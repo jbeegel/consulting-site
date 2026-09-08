@@ -57,6 +57,9 @@ _HOT_WORDS = re.compile(
     r")\b", re.I)
 
 
+_VISION = True  # set from Settings by ValuationPipeline
+
+
 def triage_score(lot: dict[str, Any]) -> float:
     """Cheap heuristic: which lots are worth spending a valuation call on, highest first."""
     title = lot.get("title") or ""
@@ -73,8 +76,9 @@ def triage_score(lot: dict[str, Any]) -> float:
     tl = lot.get("time_left_seconds")
     if tl is not None and tl < 6 * 3600:
         s += 1.0
-    if re.search(r"\b(box of|misc|assorted|miscellaneous|contents of|shelf lot)\b", title, re.I):
-        s -= 1.5
+    if re.search(r"\b(box of|misc|assorted|miscellaneous|contents of|shelf lot|knic ?knac|knick ?knack|bric.a.brac|smalls)\b", title, re.I):
+        # Vague title: junk without photos, but with photos it is exactly where the unnoticed value hides.
+        s += 0.5 if (lot.get("picture_count") or 0) >= 1 and _VISION else -1.5
     # Penny lots: the whole game is $1-$3 buys that resell for $20-$50. Don't let a low bid look boring.
     if (lot.get("min_bid") or lot.get("high_bid") or 0) <= 5:
         s += 0.5
@@ -82,9 +86,13 @@ def triage_score(lot: dict[str, Any]) -> float:
 
 
 class ValuationPipeline:
-    def __init__(self, settings: Settings, store: Store, *, claude_valuer: Any | None = None):
+    def __init__(self, settings: Settings, store: Store, *, claude_valuer: Any | None = None,
+                 picture_fetcher: Callable[[dict[str, Any]], list[str]] | None = None):
+        global _VISION
+        _VISION = settings.vision
         self.settings = settings
         self.store = store
+        self.picture_fetcher = picture_fetcher  # e.g. Scanner.pictures_for: pulls full-size photos from HiBid
         self._claude = claude_valuer
         self._claude_tried = claude_valuer is not None
 
@@ -100,7 +108,8 @@ class ValuationPipeline:
             return None
         try:
             from .claude import ClaudeValuer
-            self._claude = ClaudeValuer(self.settings.model, web_search=self.settings.web_search)
+            self._claude = ClaudeValuer(self.settings.model, web_search=self.settings.web_search,
+                                        vision=self.settings.vision, max_images=self.settings.max_images)
         except Exception as e:  # SDK missing, bad key format, etc.
             log.warning("Claude valuer unavailable: %s", e)
             self._claude = None
@@ -123,6 +132,13 @@ class ValuationPipeline:
         val: Valuation | None = None
         claude = self._get_claude() if self.settings.valuer in ("auto", "claude") else None
         if claude is not None:
+            if self.settings.vision and not lot.get("pictures") and self.picture_fetcher:
+                try:
+                    pics = self.picture_fetcher(lot)
+                    if pics:
+                        lot = dict(lot, pictures=pics)
+                except Exception as e:  # photos are a bonus, never a blocker
+                    log.info("picture fetch failed for %s: %s", lot.get("id"), e)
             val = claude.value(lot, comps)
             if not val.usable:
                 log.info("claude gave no usable value for %s (%s)", lot["id"], val.error or val.rationale[:80])

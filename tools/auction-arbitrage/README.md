@@ -53,7 +53,8 @@ hibid.com/graphql ──LotSearch──▶ normalize ──▶ SQLite (lots)
 **Score (0–100)** = 100 × (0.6·multiple component + 0.4·dollar component) × (½ + ½·confidence) × (½ + ½·price reliability).
 The multiple component is log-scaled (2× = ⅓, 8× = full marks) because a $1 → $30 penny lot is a 25× and the
 bread and butter of auction flipping; the dollar component is scaled to a realistic $150 spread (`ARB_SPREAD_FULL`),
-and spreads under $10 are scaled down. **Sweet spot** = landed ≤ $6 and net ≥ $15 (`ARB_SWEET_*`): those get a
+and spreads under $10 are scaled down. **Score** = value score × time factor (100% under 1h, 50% at a day, 20% at 3 days, 10% at a week). **Radar**:
+Strike (< 2h), Watch (2–12h), Track (12–48h), Scan (valued, waiting on the clock). **Sweet spot** = landed ≤ $6 and net ≥ $15 (`ARB_SWEET_*`): those get a
 floor on the dollar component so a $2 buy that nets $25 scores hot, and a badge/filter in the dashboard.
 Price reliability is how much the *current* bid tells you about the *final* price: 1.0 under an hour left, 0.65 inside a day,
 0.3 with 3+ days left (bids arrive late). Heat bands: **hot ≥ 60**, warm ≥ 40, mild ≥ 20. Authenticity-flagged lots are
@@ -87,6 +88,7 @@ A typical day: `scan --hours 24` in the morning (valuations are cached 7 days, s
 | `ANTHROPIC_API_KEY` | — | Enables Claude appraisals. Without it you get eBay-sold comps / auctioneer estimates only. |
 | `ARB_MODEL` | `claude-opus-5` | Model for appraisals. `claude-sonnet-5` is ~2.5× cheaper and fine for commodity items. |
 | `ARB_WEB_SEARCH` | `1` | Let Claude search the web for sold comps (≤3 searches per lot). |
+| `ARB_VISION` / `ARB_MAX_IMAGES` | `1` / `4` | Send the lot's photos so the model reads marks and splits multi-item lots into per-item values. |
 | `ARB_EBAY_SOLD` | `1` | Scrape eBay sold listings as comps (no key; best effort, may be rate-limited). |
 | `ARB_VALUER` | `auto` | `auto` \| `claude` \| `ebay` \| `estimate` \| `none` |
 | `ARB_BUYER_PREMIUM` | `0.15` | Fallback buyer's premium when the auction doesn't publish one |

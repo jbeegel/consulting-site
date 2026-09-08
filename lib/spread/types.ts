@@ -76,6 +76,22 @@ export interface ListingPlan {
   packaging: string;
   shipping_cost_estimate: number;
   keywords: string[];
+  alt_titles?: string[];
+  condition_description?: string;
+  photo_checklist?: string[];
+  seo_notes?: string;
+  promoted_rate?: number;
+  best_time_to_list?: string;
+}
+
+export interface LotItem {
+  name: string;
+  maker_or_mark: string;
+  era: string;
+  est_low: number;
+  est_high: number;
+  confidence: number;
+  note: string;
 }
 
 export interface PricePoint {
@@ -135,6 +151,9 @@ export interface Valuation {
   unit_count: number;
   sources_consulted: string[];
   listing?: ListingPlan | null;
+  items?: LotItem[];
+  standout_item?: string;
+  images_used?: number;
   model_used: string;
   created_at: number;
   error: string;
@@ -155,9 +174,11 @@ export interface Score {
   spread_low?: number | null;
   ratio: number | null;
   confidence: number;
-  score: number;
+  value_score: number; // disparity at today's price, ignoring the clock
+  score: number; // value_score x price_reliability
   heat: "hot" | "warm" | "mild" | "cold" | "unvalued";
   sweet_spot?: boolean;
+  radar: "strike" | "watch" | "track" | "scan";
 }
 
 export interface Opportunity {
