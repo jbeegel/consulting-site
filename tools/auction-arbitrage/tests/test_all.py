@@ -166,6 +166,7 @@ def test_claude_valuer_parsing(settings, monkeypatch):
     valuer.client = type("C", (), {"messages": FakeMessages3()})()
     v = valuer.value({"id": 7, "title": "1989 Upper Deck Ken Griffey Jr #1 rookie", "description": "", "quantity": 1})
     assert v.grading and v.mid == 35 and v.low == 28 and "raw" in v.confidence_reason
+    valuer.client = FakeClient()  # back to the plain fake for non-card lots
 
     # pipeline uses the injected valuer and caches by title
     store = Store(settings.db_path)
