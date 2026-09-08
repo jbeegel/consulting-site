@@ -143,6 +143,24 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
 .conf{display:inline-block;width:46px;height:6px;background:var(--bg-3);border-radius:3px;vertical-align:middle;overflow:hidden}
 .conf i{display:block;height:100%;background:var(--accent)}
 .flag{font-size:10px;border:1px solid var(--warn);color:var(--warn);border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle}
+.sweet{font-size:10px;background:var(--good);color:#fff;border-radius:3px;padding:1px 5px;margin-left:4px;vertical-align:middle;font-weight:600;letter-spacing:.02em}
+.prices{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
+.price{border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:var(--bg)}
+.price.rec{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.price .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600;display:flex;justify-content:space-between}
+.price .amt{font-family:var(--mono);font-size:22px;font-weight:600;margin:4px 0 2px}
+.price .net{font-family:var(--mono);font-size:12px;color:var(--ink-2)}
+.price .net b{color:var(--good)}
+.price .net b.neg{color:var(--bad)}
+.listbox{border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:var(--bg);margin-top:8px}
+.listbox .row{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px}
+.listbox .row .lbl{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.listbox .ttl{font-weight:600;font-size:14px;line-height:1.35}
+.listbox .cnt{font-family:var(--mono);font-size:11px;color:var(--ink-3)}
+.copy{border:1px solid var(--line-2);background:var(--bg-2);border-radius:4px;padding:2px 8px;font-size:11px}
+.specs{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.specs span{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:1px 8px;background:var(--bg-2)}
+.fees{font-size:11px;color:var(--ink-3);margin-top:6px;line-height:1.5}
 .empty{padding:40px;text-align:center;color:var(--ink-3)}
 
 /* ---------- drawer */
@@ -203,6 +221,7 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
       <h3>Minimum score <span class="num" id="minScoreLbl">0</span></h3>
       <div class="range"><input type="range" id="minScore" min="0" max="90" step="5" value="0"></div>
       <label class="toggle"><input type="checkbox" id="noBids"> No bids yet only</label>
+      <label class="toggle"><input type="checkbox" id="sweetOnly"> Sweet spots only <span class="muted" id="sweetDef" style="font-size:11px">(≤$6 landed, ≥$15 net)</span></label>
       <label class="toggle"><input type="checkbox" id="hideUnvalued" checked> Hide unvalued lots</label>
       <h3>Closes within</h3>
       <div class="chips" id="bucketChips"></div>
@@ -242,7 +261,7 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
 (function(){
 const $=s=>document.querySelector(s);
 const API=window.__ARB_API__||'/api';
-const state={opps:[],cats:[],config:{},status:{},filters:{cats:new Set(),buckets:new Set(),minScore:0,q:'',noBids:false,hideUnvalued:true},sort:{key:'score',dir:-1},embedded:false,pollTimer:null};
+const state={opps:[],cats:[],config:{},status:{},filters:{cats:new Set(),buckets:new Set(),minScore:0,q:'',noBids:false,sweetOnly:false,hideUnvalued:true},sort:{key:'score',dir:-1},embedded:false,pollTimer:null};
 const BUCKETS=['<1h','1-3h','3-6h','6-12h','12-24h','1-3d','3d+'];
 const fmt=n=>n==null?'—':'$'+Math.round(n).toLocaleString();
 const fmt2=n=>n==null?'—':'$'+n.toLocaleString(undefined,{maximumFractionDigits:0});
@@ -283,6 +302,7 @@ function visible(){
     if(f.hideUnvalued&&!o.score.valued)return false;
     if(o.score.valued&&o.score.score<f.minScore)return false;
     if(f.noBids&&o.lot.bid_count>0)return false;
+    if(f.sweetOnly&&!o.score.sweet_spot)return false;
     if(f.cats.size&&!f.cats.has(o.lot.category))return false;
     if(f.buckets.size&&!f.buckets.has(bucketOf(s)))return false;
     if(ql&&!((o.lot.title||'')+' '+(o.lot.auction_name||'')+' '+(o.valuation?.identified_item||'')).toLowerCase().includes(ql))return false;
@@ -303,8 +323,9 @@ function renderKpis(){
   const v=state.opps.filter(o=>o.score.valued);
   const hot=v.filter(o=>o.score.heat==='hot'),warm=v.filter(o=>o.score.heat==='warm');
   const soon=v.filter(o=>{const s=secsLeft(o);return s!=null&&s<3*3600&&o.score.score>=40});
+  const sweet=v.filter(o=>o.score.sweet_spot);
   const spread=hot.concat(warm).reduce((a,o)=>a+Math.max(0,o.score.spread||0),0);
-  $('#kpis').innerHTML=[[state.opps.length,'lots tracked'],[v.length,'valued'],[hot.length,'hot'],[warm.length,'warm'],[soon.length,'≥warm, <3h'],[fmt(spread),'spread in hot+warm']].map(([b,s])=>`<div class="kpi"><b>${b}</b><small>${s}</small></div>`).join('');
+  $('#kpis').innerHTML=[[state.opps.length,'lots tracked'],[v.length,'valued'],[hot.length,'hot'],[warm.length,'warm'],[soon.length,'≥warm, <3h'],[sweet.length,'sweet spots'],[fmt(spread),'spread in hot+warm']].map(([b,s])=>`<div class="kpi"><b>${b}</b><small>${s}</small></div>`).join('');
 }
 function renderStatus(){
   const st=state.status.status||{};const ls=state.status.last_scan;
@@ -312,7 +333,7 @@ function renderStatus(){
   let t='idle';if(st.running){t=st.phase==='pulling'?'pulling lots from HiBid…':`valuing ${st.lots_valued}/${st.lots_to_value}${st.message?' · '+st.message:''}`}else if(st.error){t='last scan failed: '+st.error}else if(st.phase==='done'){t=`last scan${st.trigger?' ('+st.trigger+')':''}: ${st.message||`${st.lots_seen} lots in window, ${st.lots_valued} newly valued`}`}
   $('#statusText').textContent=t;
   $('#lastScan').textContent=ls&&ls.finished_at?('finished '+new Date(ls.finished_at*1000).toLocaleString()):'';
-  const c=state.config;$('#valuer').textContent=c.model?`valuer: ${c.claude_enabled?c.model+' + web search':'no API key → eBay sold comps / auctioneer estimate'}${c.ebay_sold?' · eBay sold':''}`:'';
+  const c=state.config;if(c.sweet_spot)$('#sweetDef').textContent=`(≤${fmt(c.sweet_spot.max_landed)} landed, ≥${fmt(c.sweet_spot.min_net)} net)`;$('#valuer').textContent=c.model?`valuer: ${c.claude_enabled?c.model+' + web search':'no API key → eBay sold comps / auctioneer estimate'}${c.ebay_sold?' · eBay sold':''}`:'';
   $('#src').textContent=(c.hibid||'hibid.com').replace(/^https?:\/\//,'');
 }
 
@@ -369,7 +390,7 @@ function renderTable(){
   $('#tbody').innerHTML=rows.map(o=>{const l=o.lot,s=o.score,v=o.valuation||{};const sl=secsLeft(o);
     return `<tr class="row" data-id="${l.id}">
       <td>${s.valued?`<span class="pill ${s.heat}">${Math.round(s.score)}</span>`:'<span class="pill unvalued">n/a</span>'}</td>
-      <td class="title"><div class="t">${esc(l.title)}${v.authenticity_risk?'<span class="flag" title="Authenticity risk flagged">auth</span>':''}</div><div class="s">${esc(v.identified_item&&v.identified_item!==l.title?v.identified_item:'')}${l.bid_count===0?' · no bids':''}${l.estimate?' · est. '+esc(l.estimate):''}</div></td>
+      <td class="title"><div class="t">${esc(l.title)}${v.authenticity_risk?'<span class="flag" title="Authenticity risk flagged">auth</span>':''}${s.sweet_spot?'<span class="sweet" title="Penny lot: tiny landed cost, real resale">$→$$</span>':''}</div><div class="s">${esc(v.identified_item&&v.identified_item!==l.title?v.identified_item:'')}${l.bid_count===0?' · no bids':''}${l.estimate?' · est. '+esc(l.estimate):''}</div></td>
       <td>${esc(l.category)}</td>
       <td class="r num">${l.bid_count}</td>
       <td class="r num">${fmt(s.next_bid)}</td>
@@ -401,7 +422,7 @@ function renderDossier(o,loading){
   const prem=Math.round((l.buyer_premium_rate??c.buyer_premium??0.15)*100);
   const pics=(l.pictures||[]).filter(Boolean).slice(0,8);
   let h=`<div class="top"><h2>${esc(l.title)}</h2><button class="close" aria-label="Close" onclick="document.getElementById('scrim').click()">×</button></div>
-  <div class="meta">Lot ${esc(l.lot_number||'')} · ${esc(l.category_path||l.category)} · ${esc(l.auctioneer||'')}${l.city?' · '+esc(l.city)+', '+esc(l.state||''):''}${l.shipping_offered?' · ships':' · pickup'}</div>
+  <div class="meta">${s.sweet_spot?'<span class="sweet">SWEET SPOT</span> ':''}Lot ${esc(l.lot_number||'')} · ${esc(l.category_path||l.category)} · ${esc(l.auctioneer||'')}${l.city?' · '+esc(l.city)+', '+esc(l.state||''):''}${l.shipping_offered?' · ships':' · pickup'}</div>
   <div class="hero">${l.image?`<img src="${esc(l.image)}" alt="">`:'<div class="noimg">no photo cached</div>'}
     <div>
       <div class="big">${s.valued?`<span class="pill ${s.heat}" style="font-size:22px;padding:4px 10px">${Math.round(s.score)}</span> <span style="font-size:20px">${s.ratio.toFixed(1)}×</span>`:'<span class="pill unvalued">not valued</span>'}<small>${s.valued?`${fmt(s.spread)} spread at the mid case · ${fmt(s.spread_low)} at the low case`:'run a valuation to score this lot'}</small></div>
@@ -426,10 +447,25 @@ function renderDossier(o,loading){
     if(v.comps?.length)h+=`<h3>Comparable sales (${v.comps.length})</h3><table class="comps">${v.comps.slice(0,12).map(cp=>`<tr><td>${cp.url?`<a href="${esc(cp.url)}" target="_blank" rel="noopener">${esc(cp.title)}</a>`:esc(cp.title)}${cp.note?`<div class="muted" style="font-size:11px">${esc(cp.note)}</div>`:''}</td><td class="muted" style="white-space:nowrap;font-size:11px">${esc(cp.source||'')}${cp.date?'<br>'+esc(cp.date):''}</td><td class="r">${fmt2(cp.price)}</td></tr>`).join('')}</table>`;
     if(v.error)h+=`<p class="muted">valuation note: ${esc(v.error)}</p>`;
   }
-  h+=`<h3>Listing</h3>${pics.length?`<div class="pics">${pics.map(p=>`<img src="${esc(p)}" alt="">`).join('')}</div>`:''}<div class="desc" style="margin-top:8px">${esc(l.description||'(no description cached)')}</div>`;
+  const le=o.listing,lp=v&&v.listing;
+  if(le&&le.points){
+    h+=`<h3>List it on eBay <span class="method">· ${Math.round(le.fee_rate*1000)/10}% final value fee · ${le.buyer_pays_shipping?'buyer pays shipping':'free shipping, you absorb '+fmt(le.shipping_cost)}${lp?' · '+esc(lp.format.replace('_',' ')):''}</span></h3>`;
+    h+=`<div class="prices">`+le.points.map(p=>`<div class="price${p.label===le.recommended?' rec':''}"><div class="lbl"><span>${p.label}</span><span>~${p.expected_days}d</span></div><div class="amt">${fmt(p.price)}</div><div class="net">net ${fmt(p.net)} · <b class="${p.profit<0?'neg':''}">${p.profit>=0?'+':''}${fmt(p.profit)}</b>${p.roi!=null?` (${Math.round(p.roi*100)}%)`:''}</div></div>`).join('')+`</div>`;
+    const m=le.points[1];
+    h+=`<div class="fees">At the market price: ${fmt(m.price)}${m.shipping_charged?' + '+fmt(m.shipping_charged)+' shipping charged':''} − ${fmt(m.fvf)} eBay fee − ${fmt2(m.per_order)} per-order${m.promoted?' − '+fmt(m.promoted)+' promoted':''} − ${fmt(m.shipping_cost)} shipping − ${fmt(m.packaging)} packaging = <b>${fmt(m.net)} in pocket</b> vs ${fmt(s.landed_cost)} landed.${le.best_offer_floor?` Accept offers down to ${fmt(le.best_offer_floor)}.`:''}${le.auction_start?` If auction: start at ${fmt(le.auction_start)}.`:''}</div>`;
+    if(lp){
+      h+=`<div class="listbox"><div class="row"><span class="lbl">Title <span class="cnt">${lp.title.length}/80</span></span><button class="copy" data-copy="${esc(lp.title)}">Copy</button></div><div class="ttl">${esc(lp.title)}</div>
+        <div class="row" style="margin-top:8px"><span class="lbl">Category · condition</span></div><div style="font-size:13px">${esc(lp.category)} · ${esc(lp.condition)}${lp.packaging?` · ships in ${esc(lp.packaging)} (~${Math.round(lp.shipping_weight_oz||0)} oz)`:''}</div>
+        ${lp.item_specifics&&lp.item_specifics.length?`<div class="row" style="margin-top:8px"><span class="lbl">Item specifics</span><button class="copy" data-copy="${esc(lp.item_specifics.map(x=>x.name+': '+x.value).join('\n'))}">Copy</button></div><div class="specs">${lp.item_specifics.map(x=>`<span><b>${esc(x.name)}</b>: ${esc(x.value)}</span>`).join('')}</div>`:''}
+        <div class="row" style="margin-top:8px"><span class="lbl">Description</span><button class="copy" data-copy="${esc(lp.description)}">Copy</button></div><div style="font-size:13px;line-height:1.5;white-space:pre-wrap">${esc(lp.description)}</div>
+        <div class="actions" style="margin-top:10px"><a class="btn primary" href="https://www.ebay.com/sl/sell" target="_blank" rel="noopener">Open eBay sell form ↗</a><button class="copy" style="padding:6px 12px" data-copy="${esc(`${lp.title}\n\n${lp.description}\n\nCategory: ${lp.category}\nCondition: ${lp.condition}\nPrice: $${Math.round(m.price)} (offers to $${Math.round(le.best_offer_floor||m.price*0.85)})\n${(lp.item_specifics||[]).map(x=>x.name+': '+x.value).join('\n')}`)}">Copy whole listing</button></div></div>`;
+    }
+  }
+  h+=`<h3>HiBid listing</h3>${pics.length?`<div class="pics">${pics.map(p=>`<img src="${esc(p)}" alt="">`).join('')}</div>`:''}<div class="desc" style="margin-top:8px">${esc(l.description||'(no description cached)')}</div>`;
   if(l.estimate)h+=`<p class="muted" style="font-size:12px">Auctioneer estimate: ${esc(l.estimate)}${l.buyer_premium_text?' · Buyer\'s premium: '+esc(l.buyer_premium_text):''}</p>`;
   if(loading&&!state.embedded)h+='<p class="muted" style="font-size:12px">fetching full listing…</p>';
   $('#drawerInner').innerHTML=h;
+  $('#drawerInner').querySelectorAll('.copy').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText(b.dataset.copy);const t=b.textContent;b.textContent='Copied';setTimeout(()=>b.textContent=t,1200)}catch(e){prompt('Copy:',b.dataset.copy)}});
   const r=$('#dRefresh');if(r)r.onclick=async()=>{r.disabled=true;r.textContent='refreshing…';try{const n=await api(`/lot/${l.id}/refresh`,{method:'POST'});Object.assign(state.opps.find(z=>z.lot.id===l.id)||{},n);renderDossier(n,false);renderTable();renderScatter()}catch(e){r.textContent='failed: '+e.message}};
   const rv=$('#dRevalue');if(rv)rv.onclick=async()=>{rv.disabled=true;rv.textContent='valuing… (10–60s)';try{const n=await api(`/lot/${l.id}/revalue`,{method:'POST'});Object.assign(state.opps.find(z=>z.lot.id===l.id)||{},n);renderDossier(n,false);renderAll()}catch(e){rv.textContent='failed: '+e.message}};
 }
@@ -450,6 +486,7 @@ async function poll(){
 $('#q').oninput=e=>{state.filters.q=e.target.value;renderHeatmap();renderScatter();renderTable()};
 $('#minScore').oninput=e=>{state.filters.minScore=+e.target.value;$('#minScoreLbl').textContent=e.target.value;renderScatter();renderTable()};
 $('#noBids').onchange=e=>{state.filters.noBids=e.target.checked;renderScatter();renderTable()};
+$('#sweetOnly').onchange=e=>{state.filters.sweetOnly=e.target.checked;renderScatter();renderTable()};
 $('#hideUnvalued').onchange=e=>{state.filters.hideUnvalued=e.target.checked;renderTable()};
 
 load().then(()=>{if(!state.embedded){poll()}});

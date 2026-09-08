@@ -50,7 +50,11 @@ hibid.com/graphql ──LotSearch──▶ normalize ──▶ SQLite (lots)
 **Net resale** = mid estimate × (1 − selling fees) − your shipping cost.
 **Spread** = net resale − landed cost. **Multiple** = net resale ÷ landed cost.
 
-**Score (0–100)** = 100 × (½·multiple component + ½·dollar component) × (½ + ½·confidence) × (½ + ½·price reliability).
+**Score (0–100)** = 100 × (0.6·multiple component + 0.4·dollar component) × (½ + ½·confidence) × (½ + ½·price reliability).
+The multiple component is log-scaled (2× = ⅓, 8× = full marks) because a $1 → $30 penny lot is a 25× and the
+bread and butter of auction flipping; the dollar component is scaled to a realistic $150 spread (`ARB_SPREAD_FULL`),
+and spreads under $10 are scaled down. **Sweet spot** = landed ≤ $6 and net ≥ $15 (`ARB_SWEET_*`): those get a
+floor on the dollar component so a $2 buy that nets $25 scores hot, and a badge/filter in the dashboard.
 Price reliability is how much the *current* bid tells you about the *final* price: 1.0 under an hour left, 0.65 inside a day,
 0.3 with 3+ days left (bids arrive late). Heat bands: **hot ≥ 60**, warm ≥ 40, mild ≥ 20. Authenticity-flagged lots are
 discounted 25%.
@@ -109,6 +113,9 @@ titles cost nothing. Start with `--max-value 20` and a tight `--hours 6` window 
 * **Dossier drawer** — photo, live bid & countdown, full cost breakdown, valuation range, *Why the upside* paragraph,
   value drivers, risks, comparable sales with links, listing description & photos, **Open on HiBid**, **eBay sold**
   search, **Refresh live**, **Re-value**.
+* **List it on eBay** — the appraisal also drafts the listing (80-char title, category, condition, item specifics,
+  description) and three price points (quick / market / patient) with net after eBay fees (`ARB_EBAY_*`), shipping
+  and packaging, and profit vs. landed cost. Copy buttons for the sell form.
 * Left rail: minimum score, no-bids-only, time-bucket and category toggles, free-text filter.
 
 ## Real-time data

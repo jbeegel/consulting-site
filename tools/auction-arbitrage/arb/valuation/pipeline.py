@@ -17,18 +17,44 @@ log = logging.getLogger(__name__)
 
 # Words that hint at resale-grade items; used only to prioritise which lots get valued first.
 _HOT_WORDS = re.compile(
-    r"\b(dewalt|milwaukee|makita|bosch|snap-?on|festool|stihl|husqvarna|honda|yamaha|generac|kohler|"
-    r"rolex|omega|seiko|tag heuer|breitling|cartier|tiffany|louis vuitton|gucci|coach|prada|chanel|hermes|"
-    r"gold|silver|sterling|platinum|diamond|karat|\d+k\b|bullion|coin|morgan|eagle|krugerrand|"
-    r"lego|nintendo|playstation|ps5|xbox|switch|pokemon|magic the gathering|funko|"
-    r"apple|iphone|ipad|macbook|imac|samsung|sony|canon|nikon|leica|bose|sonos|dyson|kitchenaid|vitamix|"
-    r"herman miller|aeron|steelcase|eames|knoll|mid.?century|"
-    r"yeti|weber|traeger|big green egg|"
-    r"gibson|fender|martin|taylor|yamaha|roland|marshall|"
-    r"trek|specialized|cannondale|giant|peloton|"
-    r"john deere|kubota|cat\b|caterpillar|toro|ego\b|ryobi|"
-    r"garmin|dji|gopro|oculus|quest|"
-    r"vintage|antique|signed|first edition|rare)\b", re.I)
+    r"\b("
+    # tools / equipment / outdoor
+    r"dewalt|milwaukee|makita|bosch|snap-?on|festool|stihl|husqvarna|honda|yamaha|generac|kohler|"
+    r"john deere|kubota|caterpillar|toro|ego\b|ryobi|yeti|weber|traeger|big green egg|stanley|bailey|griswold|wagner|"
+    # watches / jewelry / precious
+    r"rolex|omega|seiko|tag heuer|breitling|cartier|tiffany|bulova|accutron|elgin|waltham|hamilton|pocket watch|"
+    r"gold|silver|sterling|platinum|diamond|karat|\d+k\b|gold filled|bullion|coin|morgan|eagle|krugerrand|cameo|bakelite|"
+    r"trifari|weiss|coro|monet|napier|costume jewelry|"
+    # luxury / fashion
+    r"louis vuitton|gucci|coach|prada|chanel|hermes|dooney|"
+    # toys / games / cards
+    r"lego|nintendo|playstation|ps5|xbox|switch|pokemon|magic the gathering|funko|matchbox|hot wheels|lionel|marx|tonka|"
+    r"buddy l|barbie|g\.?i\.? joe|star wars|pez|"
+    r"topps|bowman|fleer|upper deck|panini|donruss|psa|bgs|rookie|autograph|signed|baseball card|football card|sports card|"
+    r"basketball card|hockey card|trading card|wax pack|"
+    # electronics / cameras / music gear
+    r"apple|iphone|ipad|macbook|imac|samsung|sony|canon|nikon|leica|kodak|polaroid|brownie|bose|sonos|dyson|kitchenaid|vitamix|"
+    r"gibson|fender|martin|taylor|roland|marshall|zenith|philco|typewriter|rotary phone|"
+    # furniture / design
+    r"herman miller|aeron|steelcase|eames|knoll|mid.?century|art deco|art nouveau|victorian|primitive|folk art|"
+    # ceramics / glass / collectibles
+    r"occupied japan|noritake|kewpie|bisque|chalkware|hummel|lladro|roseville|mccoy|hull|fenton|fiesta|depression glass|"
+    r"carnival glass|milk glass|wedgwood|jasperware|lenox|royal doulton|limoges|haviland|stoneware|crock|redware|ironstone|"
+    r"pyrex|corning|majolica|cloisonne|satsuma|imari|nippon|wall pocket|salt and pepper|shakers|figurine|"
+    # advertising / banks / ephemera
+    r"advertising|tin sign|porcelain sign|coca.?cola|pepsi|still bank|mechanical bank|calendar bank|letter opener|inkwell|"
+    r"fountain pen|parker|sheaffer|waterman|zippo|lighter|pocket knife|case xx|buck knife|humidor|tobacco|"
+    r"oil lamp|aladdin|kerosene|lantern|railroad|insulator|marbles|license plate|milk bottle|whiskey bottle|decanter|"
+    r"jim beam|ezra brooks|singer|featherweight|seth thomas|ansonia|clock|"
+    # books / paper / media
+    r"first edition|1st edition|antique book|primer|mcguffey|yearbook|program|pennant|comic|"
+    r"boy scouts|bsa\b|girl scouts|chip hilton|hardy boys|nancy drew|big little book|"
+    r"lp\b|vinyl|record|45 rpm|78 rpm|"
+    # generic signals
+    r"vintage|antique|rare|native|indian|wall hanging|"
+    # bikes / fitness / drones
+    r"trek|specialized|cannondale|giant|peloton|schwinn|garmin|dji|gopro|oculus|quest"
+    r")\b", re.I)
 
 
 def triage_score(lot: dict[str, Any]) -> float:
@@ -49,6 +75,9 @@ def triage_score(lot: dict[str, Any]) -> float:
         s += 1.0
     if re.search(r"\b(box of|misc|assorted|miscellaneous|contents of|shelf lot)\b", title, re.I):
         s -= 1.5
+    # Penny lots: the whole game is $1-$3 buys that resell for $20-$50. Don't let a low bid look boring.
+    if (lot.get("min_bid") or lot.get("high_bid") or 0) <= 5:
+        s += 0.5
     return s
 
 

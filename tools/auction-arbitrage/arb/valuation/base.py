@@ -9,9 +9,17 @@ from typing import Any
 _STOP = {"lot", "of", "the", "and", "with", "a", "an", "for", "in", "new", "used", "pcs", "pc", "set"}
 
 
+_PREFIX = re.compile(r"^\s*(?:[A-Za-z]{1,2}\)|\(?[A-Za-z]{1,2}\)|#?\d{1,4}[.)-])\s*")
+
+
+def strip_prefix(title: str) -> str:
+    """Auctioneers prefix titles with sort codes like 'G) ' or '12) '; drop them before searching."""
+    return _PREFIX.sub("", title or "", count=1).strip()
+
+
 def title_key(title: str, quantity: float | None = None) -> str:
     """Stable key for 'same item' so identical lots across auctions reuse a valuation."""
-    words = re.findall(r"[a-z0-9]+", (title or "").lower())
+    words = re.findall(r"[a-z0-9]+", strip_prefix(title).lower())
     words = [w for w in words if w not in _STOP]
     base = " ".join(words)
     if quantity and quantity > 1:
@@ -56,6 +64,7 @@ class Valuation:
     bulk_lot: bool = False
     unit_count: int = 1
     sources_consulted: list[str] = field(default_factory=list)
+    listing: dict[str, Any] | None = None  # ready-to-post eBay listing plan (see claude.LISTING_SCHEMA)
     model_used: str = ""
     created_at: float = field(default_factory=time.time)
     error: str = ""

@@ -43,6 +43,17 @@ class Settings:
     pickup_cost: float = field(default_factory=lambda: _f("ARB_PICKUP_COST", 0.0))  # $ per lot (gas, time)
     resale_fee: float = field(default_factory=lambda: _f("ARB_RESALE_FEE", 0.15))  # marketplace + payment fees
     resale_shipping: float = field(default_factory=lambda: _f("ARB_RESALE_SHIP", 0.0))  # $ per item you absorb
+    spread_full: float = field(default_factory=lambda: _f("ARB_SPREAD_FULL", 150.0))  # $ net spread that earns full marks
+    min_spread: float = field(default_factory=lambda: _f("ARB_MIN_SPREAD", 10.0))  # below this the score is scaled down
+    sweet_spot_max_landed: float = field(default_factory=lambda: _f("ARB_SWEET_MAX_LANDED", 6.0))
+    sweet_spot_min_net: float = field(default_factory=lambda: _f("ARB_SWEET_MIN_NET", 15.0))
+    # eBay fee model (see scoring.listing_economics)
+    ebay_fvf: float = field(default_factory=lambda: _f("ARB_EBAY_FVF", 0.136))
+    ebay_fvf_media: float = field(default_factory=lambda: _f("ARB_EBAY_FVF_MEDIA", 0.153))  # books, music, movies
+    ebay_per_order: float = field(default_factory=lambda: _f("ARB_EBAY_PER_ORDER", 0.30))
+    ebay_per_order_small: float = field(default_factory=lambda: _f("ARB_EBAY_PER_ORDER_SMALL", 0.40))  # orders <= $10
+    ebay_promoted: float = field(default_factory=lambda: _f("ARB_EBAY_PROMOTED", 0.0))  # optional ad rate
+    packaging_cost: float = field(default_factory=lambda: _f("ARB_PACKAGING", 1.0))
 
     # --- default search scope
     zip: str | None = field(default_factory=lambda: os.environ.get("ARB_ZIP") or None)

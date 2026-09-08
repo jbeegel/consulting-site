@@ -60,6 +60,52 @@ export interface Comp {
   note: string;
 }
 
+export interface ListingPlan {
+  title: string;
+  category: string;
+  condition: string;
+  item_specifics: { name: string; value: string }[];
+  description: string;
+  format: "fixed_price" | "auction";
+  price_quick: number;
+  price_market: number;
+  price_patient: number;
+  best_offer_floor: number;
+  auction_start: number;
+  shipping_weight_oz: number;
+  packaging: string;
+  shipping_cost_estimate: number;
+  keywords: string[];
+}
+
+export interface PricePoint {
+  label: "quick" | "market" | "patient";
+  price: number;
+  shipping_charged: number;
+  fvf: number;
+  fvf_rate: number;
+  per_order: number;
+  promoted: number;
+  shipping_cost: number;
+  packaging: number;
+  net: number;
+  expected_days: number;
+  profit: number;
+  roi: number | null;
+}
+
+export interface ListingEconomics {
+  category: string;
+  fee_rate: number;
+  shipping_cost: number;
+  buyer_pays_shipping: boolean;
+  format: string;
+  best_offer_floor: number | null;
+  auction_start: number | null;
+  points: PricePoint[];
+  recommended: "market";
+}
+
 export type ValuationMethod = "claude+web" | "claude" | "ebay_sold" | "ebay_active" | "hibid_estimate" | "none";
 
 export interface Valuation {
@@ -88,6 +134,7 @@ export interface Valuation {
   bulk_lot: boolean;
   unit_count: number;
   sources_consulted: string[];
+  listing?: ListingPlan | null;
   model_used: string;
   created_at: number;
   error: string;
@@ -110,6 +157,7 @@ export interface Score {
   confidence: number;
   score: number;
   heat: "hot" | "warm" | "mild" | "cold" | "unvalued";
+  sweet_spot?: boolean;
 }
 
 export interface Opportunity {
@@ -117,6 +165,7 @@ export interface Opportunity {
   valuation: Valuation | null;
   score: Score;
   why: string;
+  listing: ListingEconomics | null;
 }
 
 export interface ScanParams {

@@ -1,7 +1,7 @@
 // Independent valuation with Claude + server-side web search. One request per lot. The lot's current
 // bid is deliberately NOT shown to the model so the estimate can't anchor on it.
 import Anthropic from "@anthropic-ai/sdk";
-import type { Comp, Lot, Valuation } from "../types";
+import type { Comp, ListingPlan, Lot, Valuation } from "../types";
 import { emptyValuation } from "./base";
 
 const SYSTEM = `You are a veteran secondary-market appraiser and reseller (eBay power seller, estate liquidator,
@@ -17,11 +17,40 @@ Rules:
 - For bulk lots, value the lot as a whole (what one buyer would pay), not the retail sum of parts.
 - Flag authenticity risk for luxury brands, precious metals/coins, autographs, designer goods.
 - Be conservative on obscure items, art, and collectibles; be precise on commodity electronics/tools.
-- Report prices in USD. Never exceed 3 web searches per item; stop early when you have 3+ solid comps.`;
+- Report prices in USD. Never exceed 3 web searches per item; stop early when you have 3+ solid comps.
+- Also draft the eBay listing you would post: an 80-character keyword-dense title (brand, what it is, era,
+  maker marks, size, key search words; no filler like "LOOK" or "WOW"), the best eBay category, condition,
+  item specifics buyers filter on, an honest 3-6 sentence description, three price points (quick sale =
+  around the 25th percentile of sold comps, market = median, patient = 75th percentile), a best-offer floor,
+  and a shipping estimate (weight class and packaging).`;
+
+const LISTING_SCHEMA = {
+  type: "object",
+  properties: {
+    title: { type: "string", description: "eBay title, max 80 characters" },
+    category: { type: "string", description: "eBay category path, e.g. Collectibles > Decorative Collectibles > Figurines" },
+    condition: { type: "string", description: "eBay condition: New, Like New, Very Good, Good, Acceptable, Used, For parts" },
+    item_specifics: { type: "array", items: { type: "object", properties: { name: { type: "string" }, value: { type: "string" } }, required: ["name", "value"], additionalProperties: false } },
+    description: { type: "string" },
+    format: { type: "string", enum: ["fixed_price", "auction"] },
+    price_quick: { type: "number" },
+    price_market: { type: "number" },
+    price_patient: { type: "number" },
+    best_offer_floor: { type: "number" },
+    auction_start: { type: "number", description: "starting bid if format is auction, else 0" },
+    shipping_weight_oz: { type: "number" },
+    packaging: { type: "string", description: "padded mailer | small box | medium box | large box | freight" },
+    shipping_cost_estimate: { type: "number", description: "what it will cost you to ship domestically, USD" },
+    keywords: { type: "array", items: { type: "string" } },
+  },
+  required: ["title", "category", "condition", "item_specifics", "description", "format", "price_quick", "price_market", "price_patient", "best_offer_floor", "auction_start", "shipping_weight_oz", "packaging", "shipping_cost_estimate", "keywords"],
+  additionalProperties: false,
+} as const;
 
 const SCHEMA = {
   type: "object",
   properties: {
+    listing: LISTING_SCHEMA,
     identified_item: { type: "string" },
     brand: { type: "string" },
     model: { type: "string" },
@@ -51,7 +80,7 @@ const SCHEMA = {
     authenticity_risk: { type: "boolean" },
     search_query: { type: "string", description: "best eBay sold-listings search string for this item" },
   },
-  required: ["identified_item", "brand", "model", "condition_assumption", "bulk_lot", "unit_count", "resale_low", "resale_mid", "resale_high", "confidence", "confidence_reason", "demand", "days_to_sell", "best_channel", "value_drivers", "risks", "rationale", "comps", "authenticity_risk", "search_query"],
+  required: ["identified_item", "brand", "model", "condition_assumption", "bulk_lot", "unit_count", "resale_low", "resale_mid", "resale_high", "confidence", "confidence_reason", "demand", "days_to_sell", "best_channel", "value_drivers", "risks", "rationale", "comps", "authenticity_risk", "search_query", "listing"],
   additionalProperties: false,
 } as const;
 
@@ -61,6 +90,7 @@ function lotPrompt(lot: Lot, comps: Comp[]): string {
   const parts = [
     "Appraise this online-auction lot for resale.",
     `Title: ${lot.title}`,
+    "Note: a leading code like 'G)' is the auctioneer's sort prefix, not part of the item.",
     `Lot category: ${lot.category_path || lot.category || "unknown"}`,
     `Quantity in lot: ${lot.quantity || 1}`,
     `Auctioneer's estimate (may be absent or optimistic): ${lot.estimate || "none"}`,
@@ -134,6 +164,8 @@ export class ClaudeValuer {
     for (const c of comps.slice(0, 10)) if (!v.comps.some((x) => x.url === c.url)) v.comps.push({ ...c, note: c.note || `raw ${c.source} pull` });
     v.authenticity_risk = !!data.authenticity_risk;
     v.search_query = s("search_query");
+    const lst = data.listing as ListingPlan | undefined;
+    if (lst && typeof lst === "object" && lst.title) v.listing = { ...lst, title: String(lst.title).slice(0, 80) };
     v.method = this.webSearch && searched ? "claude+web" : "claude";
     v.sources_consulted = [...new Set(v.comps.map((c) => (c.source || "").trim()).filter(Boolean))].sort();
     v.created_at = Date.now() / 1000;

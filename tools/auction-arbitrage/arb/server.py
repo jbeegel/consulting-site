@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from .config import Settings, load
 from .db import Store
 from .scanner import Scanner
-from .scoring import TIME_BUCKETS, score_lot, why_upside
+from .scoring import TIME_BUCKETS, listing_economics, score_lot, why_upside
 
 log = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
@@ -38,6 +38,7 @@ def build_opportunity(lot: dict[str, Any], val: dict[str, Any] | None, s: Settin
         "valuation": val,
         "score": sc,
         "why": why_upside(lot, val, sc, s) if val else "",
+        "listing": listing_economics(lot, val, sc, s),
     }
 
 
@@ -59,6 +60,8 @@ def create_app(settings: Settings | None = None, store: Store | None = None, sca
             "resale_shipping": s.resale_shipping, "pickup_cost": s.pickup_cost, "model": s.model,
             "valuer": s.valuer, "claude_enabled": s.anthropic_available and s.valuer in ("auto", "claude"),
             "ebay_sold": s.ebay_sold, "hibid": s.hibid_site, "time_buckets": [b[0] for b in TIME_BUCKETS],
+            "sweet_spot": {"max_landed": s.sweet_spot_max_landed, "min_net": s.sweet_spot_min_net},
+            "ebay_fees": {"fvf": s.ebay_fvf, "fvf_media": s.ebay_fvf_media, "per_order": s.ebay_per_order, "packaging": s.packaging_cost},
         }
 
     @app.get("/api/opportunities")

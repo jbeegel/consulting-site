@@ -4,6 +4,7 @@
 //  2. Browse API (official, free key: EBAY_CLIENT_ID + EBAY_CLIENT_SECRET). Returns ACTIVE listings
 //     (asking prices, not sold) — weaker evidence, labelled as such, but reliable from a server.
 import type { Comp } from "../types";
+import { stripPrefix } from "./base";
 
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36";
 const ITEM = /<li class="s-item[^"]*"[^>]*>([\s\S]*?)<\/li>/g;
@@ -24,7 +25,7 @@ export function soldSearchUrl(query: string): string {
 
 export function cleanQuery(title: string, maxWords = 8): string {
   const junk = new Set(["lot", "of", "the", "and", "with", "new", "nib", "nwt", "untested", "as", "is", "read"]);
-  const t = (title || "").replace(/\(.*?\)|\[.*?\]/g, " ").replace(/[^A-Za-z0-9\-.\s]/g, " ");
+  const t = stripPrefix(title).replace(/\(.*?\)|\[.*?\]/g, " ").replace(/[^A-Za-z0-9\-.\s]/g, " ");
   return t.split(/\s+/).filter((w) => w.length > 1 && !junk.has(w.toLowerCase())).slice(0, maxWords).join(" ");
 }
 

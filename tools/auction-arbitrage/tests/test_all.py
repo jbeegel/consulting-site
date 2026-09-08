@@ -25,6 +25,15 @@ def test_client_search_and_normalize(settings):
     assert "highBid" in st and "timeLeftSeconds" in st
 
 
+def test_title_prefix_strip():
+    from arb.valuation.base import strip_prefix, title_key
+    from arb.valuation.ebay import clean_query
+    assert strip_prefix("G) Noritake wall pocket") == "Noritake wall pocket"
+    assert strip_prefix("12) vintage bank") == "vintage bank"
+    assert title_key("G) Noritake wall pocket") == title_key("Noritake wall pocket")
+    assert clean_query("G) Strike Three By Clair Bee A Chip Hilton") == "Strike Three By Clair Bee Chip Hilton"
+
+
 def test_estimate_parser():
     assert parse_estimate("$100 - $200") == (100, 200)
     assert parse_estimate("1,000 to 1,500") == (1000, 1500)
@@ -47,6 +56,17 @@ def test_scoring_math(settings):
     # far-out lots get discounted
     far = score_lot(dict(lot, ends_at=now + 5 * 86400), val, settings, now=now)
     assert far["score"] < sc["score"]
+    # penny lot: $1 bid that nets $25 is a sweet spot and scores hot
+    penny = score_lot(dict(lot, high_bid=1.0, min_bid=1.0), {"mid": 30.0, "low": 20.0, "high": 45.0, "confidence": 0.7}, settings, now=now)
+    assert penny["sweet_spot"] and penny["heat"] == "hot"
+    from arb.scoring import listing_economics
+    le = listing_economics(dict(lot, category_path="Books > Antiquarian"), {"mid": 30.0, "low": 20.0, "high": 45.0, "confidence": 0.7,
+                           "listing": {"price_quick": 20, "price_market": 30, "price_patient": 45, "shipping_cost_estimate": 5, "category": "Books"}}, penny, settings)
+    assert [p["label"] for p in le["points"]] == ["quick", "market", "patient"]
+    m = le["points"][1]
+    assert le["fee_rate"] == settings.ebay_fvf_media and le["buyer_pays_shipping"]
+    assert abs(m["net"] - ((30 + 5) * (1 - settings.ebay_fvf_media) - settings.ebay_per_order - 5 - settings.packaging_cost)) < 1e-6
+    assert m["profit"] == m["net"] - penny["landed_cost"]
     # negative spread -> zero score
     bad = score_lot(dict(lot, min_bid=400.0), val, settings, now=now)
     assert bad["score"] == 0 and bad["spread"] < 0
@@ -132,7 +152,8 @@ def test_api_surface(settings):
     opps = c.get("/api/opportunities").json()
     assert opps["count"] > 50 and opps["opportunities"][0]["score"]["score"] >= opps["opportunities"][-1]["score"]["score"]
     top = opps["opportunities"][0]
-    assert top["why"] and top["valuation"]["comps"]
+    assert top["why"] and top["valuation"]["comps"] and top["listing"]["points"][1]["net"] > 0
+    assert any(o["score"].get("sweet_spot") for o in opps["opportunities"])
     cats = c.get("/api/categories").json()
     assert cats and cats[0]["best_score"] >= cats[-1]["best_score"]
     assert c.get(f"/api/lot/{top['lot']['id']}").json()["lot"]["id"] == top["lot"]["id"]

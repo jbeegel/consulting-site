@@ -28,11 +28,42 @@ Rules:
 - For bulk lots, value the lot as a whole (what one buyer would pay), not the retail sum of parts.
 - Flag authenticity risk for luxury brands, precious metals/coins, autographs, designer goods.
 - Be conservative on obscure items, art, and collectibles; be precise on commodity electronics/tools.
-- Report prices in USD. Never exceed 3 web searches per item; stop early when you have 3+ solid comps."""
+- Report prices in USD. Never exceed 3 web searches per item; stop early when you have 3+ solid comps.
+- Also draft the eBay listing you would post: an 80-character keyword-dense title (brand, what it is, era,
+  maker marks, size, key search words; no filler like "LOOK" or "WOW"), the best eBay category, condition,
+  item specifics buyers filter on, an honest 3-6 sentence description, three price points (quick sale =
+  around the 25th percentile of sold comps, market = median, patient = 75th percentile), a best-offer floor,
+  and a shipping estimate (weight class and packaging)."""
+
+LISTING_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string", "description": "eBay title, max 80 characters"},
+        "category": {"type": "string", "description": "eBay category path, e.g. Collectibles > Decorative Collectibles > Figurines"},
+        "condition": {"type": "string", "description": "eBay condition: New, Like New, Very Good, Good, Acceptable, Used, For parts"},
+        "item_specifics": {"type": "array", "items": {"type": "object", "properties": {"name": {"type": "string"}, "value": {"type": "string"}}, "required": ["name", "value"], "additionalProperties": False}},
+        "description": {"type": "string"},
+        "format": {"type": "string", "enum": ["fixed_price", "auction"]},
+        "price_quick": {"type": "number"},
+        "price_market": {"type": "number"},
+        "price_patient": {"type": "number"},
+        "best_offer_floor": {"type": "number"},
+        "auction_start": {"type": "number", "description": "starting bid if format is auction, else 0"},
+        "shipping_weight_oz": {"type": "number"},
+        "packaging": {"type": "string", "description": "padded mailer | small box | medium box | large box | freight"},
+        "shipping_cost_estimate": {"type": "number", "description": "what it will cost you to ship domestically, USD"},
+        "keywords": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["title", "category", "condition", "item_specifics", "description", "format", "price_quick", "price_market",
+                 "price_patient", "best_offer_floor", "auction_start", "shipping_weight_oz", "packaging",
+                 "shipping_cost_estimate", "keywords"],
+    "additionalProperties": False,
+}
 
 SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
+        "listing": LISTING_SCHEMA,
         "identified_item": {"type": "string"},
         "brand": {"type": "string"},
         "model": {"type": "string"},
@@ -72,7 +103,7 @@ SCHEMA: dict[str, Any] = {
     "required": ["identified_item", "brand", "model", "condition_assumption", "bulk_lot", "unit_count",
                  "resale_low", "resale_mid", "resale_high", "confidence", "confidence_reason", "demand",
                  "days_to_sell", "best_channel", "value_drivers", "risks", "rationale", "comps",
-                 "authenticity_risk", "search_query"],
+                 "authenticity_risk", "search_query", "listing"],
     "additionalProperties": False,
 }
 
@@ -84,6 +115,7 @@ def _lot_prompt(lot: dict[str, Any], comps: list[Comp]) -> str:
     parts = [
         "Appraise this online-auction lot for resale.",
         f"Title: {lot.get('title', '')}",
+        "Note: a leading code like 'G)' is the auctioneer's sort prefix, not part of the item.",
         f"Lot category: {lot.get('category_path') or lot.get('category') or 'unknown'}",
         f"Quantity in lot: {lot.get('quantity') or 1}",
         f"Auctioneer's estimate (may be absent or optimistic): {lot.get('estimate') or 'none'}",
@@ -174,6 +206,10 @@ class ClaudeValuer:
                                 "date": c.date, "note": "raw eBay sold pull"})
         v.authenticity_risk = bool(data.get("authenticity_risk"))
         v.search_query = data.get("search_query", "")
+        lst = data.get("listing")
+        if isinstance(lst, dict) and lst.get("title"):
+            lst["title"] = str(lst["title"])[:80]
+            v.listing = lst
         v.method = "claude+web" if (self.web_search and searched) else "claude"
         v.sources_consulted = sorted({(c.get("source") or "").strip() for c in v.comps if c.get("source")})
         v.created_at = time.time()

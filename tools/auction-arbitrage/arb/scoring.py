@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import re
 import time
 from typing import Any
 
@@ -94,19 +95,74 @@ def score_lot(lot: dict[str, Any], val: dict[str, Any] | None, s: Settings, *, n
     ratio = net / cost if cost > 0 else 0.0
     conf = float(val.get("confidence") or 0)
 
-    ratio_component = max(0.0, min(1.0, (ratio - 1.0) / 4.0))  # 5x = full marks
-    dollar_component = max(0.0, min(1.0, spread / 400.0))      # $400 net spread = full marks
-    raw = 0.5 * ratio_component + 0.5 * dollar_component
+    # Multiple matters most (a $1 -> $30 penny lot is a 25x, the bread and butter of auction flipping);
+    # dollars matter too, scaled to a realistic "great flip" rather than a four-figure one.
+    sweet = cost <= s.sweet_spot_max_landed and net >= s.sweet_spot_min_net
+    ratio_component = max(0.0, min(1.0, math.log2(max(ratio, 1.0)) / 3.0))  # 8x = full marks, 2x = 1/3
+    dollar_component = max(0.0, min(1.0, spread / max(1.0, s.spread_full)))
+    if sweet:  # a $1-$3 buy that nets $15+ is the bread and butter; don't let small dollars bury it
+        dollar_component = max(dollar_component, 0.5)
+    raw = 0.6 * ratio_component + 0.4 * dollar_component
     score = 100 * raw * (0.5 + 0.5 * conf) * (0.5 + 0.5 * out["price_reliability"])
     if spread <= 0:
         score = 0.0
+    elif spread < s.min_spread:  # a 10x on $2 of headroom is not worth the gas
+        score *= spread / s.min_spread
     if val.get("authenticity_risk"):
         score *= 0.75
     out.update({
         "net_resale": net, "net_resale_low": net_low, "spread": spread, "spread_low": net_low - cost,
-        "ratio": ratio, "confidence": conf, "score": round(score, 1), "heat": heat(score),
+        "ratio": ratio, "confidence": conf, "score": round(score, 1), "heat": heat(score), "sweet_spot": sweet,
     })
     return out
+
+
+# ---------------------------------------------------------------------------
+# eBay listing economics: what you net at each recommended price point
+# ---------------------------------------------------------------------------
+
+_MEDIA = re.compile(r"\b(book|books|magazine|comic|movie|dvd|blu-ray|vhs|music|cd|vinyl|record|lp|cassette)\b", re.I)
+
+
+def ebay_fee_rate(category: str, s: Settings) -> float:
+    return s.ebay_fvf_media if _MEDIA.search(category or "") else s.ebay_fvf
+
+
+def net_out(price: float, *, category: str, shipping_cost: float, s: Settings, shipping_charged: float = 0.0) -> dict[str, Any]:
+    """Net cash after eBay final value fee, per-order fee, promoted-listing ad, shipping and packaging."""
+    gross = price + shipping_charged
+    rate = ebay_fee_rate(category, s)
+    fvf = gross * rate
+    per_order = s.ebay_per_order_small if gross <= 10 else s.ebay_per_order
+    promoted = gross * s.ebay_promoted
+    net = gross - fvf - per_order - promoted - shipping_cost - s.packaging_cost
+    return {"price": price, "shipping_charged": shipping_charged, "fvf": fvf, "fvf_rate": rate, "per_order": per_order,
+            "promoted": promoted, "shipping_cost": shipping_cost, "packaging": s.packaging_cost, "net": net}
+
+
+def listing_economics(lot: dict[str, Any], val: dict[str, Any] | None, sc: dict[str, Any], s: Settings) -> dict[str, Any] | None:
+    """Three price points (quick / market / patient) with net-out and profit vs. landed cost."""
+    if not val or not val.get("mid"):
+        return None
+    lst = val.get("listing") or {}
+    cat = lst.get("category") or lot.get("category_path") or ""
+    ship = float(lst.get("shipping_cost_estimate") or s.resale_shipping or 0)
+    quick = float(lst.get("price_quick") or val.get("low") or val["mid"] * 0.8)
+    market = float(lst.get("price_market") or val["mid"])
+    patient = float(lst.get("price_patient") or val.get("high") or val["mid"] * 1.2)
+    # Buyer pays shipping on cheap items (free shipping on a $20 item eats the margin); seller absorbs on pricey ones.
+    charged = ship if market < 60 else 0.0
+    pts = []
+    for label, price, days in (("quick", quick, 7), ("market", market, 21), ("patient", patient, 45)):
+        e = net_out(price, category=cat, shipping_cost=ship, s=s, shipping_charged=charged)
+        e.update({"label": label, "expected_days": days, "profit": e["net"] - sc["landed_cost"],
+                  "roi": (e["net"] - sc["landed_cost"]) / sc["landed_cost"] if sc["landed_cost"] > 0 else None})
+        pts.append(e)
+    return {
+        "category": cat, "fee_rate": ebay_fee_rate(cat, s), "shipping_cost": ship, "buyer_pays_shipping": charged > 0,
+        "format": lst.get("format") or "fixed_price", "best_offer_floor": lst.get("best_offer_floor"),
+        "auction_start": lst.get("auction_start"), "points": pts, "recommended": "market",
+    }
 
 
 def why_upside(lot: dict[str, Any], val: dict[str, Any], sc: dict[str, Any], s: Settings) -> str:

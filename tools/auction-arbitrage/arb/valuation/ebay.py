@@ -16,7 +16,7 @@ from typing import Any
 
 import httpx
 
-from .base import Comp
+from .base import Comp, strip_prefix
 
 log = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ def sold_search_url(query: str) -> str:
 
 
 def clean_query(title: str, max_words: int = 8) -> str:
-    t = re.sub(r"\(.*?\)|\[.*?\]", " ", title or "")
+    t = re.sub(r"\(.*?\)|\[.*?\]", " ", strip_prefix(title))
     t = re.sub(r"[^A-Za-z0-9\-\.\s]", " ", t)
     words = [w for w in t.split() if len(w) > 1]
     junk = {"lot", "of", "the", "and", "with", "new", "nib", "nwt", "untested", "as", "is", "read"}

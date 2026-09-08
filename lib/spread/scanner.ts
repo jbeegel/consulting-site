@@ -3,14 +3,14 @@
 import { sendAlerts } from "./alerts";
 import { config, type Config } from "./config";
 import { applyState, HiBidClient, normalizeLot } from "./hibid";
-import { scoreLot, whyUpside } from "./scoring";
+import { listingEconomics, scoreLot, whyUpside } from "./scoring";
 import { getStore, type Store } from "./store";
 import type { Lot, Opportunity, ScanParams, Valuation } from "./types";
 import { ValuationPipeline } from "./valuation";
 
 export function buildOpportunity(lot: Lot, val: Valuation | null, c: Config = config, now = Date.now() / 1000): Opportunity {
   const score = scoreLot(lot, val, c, now);
-  return { lot, valuation: val, score, why: val ? whyUpside(lot, val, score, c) : "" };
+  return { lot, valuation: val, score, why: val ? whyUpside(lot, val, score, c) : "", listing: listingEconomics(lot, val, score, c) };
 }
 
 export class Scanner {

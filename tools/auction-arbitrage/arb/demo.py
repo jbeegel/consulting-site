@@ -73,6 +73,15 @@ CATALOG: list[tuple] = [
     ("Vintage Schwinn Stingray Krate bicycle, Orange Krate, 1970", "Sporting Goods > Bicycles", 900, 1800, "medium", ["Krates are blue-chip collectibles"], ["Reproduction parts reduce value"], False, "$300 - $600"),
     ("Tiffany & Co sterling silver Return to Tiffany heart tag bracelet", "Jewelry & Watches > Jewelry", 180, 280, "high", ["Brand demand"], ["Counterfeits; check hallmarks"], True, ""),
     ("Sony WH-1000XM4 Wireless Headphones", "Electronics > Audio", 120, 180, "high", [], ["Headband cracks"], False, ""),
+    # Penny lots: the $1-$3 buys that resell for $20-$50 (the real bread and butter)
+    ("G) Strike Three By Clair Bee A Chip Hilton", "Books > Antiquarian & Collectible", 20, 45, "medium", ["Chip Hilton series has a devoted collector base", "Dust jacket present"], ["Ex-library or torn jacket cuts value in half"], False, ""),
+    ("G) vintage occupied JAPAN antique knic knacs", "Collectibles > Decorative", 18, 40, "medium", ["'Occupied Japan' mark (1947-52) is actively collected", "Sold as a lot of three"], ["Chips and repairs"], False, ""),
+    ("G) Noritake wall pocket", "Collectibles > Decorative", 25, 60, "medium", ["Hand-painted Noritake 'M' mark era pieces sell steadily"], ["Hairlines, crazing"], False, ""),
+    ("G) Vintage Kewpie Doll Figurine Bisque Porcelain", "Collectibles > Figurines", 20, 50, "medium", ["Bisque Kewpies with Rose O'Neill marks fetch more"], ["Unmarked reproductions are common"], False, ""),
+    ("G) Bob Dylan Another Side LP CS 8993 Columbia", "Music > Vinyl Records", 15, 40, "high", ["Early Columbia '360 Sound' pressing", "Dylan always moves"], ["Grade the vinyl; scratches kill value"], False, ""),
+    ("G) VINTAGE Metal Calendar Bank - CITIZENS BANK", "Collectibles > Advertising", 20, 45, "medium", ["Advertising still banks with working calendar are a niche", "Local bank collectors"], ["Missing key, stuck calendar"], False, ""),
+    ("G) cast plaster native wall hanging 1940's", "Collectibles > Decorative", 25, 60, "medium", ["1940s chalkware wall plaques sold in pairs do well"], ["Chips in plaster are hard to hide"], False, ""),
+    ("G) YOUNG Folks SPEAKER 1882 Hardcover", "Books > Antiquarian & Collectible", 15, 35, "low", ["Decorative Victorian binding"], ["Foxing, loose hinges"], False, ""),
 ]
 
 AUCTIONS = [
@@ -95,6 +104,7 @@ def make_demo(seed: int = 7, now: float | None = None) -> tuple[list[dict[str, A
     for idx, (title, cat_path, lo, hi, demand, drivers, risks, auth, est) in enumerate(CATALOG):
         # Some items appear in two auctions to show cross-auction dedupe/cache behaviour.
         copies = 2 if idx % 9 == 0 else 1
+        penny = title.startswith("G) ")
         for c in range(copies):
             lot_id += rng.randint(1, 40)
             mid = (lo + hi) / 2
@@ -102,6 +112,8 @@ def make_demo(seed: int = 7, now: float | None = None) -> tuple[list[dict[str, A
             roll = rng.random()
             frac = rng.uniform(0.04, 0.2) if roll < 0.22 else rng.uniform(0.2, 0.5) if roll < 0.5 else rng.uniform(0.5, 1.1)
             high_bid = round(mid * frac / 5) * 5 if mid > 50 else round(mid * frac)
+            if penny:
+                high_bid = float(rng.choice([0, 1, 1, 2, 3]))
             bid_count = 0 if rng.random() < 0.25 else rng.randint(1, 24)
             if bid_count == 0:
                 high_bid = 0.0
@@ -151,6 +163,17 @@ def make_demo(seed: int = 7, now: float | None = None) -> tuple[list[dict[str, A
                              f"Demand is {demand}.",
                 "comps": comps, "search_query": title, "authenticity_risk": auth, "bulk_lot": False, "unit_count": 1,
                 "sources_consulted": ["ebay_sold (demo)"], "model_used": "demo", "created_at": now, "error": "",
+                "listing": {
+                    "title": (title.replace("G) ", "") + " " + " ".join(cat_path.split(" > ")[-1:]))[:80],
+                    "category": cat_path, "condition": "Used",
+                    "item_specifics": [{"name": "Brand", "value": title.replace("G) ", "").split()[0]}, {"name": "Era", "value": "Vintage" if "intage" in title or "ntique" in title else "Modern"}],
+                    "description": f"{title.replace('G) ', '')}. Used, good condition as pictured; see photos for details. Ships within 1 business day, carefully packed.",
+                    "format": "fixed_price", "price_quick": round(lo, 0), "price_market": round(mid, 0), "price_patient": round(hi, 0),
+                    "best_offer_floor": round(lo * 0.9, 0), "auction_start": 0,
+                    "shipping_weight_oz": 12 if mid < 100 else 80, "packaging": "small box" if mid < 100 else "medium box",
+                    "shipping_cost_estimate": 6.5 if mid < 60 else 14.0 if mid < 500 else 0.0,
+                    "keywords": [w for w in title.replace("G) ", "").split() if len(w) > 3][:6],
+                },
             })
     return lots, vals
 
