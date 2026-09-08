@@ -68,6 +68,13 @@ header{position:sticky;top:0;z-index:20;background:var(--bg-2);border-bottom:1px
 @keyframes pulse{50%{opacity:.3}}
 @media (prefers-reduced-motion:reduce){.status .dot.live{animation:none}}
 .banner{background:var(--accent-soft);color:var(--ink);padding:8px 20px;font-size:13px;border-bottom:1px solid var(--line)}
+.health{background:var(--bg-2);border-bottom:1px solid var(--line);padding:8px 20px;font-size:12px;display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center}
+.health .chk{display:inline-flex;gap:6px;align-items:center}
+.health .chk i{width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--good)}
+.health .chk.bad i{background:var(--bad)}
+.health .chk.warn i{background:var(--warn)}
+.health .chk .fix{color:var(--ink-3)}
+.health .close{margin-left:auto;border:0;background:transparent;color:var(--ink-3);cursor:pointer}
 
 /* ---------- layout */
 .wrap{display:grid;grid-template-columns:230px 1fr;gap:0;min-height:calc(100vh - 60px)}
@@ -226,6 +233,7 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
   </div>
 </header>
 <div class="banner" id="banner" hidden></div>
+<div class="health" id="health" hidden></div>
 
 <div class="wrap">
   <aside>
@@ -308,6 +316,13 @@ async function load(){
     }else{$('#banner').hidden=false;$('#banner').textContent='Could not reach the API: '+e.message;}
   }
   renderAll();
+  if(!state.embedded)health();
+}
+async function health(){
+  try{const h=await api('/health');const bad=h.checks.filter(c=>!c.ok);const el=$('#health');
+    if(!bad.length){el.hidden=true;return}
+    el.hidden=false;el.innerHTML=`<b>Setup</b> `+h.checks.map(c=>`<span class="chk ${c.ok?'':c.level==='required'?'bad':'warn'}" title="${esc(c.detail)}"><i></i>${esc(c.name)}${c.ok?'':c.fix?` <span class="fix">→ ${esc(c.fix)}</span>`:''}</span>`).join('')+`<button class="close" title="hide" onclick="this.parentNode.hidden=true">×</button>`;
+  }catch(e){}
 }
 function renderAll(){renderStatus();renderKpis();renderChips();renderHeatmap();renderScatter();renderTable()}
 

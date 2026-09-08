@@ -1,4 +1,5 @@
-# Triggers a Spread Hunter scan every 15 minutes. Vercel's Hobby plan only allows daily crons, so this
+# Triggers a Spread Hunter scan every 15 minutes. NOTE: GitHub only runs scheduled workflows from the
+# repository's default branch, so this fires once the PR is merged. Vercel's Hobby plan only allows daily crons, so this
 # workflow provides the frequent cadence. Set two repository secrets:
 #   SPREAD_CRON_URL   e.g. https://your-site.vercel.app/api/spread/cron
 #   CRON_SECRET       the same value as the CRON_SECRET env var on Vercel
