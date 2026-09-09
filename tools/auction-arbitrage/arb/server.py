@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from .config import Settings, load
+from .calibration import build_report
 from .db import Store
 from .scanner import Scanner
 from .scoring import TIME_BUCKETS, grading_economics, listing_economics, score_lot, why_upside
@@ -62,6 +63,7 @@ def create_app(settings: Settings | None = None, store: Store | None = None, sca
             "valuer": s.valuer, "claude_enabled": s.anthropic_available and s.valuer in ("auto", "claude"),
             "ebay_sold": s.ebay_sold, "hibid": s.hibid_site, "time_buckets": [b[0] for b in TIME_BUCKETS],
             "sweet_spot": {"max_landed": s.sweet_spot_max_landed, "min_net": s.sweet_spot_min_net},
+            "calibration": {"enabled": s.calibration, "min_closed": s.calibration_min_closed, "min_sales": s.calibration_min_sales},
             "vision": s.vision, "radar_levels": ["strike", "watch", "track", "scan"],
             "grading": {"enabled": s.grading, "fee": s.grading_fee, "ship": s.grading_ship, "days": s.grading_days},
             "ebay_fees": {"fvf": s.ebay_fvf, "fvf_media": s.ebay_fvf_media, "per_order": s.ebay_per_order, "packaging": s.packaging_cost},
@@ -140,6 +142,52 @@ def create_app(settings: Settings | None = None, store: Store | None = None, sca
     @app.get("/api/scan/status")
     def scan_status():
         return {"status": sc.status.snapshot(), "last_scan": db.last_scan(), "stats": db.stats()}
+
+    @app.get("/api/calibration")
+    def calibration(rows: bool = False):
+        outcomes = db.outcomes()
+        report = build_report(outcomes, s)
+        return {**report, "enabled": s.calibration, "min_closed": s.calibration_min_closed,
+                "min_sales": s.calibration_min_sales, "outcomes": outcomes[:500] if rows else None}
+
+    @app.post("/api/lot/{lot_id}/sale")
+    def record_sale(lot_id: int, body: dict[str, Any]):
+        """Record what a lot actually did for you. Ground truth beats auction hammer prices."""
+        existing = db.get_outcome(lot_id)
+        lot = db.get_lot(lot_id)
+        if not existing and not lot:
+            raise HTTPException(404, "unknown lot")
+        if existing:
+            base = existing
+        else:
+            val = db.get_valuation(lot_id)
+            sc = score_lot(lot, val, s)
+            base = {"lot_id": lot_id, "title": lot.get("title"), "category": lot.get("category") or "Uncategorized",
+                    "closed_at": lot.get("ends_at") or time.time(), "predicted_low": (val or {}).get("low"),
+                    "predicted_mid": (val or {}).get("mid"), "predicted_high": (val or {}).get("high"),
+                    "predicted_net": sc.get("net_resale"), "confidence": (val or {}).get("confidence", 0),
+                    "method": (val or {}).get("method", "none"), "score": sc.get("score", 0),
+                    "hammer": None, "landed_at_hammer": None, "bought": None, "bought_price": None,
+                    "sale_price": None, "sale_at": None, "sale_channel": "", "notes": ""}
+
+        def num(v):
+            try:
+                f = float(v)
+                return f if f > 0 else None
+            except (TypeError, ValueError):
+                return None
+
+        paid, sold = num(body.get("bought_price")), num(body.get("sale_price"))
+        updated = {**base,
+                   "bought": body.get("bought", True if paid is not None else base.get("bought")),
+                   "bought_price": paid if paid is not None else base.get("bought_price"),
+                   "sale_price": sold if sold is not None else base.get("sale_price"),
+                   "sale_at": body.get("sale_at") or (time.time() if sold is not None else base.get("sale_at")),
+                   "sale_channel": body.get("sale_channel", base.get("sale_channel", "")),
+                   "notes": body.get("notes", base.get("notes", "")),
+                   "recorded_at": time.time()}
+        db.save_outcome(updated)
+        return {"outcome": updated}
 
     @app.get("/api/categories")
     def categories():

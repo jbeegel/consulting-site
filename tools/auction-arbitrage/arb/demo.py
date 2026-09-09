@@ -226,11 +226,59 @@ def make_demo(seed: int = 7, now: float | None = None) -> tuple[list[dict[str, A
     return lots, vals
 
 
+# (category, n, hammer ratio spread, sales) -- a plausible few weeks of history: the valuer is
+# well calibrated on commodity electronics and tools, and runs optimistic on furniture and art.
+_OUTCOME_MIX = [
+    ("Electronics", 22, (0.18, 0.55), [(0.95, 1), (1.05, 1), (0.9, 1), (1.1, 1), (1.0, 1), (0.97, 1)]),
+    ("Tools", 17, (0.2, 0.6), [(1.02, 1), (0.93, 1), (1.08, 1), (0.99, 1), (1.04, 1)]),
+    ("Collectibles", 14, (0.25, 0.85), [(0.8, 1), (1.15, 1), (0.7, 1)]),
+    ("Furniture", 11, (0.7, 1.4), []),          # consistently outbid at our own number: inflated
+    ("Jewelry & Watches", 9, (0.3, 0.9), []),
+    ("Art", 6, (0.8, 1.6), []),                  # too few to act on yet, but visibly bad
+    ("Books", 5, (0.2, 0.7), []),
+]
+
+
+def make_demo_outcomes(seed: int = 11, now: float | None = None) -> list[dict[str, Any]]:
+    """Closed lots with what we predicted vs. what they actually realized."""
+    rng = random.Random(seed)
+    now = now or time.time()
+    out: list[dict[str, Any]] = []
+    lot_id = 320500000
+    for cat, n, (lo_r, hi_r), sales in _OUTCOME_MIX:
+        for i in range(n):
+            lot_id += rng.randint(3, 60)
+            mid = round(rng.uniform(30, 400), 2)
+            net = round(mid * 0.85, 2)
+            hammer = round(net * rng.uniform(lo_r, hi_r) / 1.15, 2)  # back out the premium
+            rec: dict[str, Any] = {
+                "lot_id": lot_id, "title": f"{cat} lot {i + 1}", "category": cat,
+                "closed_at": now - rng.uniform(1, 21) * 86400,
+                "predicted_low": round(mid * 0.8, 2), "predicted_mid": mid, "predicted_high": round(mid * 1.2, 2),
+                "predicted_net": net, "confidence": round(rng.uniform(0.55, 0.85), 2), "method": "claude+web",
+                "score": round(rng.uniform(15, 80), 1), "hammer": hammer,
+                "landed_at_hammer": round(hammer * 1.15, 2),
+                "bought": None, "bought_price": None, "sale_price": None, "sale_at": None,
+                "sale_channel": "", "notes": "", "recorded_at": now,
+            }
+            if i < len(sales):
+                ratio, _ = sales[i]
+                rec["bought"] = True
+                rec["bought_price"] = rec["landed_at_hammer"]
+                rec["sale_price"] = round(mid * ratio, 2)
+                rec["sale_at"] = rec["closed_at"] + rng.uniform(3, 30) * 86400
+                rec["sale_channel"] = "eBay"
+            out.append(rec)
+    return out
+
+
 def load_demo(store, settings=None) -> int:
     lots, vals = make_demo()
     store.upsert_lots(lots)
     for v in vals:
         store.save_valuation(v["lot_id"], v)
+    for o in make_demo_outcomes():
+        store.save_outcome(o)
     return len(lots)
 
 

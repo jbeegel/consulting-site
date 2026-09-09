@@ -49,6 +49,14 @@ class Settings:
     min_spread: float = field(default_factory=lambda: _f("ARB_MIN_SPREAD", 10.0))  # below this the score is scaled down
     sweet_spot_max_landed: float = field(default_factory=lambda: _f("ARB_SWEET_MAX_LANDED", 6.0))
     sweet_spot_min_net: float = field(default_factory=lambda: _f("ARB_SWEET_MIN_NET", 15.0))
+    # calibration: the valuer grades its own past calls and adjusts
+    calibration: bool = field(default_factory=lambda: _b("ARB_CALIBRATION", True))
+    calibration_min_closed: int = field(default_factory=lambda: int(_f("ARB_CALIBRATION_MIN_CLOSED", 8)))
+    calibration_min_sales: int = field(default_factory=lambda: int(_f("ARB_CALIBRATION_MIN_SALES", 5)))
+    calibration_min_bias: float = field(default_factory=lambda: _f("ARB_CALIBRATION_MIN_BIAS", 0.5))
+    calibration_max_bias: float = field(default_factory=lambda: _f("ARB_CALIBRATION_MAX_BIAS", 1.5))
+    settle_per_run: int = field(default_factory=lambda: int(_f("ARB_SETTLE_PER_RUN", 40)))
+
     # grading economics (trading cards)
     grading: bool = field(default_factory=lambda: _b("ARB_GRADING", True))
     grading_fee: float = field(default_factory=lambda: _f("ARB_GRADING_FEE", 75.0))  # PSA regular-tier per card; economy/bulk is lower but slow

@@ -1,7 +1,7 @@
 // Persistence for Spread Hunter. Supabase when configured (durable across serverless instances);
 // an in-process Map store otherwise so local dev and keyless deployments still work.
 import { db } from "@/lib/db";
-import type { CategorySummary, Lot, ScanParams, ScanRecord, Valuation } from "./types";
+import type { CategorySummary, Lot, Outcome, ScanParams, ScanRecord, Valuation } from "./types";
 
 export interface LotQuery {
   includeClosed?: boolean;
@@ -28,6 +28,12 @@ export interface Store {
   valuationsSince(sinceSeconds: number): Promise<number>;
   markAlerted(ids: number[], at: number): Promise<void>;
   stats(): Promise<{ open_lots: number; valued_lots: number }>;
+  // --- calibration feedback loop
+  saveOutcome(o: Outcome): Promise<void>;
+  getOutcome(lotId: number): Promise<Outcome | null>;
+  outcomes(limit?: number): Promise<Outcome[]>;
+  /** Lots we valued whose auction has ended but whose result we have not recorded yet. */
+  awaitingSettlement(limit: number, now?: number): Promise<Lot[]>;
   readonly kind: "supabase" | "memory";
 }
 
@@ -37,6 +43,7 @@ class MemoryStore implements Store {
   private lotsMap = new Map<number, Lot>();
   private vals = new Map<number, Valuation>();
   private cache = new Map<string, Valuation>();
+  private outs = new Map<number, Outcome>();
   private scans: ScanRecord[] = [];
 
   async upsertLots(lots: Lot[]) {
@@ -93,6 +100,15 @@ class MemoryStore implements Store {
   async stats() {
     const open = [...this.lotsMap.values()].filter((l) => !l.is_closed);
     return { open_lots: open.length, valued_lots: open.filter((l) => this.vals.has(l.id)).length };
+  }
+  async saveOutcome(o: Outcome) { this.outs.set(o.lot_id, { ...this.outs.get(o.lot_id), ...o }); }
+  async getOutcome(lotId: number) { return this.outs.get(lotId) ?? null; }
+  async outcomes(limit = 5000) { return [...this.outs.values()].sort((a, b) => b.closed_at - a.closed_at).slice(0, limit); }
+  async awaitingSettlement(limit: number, now = Date.now() / 1000) {
+    return [...this.lotsMap.values()]
+      .filter((l) => l.ends_at !== null && l.ends_at < now && this.vals.has(l.id) && !this.outs.has(l.id))
+      .sort((a, b) => (b.ends_at ?? 0) - (a.ends_at ?? 0))
+      .slice(0, limit);
   }
 }
 
@@ -206,6 +222,36 @@ class SupabaseStore implements Store {
     const lots = await this.lots({ limit: 5000 });
     const vals = await this.valuationsFor(lots.map((l) => l.id));
     return { open_lots: open ?? 0, valued_lots: vals.size };
+  }
+  async saveOutcome(o: Outcome) {
+    const { error } = await this.sb.from("spread_outcomes").upsert({
+      lot_id: o.lot_id, title: o.title, category: o.category, closed_at: iso(o.closed_at),
+      predicted_mid: o.predicted_mid, predicted_net: o.predicted_net, confidence: o.confidence,
+      method: o.method, score: o.score, hammer: o.hammer, landed_at_hammer: o.landed_at_hammer,
+      sale_price: o.sale_price, sale_at: iso(o.sale_at), data: o,
+    }, { onConflict: "lot_id" });
+    if (error) throw new Error("spread_outcomes upsert: " + error.message);
+  }
+  async getOutcome(lotId: number) {
+    const { data } = await this.sb.from("spread_outcomes").select("data").eq("lot_id", lotId).maybeSingle();
+    return (data?.data as Outcome) ?? null;
+  }
+  async outcomes(limit = 5000) {
+    const { data, error } = await this.sb.from("spread_outcomes").select("data").order("closed_at", { ascending: false }).limit(limit);
+    if (error) throw new Error("spread_outcomes select: " + error.message);
+    return (data ?? []).map((r) => r.data as Outcome);
+  }
+  async awaitingSettlement(limit: number, now = Date.now() / 1000) {
+    const { data } = await this.sb.from("spread_lots").select("data, alerted_at")
+      .lt("ends_at", iso(now)!).order("ends_at", { ascending: false }).limit(Math.max(limit * 4, 200));
+    let lots = (data ?? []).map((r) => this.row2lot(r as { data: Lot; alerted_at: string | null }));
+    if (!lots.length) return [];
+    const valued = await this.valuationsFor(lots.map((l) => l.id));
+    lots = lots.filter((l) => valued.has(l.id));
+    if (!lots.length) return [];
+    const { data: done } = await this.sb.from("spread_outcomes").select("lot_id").in("lot_id", lots.map((l) => l.id));
+    const settled = new Set((done ?? []).map((r) => r.lot_id as number));
+    return lots.filter((l) => !settled.has(l.id)).slice(0, limit);
   }
 }
 

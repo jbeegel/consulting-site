@@ -192,6 +192,7 @@ export interface Valuation {
   standout_item?: string;
   grading?: GradingAnalysis | null;
   images_used?: number;
+  calibration?: { bias: number; confidence_factor: number; basis: string; n: number } | null;
   model_used: string;
   created_at: number;
   error: string;
@@ -259,4 +260,59 @@ export interface CategorySummary {
   valued: number;
   best_score: number;
   hot: number;
+}
+
+// ----------------------------------------------------------------------------- calibration
+/** One closed lot, recorded after the fact: what we predicted vs. what actually happened. */
+export interface Outcome {
+  lot_id: number;
+  title: string;
+  category: string;
+  closed_at: number;
+  // what we said before it closed
+  predicted_low: number | null;
+  predicted_mid: number | null;
+  predicted_high: number | null;
+  predicted_net: number | null; // mid less selling fees
+  confidence: number;
+  method: string;
+  score: number;
+  // what the auction did (free, from HiBid's priceRealized on every closed lot)
+  hammer: number | null;
+  landed_at_hammer: number | null; // hammer + buyer's premium + tax + pickup
+  // ground truth, filled in when you actually sell it
+  bought: boolean | null;
+  bought_price: number | null;
+  sale_price: number | null;
+  sale_at: number | null;
+  sale_channel: string;
+  notes: string;
+  recorded_at: number;
+}
+
+export interface CategoryCalibration {
+  category: string;
+  n_closed: number;
+  n_sold: number;
+  /** median (landed cost at hammer) / (predicted net). >= 1 means the deal was never there. */
+  median_hammer_ratio: number | null;
+  /** share of closed lots where the hammer alone met or beat our predicted net: provably too optimistic. */
+  overshoot_rate: number | null;
+  /** median (actual sale price) / (predicted mid). 1.0 is perfect. Ground truth. */
+  median_sale_ratio: number | null;
+  /** median absolute percentage error against real sales. */
+  sale_mape: number | null;
+  /** multiplier applied to future mid estimates in this category. */
+  bias: number;
+  /** multiplier applied to future confidence in this category. */
+  confidence_factor: number;
+  basis: "sales" | "hammer" | "none";
+  updated_at: number;
+}
+
+export interface CalibrationReport {
+  generated_at: number;
+  global: CategoryCalibration;
+  categories: CategoryCalibration[];
+  totals: { closed: number; sold: number; realized_profit: number | null };
 }

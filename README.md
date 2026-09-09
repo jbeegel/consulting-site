@@ -41,6 +41,7 @@ Keyless deployments degrade gracefully to deterministic demo mode.
 | `SPREAD_SPREAD_FULL` / `SPREAD_MIN_SPREAD` | Net spread that earns full marks (default $150) and the floor below which scores are scaled down ($10) |
 | `SPREAD_SWEET_MAX_LANDED` / `SPREAD_SWEET_MIN_NET` | Sweet-spot definition: landed ≤ $6 and net ≥ $15 flags the $1–$3 buys that resell for $20–$50 |
 | `SPREAD_VISION` / `SPREAD_MAX_IMAGES` | Send lot photos to the model (default on, 4 photos) so it reads marks and splits multi-item lots |
+| `SPREAD_CALIBRATION` / `SPREAD_CALIBRATION_MIN_CLOSED` / `SPREAD_CALIBRATION_MIN_SALES` / `SPREAD_CALIBRATION_MIN_BIAS` / `SPREAD_CALIBRATION_MAX_BIAS` / `SPREAD_SETTLE_PER_RUN` | The feedback loop (default on): sample floors before an adjustment applies (8 closed lots, 5 sales), the clamp on it (0.5 to 1.5), and how many closed lots each run settles (40) |
 | `SPREAD_GRADING` / `SPREAD_GRADING_FEE` / `SPREAD_GRADING_SHIP` / `SPREAD_GRADING_DAYS` | Trading-card grading analysis (default on), $75 per-card fee + $15 shipping (about $90 all-in), 60-day turnaround |
 | `SPREAD_EBAY_FVF` / `SPREAD_EBAY_FVF_MEDIA` / `SPREAD_EBAY_PER_ORDER` / `SPREAD_EBAY_PER_ORDER_SMALL` / `SPREAD_EBAY_PROMOTED` / `SPREAD_PACKAGING` | eBay fee model for the listing net-out: 13.6% (15.3% books/music/movies), $0.30 per order ($0.40 under $10), optional promoted rate, $1 packaging |
 | `SPREAD_RUN_BUDGET_MS` | Time box per scan run (default 240000). Set 50000 if Fluid Compute is unavailable and functions cap at 60s |
@@ -53,7 +54,7 @@ Note: HiBid sits behind Cloudflare and eBay blocks many datacenter IPs. If scans
 ### Go-live checklist
 
 1. Merge to `main` (scheduled GitHub Actions workflows only run from the default branch).
-2. Supabase → SQL editor → run `supabase/spread.sql`.
+2. Supabase → SQL editor → run `supabase/spread.sql` (re-run it after pulling: it adds `spread_outcomes` for the feedback loop, and every statement is `if not exists`).
 3. Vercel → Environment Variables: `SPREAD_PASSWORD`, `CRON_SECRET`, `SPREAD_ZIP`, `SPREAD_MILES`,
    `SPREAD_ALERT_WEBHOOK`, and optionally `SPREAD_MODEL=claude-sonnet-5` with `SPREAD_DAILY_VALUATION_CAP=60`
    to keep spend around $2–3/day. Redeploy.
@@ -92,6 +93,33 @@ about $90 all-in to grade) against selling raw. Tens are rare, so the model uses
 for a 10; a "grade" call must clear a hurdle (the larger of $25, 30% of the grading cost, 25% of the raw net) and
 still beat raw with the 10 removed. Otherwise: "speculative: pays only if it gems", "grade if it looks 9+ in
 hand", "sell raw", or "inspect in hand".
+
+### The feedback loop (calibration)
+
+The valuer grades its own past calls and bends future ones toward reality. Two tiers of evidence:
+
+**Auction results, free and automatic.** HiBid publishes the realized price on every closed lot, including
+ones you never bid on. After each scan the scanner settles lots whose auctions have ended and records what
+it predicted against what the lot actually hammered for. A hammer price is not a resale value, so it can
+never prove an estimate was too low, but it can prove one was too high: if the landed cost at the hammer
+meets or beats the net resale we predicted, either the winner overpaid or, far more often across many lots,
+our number was inflated. That share is the **overshoot rate**, and on this basis the system only ever cuts
+an estimate, never raises one.
+
+**Your recorded sales, ground truth.** In any lot's dossier, enter what you paid and what it sold for. Once
+a category has `SPREAD_CALIBRATION_MIN_SALES` of them, the median of actual over predicted replaces the
+hammer signal entirely and can raise estimates as well as cut them. Wide dispersion against real sales also
+discounts confidence, since a number that is a coin flip should not be scored like a firm one.
+
+Adjustments apply per category, fall back to a global figure, need a minimum sample
+(`SPREAD_CALIBRATION_MIN_CLOSED`), and are clamped to `SPREAD_CALIBRATION_MIN_BIAS` and
+`SPREAD_CALIBRATION_MAX_BIAS` so one thin or unlucky week cannot swing the model. Every adjusted valuation
+is stamped in the dossier with the factor, the sample size, and which basis it came from. The **Valuer report
+card** panel on the dashboard shows the whole thing per category: lots closed, how often you would have been
+outbid at your own number, sales recorded, actual over predicted, and the adjustment in force.
+
+This is also the prerequisite for any autonomy. Do not let software spend money on a valuer whose accuracy
+you have never measured; a few weeks of the report card tells you which categories are trustworthy.
 
 ### Listing plan and net-out
 

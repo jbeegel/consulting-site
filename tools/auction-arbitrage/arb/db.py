@@ -23,6 +23,14 @@ CREATE TABLE IF NOT EXISTS valuations (
 CREATE TABLE IF NOT EXISTS valuation_cache (
   title_key TEXT PRIMARY KEY, created_at REAL, data TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS outcomes (
+  lot_id INTEGER PRIMARY KEY, title TEXT, category TEXT, closed_at REAL,
+  predicted_mid REAL, predicted_net REAL, confidence REAL, method TEXT, score REAL,
+  hammer REAL, landed_at_hammer REAL, sale_price REAL, sale_at REAL,
+  recorded_at REAL, data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS outcomes_closed ON outcomes(closed_at);
+CREATE INDEX IF NOT EXISTS outcomes_cat ON outcomes(category);
 CREATE TABLE IF NOT EXISTS scans (
   id INTEGER PRIMARY KEY AUTOINCREMENT, started_at REAL, finished_at REAL, status TEXT,
   params TEXT, lots_seen INTEGER DEFAULT 0, lots_valued INTEGER DEFAULT 0, message TEXT
@@ -177,6 +185,46 @@ class Store:
             valued = self._conn.execute(
                 "SELECT COUNT(*) c FROM valuations v JOIN lots l ON l.id=v.lot_id WHERE l.is_closed=0").fetchone()["c"]
         return {"open_lots": lots, "valued_lots": valued}
+
+    # ------------------------------------------------------------- outcomes
+    def save_outcome(self, o: dict[str, Any]) -> None:
+        with self._lock:
+            self._conn.execute(
+                """INSERT INTO outcomes (lot_id,title,category,closed_at,predicted_mid,predicted_net,confidence,
+                   method,score,hammer,landed_at_hammer,sale_price,sale_at,recorded_at,data)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                   ON CONFLICT(lot_id) DO UPDATE SET title=excluded.title, category=excluded.category,
+                     closed_at=excluded.closed_at, predicted_mid=excluded.predicted_mid,
+                     predicted_net=excluded.predicted_net, confidence=excluded.confidence, method=excluded.method,
+                     score=excluded.score, hammer=excluded.hammer, landed_at_hammer=excluded.landed_at_hammer,
+                     sale_price=excluded.sale_price, sale_at=excluded.sale_at, recorded_at=excluded.recorded_at,
+                     data=excluded.data""",
+                (o["lot_id"], o.get("title"), o.get("category"), o.get("closed_at"), o.get("predicted_mid"),
+                 o.get("predicted_net"), o.get("confidence"), o.get("method"), o.get("score"), o.get("hammer"),
+                 o.get("landed_at_hammer"), o.get("sale_price"), o.get("sale_at"), o.get("recorded_at", time.time()),
+                 json.dumps(o)),
+            )
+
+    def get_outcome(self, lot_id: int) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._conn.execute("SELECT data FROM outcomes WHERE lot_id=?", (lot_id,)).fetchone()
+        return json.loads(row["data"]) if row else None
+
+    def outcomes(self, limit: int = 5000) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute("SELECT data FROM outcomes ORDER BY closed_at DESC LIMIT ?", (limit,)).fetchall()
+        return [json.loads(r["data"]) for r in rows]
+
+    def awaiting_settlement(self, limit: int, now: float | None = None) -> list[dict[str, Any]]:
+        """Lots we valued whose auction has ended but whose result we have not recorded yet."""
+        now = now or time.time()
+        with self._lock:
+            rows = self._conn.execute(
+                """SELECT l.data FROM lots l JOIN valuations v ON v.lot_id=l.id
+                   LEFT JOIN outcomes o ON o.lot_id=l.id
+                   WHERE o.lot_id IS NULL AND l.ends_at IS NOT NULL AND l.ends_at < ?
+                   ORDER BY l.ends_at DESC LIMIT ?""", (now, limit)).fetchall()
+        return [json.loads(r["data"]) for r in rows]
 
     def close(self) -> None:
         with self._lock:

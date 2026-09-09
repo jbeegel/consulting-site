@@ -7,6 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Iterable
 
+from ..calibration import adjustment_for
 from ..config import Settings
 from ..db import Store
 from .base import Comp, Valuation, title_key
@@ -87,12 +88,14 @@ def triage_score(lot: dict[str, Any]) -> float:
 
 class ValuationPipeline:
     def __init__(self, settings: Settings, store: Store, *, claude_valuer: Any | None = None,
-                 picture_fetcher: Callable[[dict[str, Any]], list[str]] | None = None):
+                 picture_fetcher: Callable[[dict[str, Any]], list[str]] | None = None,
+                 calibration_fetcher: Callable[[], dict[str, Any] | None] | None = None):
         global _VISION
         _VISION = settings.vision
         self.settings = settings
         self.store = store
         self.picture_fetcher = picture_fetcher  # e.g. Scanner.pictures_for: pulls full-size photos from HiBid
+        self.calibration_fetcher = calibration_fetcher  # e.g. Scanner.calibration: the valuer's report card
         self._claude = claude_valuer
         self._claude_tried = claude_valuer is not None
 
@@ -153,8 +156,32 @@ class ValuationPipeline:
                 val.comps = [c.__dict__ for c in comps[:10]]
 
         val.created_at = time.time()
-        d = val.to_dict()
-        self.store.save_valuation(lot["id"], d)
+        val = self._apply_calibration(lot, val)
+        self.store.save_valuation(lot["id"], val.to_dict())
+        return val
+
+    def _apply_calibration(self, lot: dict[str, Any], val: Valuation) -> Valuation:
+        """Bend a fresh valuation toward what this category has actually done."""
+        if not self.settings.calibration or not self.calibration_fetcher or not val.mid:
+            return val
+        try:
+            report = self.calibration_fetcher()
+        except Exception as e:
+            log.info("calibration unavailable: %s", e)
+            return val
+        adj = adjustment_for(report, lot.get("category", ""), self.settings)
+        if adj["basis"] == "none" or (adj["bias"] == 1 and adj["confidence_factor"] == 1):
+            return val
+        b = adj["bias"]
+        for f in ("low", "mid", "high"):
+            v = getattr(val, f)
+            if v is not None:
+                setattr(val, f, round(v * b, 2))
+        val.confidence = round(val.confidence * adj["confidence_factor"], 3)
+        src = "your recorded sales" if adj["basis"] == "sales" else "auction results"
+        note = f"Calibrated: {lot.get('category') or 'this category'} valuations adjusted x{b:.2f} from {adj['n']} closed lots ({src})."
+        val.confidence_reason = (val.confidence_reason + " " if val.confidence_reason else "") + note
+        val.calibration = {"bias": b, "confidence_factor": adj["confidence_factor"], "basis": adj["basis"], "n": adj["n"]}
         return val
 
     @staticmethod

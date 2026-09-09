@@ -41,6 +41,14 @@ export const config = {
   minSpread: num("SPREAD_MIN_SPREAD", 10),
   sweetMaxLanded: num("SPREAD_SWEET_MAX_LANDED", 6),
   sweetMinNet: num("SPREAD_SWEET_MIN_NET", 15),
+  // calibration: the valuer grades its own past calls and adjusts
+  calibration: bool("SPREAD_CALIBRATION", true),
+  calibrationMinClosed: Math.floor(num("SPREAD_CALIBRATION_MIN_CLOSED", 8)),
+  calibrationMinSales: Math.floor(num("SPREAD_CALIBRATION_MIN_SALES", 5)),
+  calibrationMinBias: num("SPREAD_CALIBRATION_MIN_BIAS", 0.5),
+  calibrationMaxBias: num("SPREAD_CALIBRATION_MAX_BIAS", 1.5),
+  settlePerRun: Math.floor(num("SPREAD_SETTLE_PER_RUN", 40)),
+
   grading: bool("SPREAD_GRADING", true),
   gradingFee: num("SPREAD_GRADING_FEE", 75), // PSA regular tier; all-in with shipping ~ $90
   gradingShip: num("SPREAD_GRADING_SHIP", 15),

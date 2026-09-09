@@ -194,6 +194,26 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
 .specs span{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:1px 8px;background:var(--bg-2)}
 .fees{font-size:11px;color:var(--ink-3);margin-top:6px;line-height:1.5}
 .empty{padding:40px;text-align:center;color:var(--ink-3)}
+.card{background:var(--bg-2);border:1px solid var(--line);border-radius:8px;margin-bottom:16px;overflow:hidden}
+.card .head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer;gap:12px}
+.card .head h2{margin:0;font-size:13px;font-weight:600}
+.card .head .sum{font-size:12px;color:var(--ink-3);font-family:var(--mono);margin-left:auto}
+.card .body{padding:10px 14px 14px}
+.card.collapsed .body{display:none}
+table.cal{width:100%;border-collapse:collapse;font-size:12px}
+table.cal th{text-align:left;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:4px 8px;white-space:nowrap}
+table.cal th.r,table.cal td.r{text-align:right}
+table.cal td{padding:5px 8px;border-top:1px solid var(--line);font-family:var(--mono);white-space:nowrap}
+table.cal td.name{font-family:var(--sans);white-space:normal}
+table.cal tr.total td{border-top:2px solid var(--line-2);font-weight:600}
+.bias{display:inline-block;padding:1px 6px;border-radius:3px;font-weight:600}
+.bias.down{background:var(--bad);color:#fff}
+.bias.up{background:var(--good);color:#fff}
+.bias.flat{background:var(--bg-3);color:var(--ink-2)}
+.basis{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3)}
+.saleform{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12px}
+.saleform input{width:90px;background:var(--bg);border:1px solid var(--line-2);border-radius:4px;padding:4px 6px}
+.calstamp{font-size:11px;color:var(--ink-3);margin-top:4px}
 
 /* ---------- drawer */
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:40;display:none}
@@ -281,6 +301,11 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
       </div>
     </div>
 
+    <div class="card collapsed" id="calCard" hidden>
+      <div class="head" id="calHead"><h2>Valuer report card</h2><span class="sum" id="calSum"></span><span class="muted" style="font-size:11px" id="calToggle">show</span></div>
+      <div class="body" id="calBody"></div>
+    </div>
+
     <div class="tbl">
       <div class="head"><h2>Opportunities <span class="muted num" id="count"></span></h2><span class="muted" style="font-size:12px">click a row for the dossier</span></div>
       <div class="tscroll"><table class="opps"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
@@ -296,7 +321,7 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
 (function(){
 const $=s=>document.querySelector(s);
 const API=window.__ARB_API__||'/api';
-const state={opps:[],cats:[],config:{},status:{},filters:{cats:new Set(),buckets:new Set(),radar:new Set(),minScore:0,q:'',noBids:false,sweetOnly:false,hideUnvalued:true},sort:{key:'score',dir:-1},embedded:false,pollTimer:null};
+const state={opps:[],cats:[],config:{},status:{},cal:null,filters:{cats:new Set(),buckets:new Set(),radar:new Set(),minScore:0,q:'',noBids:false,sweetOnly:false,hideUnvalued:true},sort:{key:'score',dir:-1},embedded:false,pollTimer:null};
 const BUCKETS=['<1h','1-3h','3-6h','6-12h','12-24h','1-3d','3d+'];
 const RADAR=[['strike','Strike','< 2h, act now'],['watch','Watch','2–12h, refresh often'],['track','Track','12–48h'],['scan','Scan','far out: valued, waiting on the clock']];
 function radarOf(o){const s=secsLeft(o);const v=o.score.value_score||0;if(s==null||v<20)return 'scan';const h=s/3600;return h<2?'strike':h<12?'watch':h<48?'track':'scan'}
@@ -321,8 +346,9 @@ async function load(){
   try{
     const [cfg,opps,cats,st]=await Promise.all([api('/config'),api('/opportunities'),api('/categories'),api('/scan/status')]);
     state.config=cfg;state.opps=opps.opportunities;state.cats=cats;state.status=st;state.embedded=false;
+    try{state.cal=await api('/calibration')}catch(e){state.cal=null}
   }catch(e){
-    if(window.__ARB_DATA__){const d=window.__ARB_DATA__;state.config=d.config;state.opps=d.opportunities;state.cats=d.categories;state.status=d.status||{};state.embedded=true;
+    if(window.__ARB_DATA__){const d=window.__ARB_DATA__;state.config=d.config;state.opps=d.opportunities;state.cats=d.categories;state.status=d.status||{};state.cal=d.calibration||null;state.embedded=true;
       $('#banner').hidden=false;$('#banner').innerHTML='<b>Demo snapshot.</b> This page is a static export with example lots (synthetic data). Run <code>python -m arb serve</code> locally to scan hibid.com live, refresh bids, and re-value lots.';
       ['#btnScan','#btnRefresh'].forEach(s=>$(s).disabled=true);
     }else{$('#banner').hidden=false;$('#banner').textContent='Could not reach the API: '+e.message;}
@@ -336,7 +362,7 @@ async function health(){
     el.hidden=false;el.innerHTML=`<b>Setup</b> `+h.checks.map(c=>`<span class="chk ${c.ok?'':c.level==='required'?'bad':'warn'}" title="${esc(c.detail)}"><i></i>${esc(c.name)}${c.ok?'':c.fix?` <span class="fix">→ ${esc(c.fix)}</span>`:''}</span>`).join('')+`<button class="close" title="hide" onclick="this.parentNode.hidden=true">×</button>`;
   }catch(e){}
 }
-function renderAll(){renderStatus();renderKpis();renderChips();renderHeatmap();renderScatter();renderTable()}
+function renderAll(){renderStatus();renderKpis();renderChips();renderHeatmap();renderScatter();renderTable();renderCalibration()}
 
 // ---------------------------------------------------------------- filters
 function visible(){
@@ -494,6 +520,7 @@ function renderDossier(o,loading){
       h+=`<h3>What's in the lot <span class="method">· ${v.items.length} item${v.items.length>1?'s':''} identified${v.images_used?' from '+v.images_used+' photo'+(v.images_used>1?'s':''):''}</span></h3><table class="items">${v.items.map(it=>{const star=so&&it.name.toLowerCase().slice(0,30)===so||(v.standout_item&&v.standout_item.toLowerCase().includes(it.name.toLowerCase().slice(0,24)));return `<tr class="${star?'star':''}"><td>${star?'★ ':''}${esc(it.name)}<span class="mk">${esc(it.maker_or_mark||'')}${it.era?' · '+esc(it.era):''}${it.note?' · '+esc(it.note):''}</span></td><td class="r">${fmt(it.est_low)}–${fmt(it.est_high)}</td><td class="r muted">${Math.round((it.confidence||0)*100)}%</td></tr>`}).join('')}</table>`;
       if(v.standout_item)h+=`<p class="muted" style="font-size:12px;margin:6px 0 0">Standout: ${esc(v.standout_item)}</p>`;}
     if(v.confidence_reason)h+=`<p class="muted" style="margin:6px 0 0;font-size:12px">${esc(v.confidence_reason)}</p>`;
+    if(v.calibration)h+=`<div class="calstamp">Adjusted <b>x${v.calibration.bias.toFixed(2)}</b> by the report card, from ${v.calibration.n} closed lots (${esc(v.calibration.basis==='sales'?'your recorded sales':'auction results')}).</div>`;
     if(v.value_drivers?.length)h+=`<h3>Value drivers</h3><ul>${v.value_drivers.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
     if(v.risks?.length||v.authenticity_risk)h+=`<h3>Risks</h3><ul>${v.authenticity_risk?'<li><b>Authenticity risk</b>: get it authenticated before relying on this value.</li>':''}${(v.risks||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
     if(v.comps?.length)h+=`<h3>Comparable sales (${v.comps.length})</h3><table class="comps">${v.comps.slice(0,12).map(cp=>`<tr><td>${cp.url?`<a href="${esc(cp.url)}" target="_blank" rel="noopener">${esc(cp.title)}</a>`:esc(cp.title)}${cp.note?`<div class="muted" style="font-size:11px">${esc(cp.note)}</div>`:''}</td><td class="muted" style="white-space:nowrap;font-size:11px">${esc(cp.source||'')}${cp.date?'<br>'+esc(cp.date):''}</td><td class="r">${fmt2(cp.price)}</td></tr>`).join('')}</table>`;
@@ -528,14 +555,43 @@ function renderDossier(o,loading){
         <div class="actions" style="margin-top:10px"><a class="btn primary" href="https://www.ebay.com/sl/sell" target="_blank" rel="noopener">Open eBay sell form ↗</a><button class="copy" style="padding:6px 12px" data-copy="${esc(`${lp.title}\n\n${lp.description}\n\nCategory: ${lp.category}\nCondition: ${lp.condition}\nPrice: $${Math.round(m.price)} (offers to $${Math.round(le.best_offer_floor||m.price*0.85)})\n${(lp.item_specifics||[]).map(x=>x.name+': '+x.value).join('\n')}`)}">Copy whole listing</button></div></div>`;
     }
   }
+  if(!state.embedded)h+=`<h3>Record what happened</h3><p class="muted" style="font-size:12px;margin:0">Feeding real numbers back is what makes the valuations get better. Leave a box blank to skip it.</p>
+    <div class="saleform"><label>Paid <input id="sPaid" type="number" step="0.01" placeholder="${Math.round(s.landed_cost)}"></label><label>Sold for <input id="sSold" type="number" step="0.01"></label><input id="sNote" placeholder="note (optional)" style="width:150px"><button class="btn" id="sSave">Save</button><span class="muted" id="sMsg"></span></div>`;
   h+=`<h3>HiBid listing</h3>${pics.length?`<div class="pics">${pics.map(p=>`<img src="${esc(p)}" alt="">`).join('')}</div>`:''}<div class="desc" style="margin-top:8px">${esc(l.description||'(no description cached)')}</div>`;
   if(l.estimate)h+=`<p class="muted" style="font-size:12px">Auctioneer estimate: ${esc(l.estimate)}${l.buyer_premium_text?' · Buyer\'s premium: '+esc(l.buyer_premium_text):''}</p>`;
   if(loading&&!state.embedded)h+='<p class="muted" style="font-size:12px">fetching full listing…</p>';
   $('#drawerInner').innerHTML=h;
   $('#drawerInner').querySelectorAll('.copy').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText(b.dataset.copy);const t=b.textContent;b.textContent='Copied';setTimeout(()=>b.textContent=t,1200)}catch(e){prompt('Copy:',b.dataset.copy)}});
   const r=$('#dRefresh');if(r)r.onclick=async()=>{r.disabled=true;r.textContent='refreshing…';try{const n=await api(`/lot/${l.id}/refresh`,{method:'POST'});Object.assign(state.opps.find(z=>z.lot.id===l.id)||{},n);renderDossier(n,false);renderTable();renderScatter()}catch(e){r.textContent='failed: '+e.message}};
+  const sv=$('#sSave');if(sv)sv.onclick=async()=>{
+    const paid=parseFloat($('#sPaid').value),sold=parseFloat($('#sSold').value);
+    if(!isFinite(paid)&&!isFinite(sold)){$('#sMsg').textContent='enter a number first';return}
+    sv.disabled=true;$('#sMsg').textContent='saving…';
+    try{await api(`/lot/${l.id}/sale`,{method:'POST',body:JSON.stringify({bought_price:isFinite(paid)?paid:undefined,sale_price:isFinite(sold)?sold:undefined,notes:$('#sNote').value||undefined})});
+      $('#sMsg').textContent='saved — it will show up in the report card';state.cal=await api('/calibration').catch(()=>state.cal);renderCalibration()}
+    catch(e){$('#sMsg').textContent='failed: '+e.message}
+    sv.disabled=false};
   const rv=$('#dRevalue');if(rv)rv.onclick=async()=>{rv.disabled=true;rv.textContent='valuing… (10–60s)';try{const n=await api(`/lot/${l.id}/revalue`,{method:'POST'});Object.assign(state.opps.find(z=>z.lot.id===l.id)||{},n);renderDossier(n,false);renderAll()}catch(e){rv.textContent='failed: '+e.message}};
 }
+
+// ---------------------------------------------------------------- report card
+function biasClass(b){return b<0.97?'down':b>1.03?'up':'flat'}
+function renderCalibration(){
+  const c=state.cal,el=$('#calCard');
+  if(!c||!c.totals||!c.totals.closed){el.hidden=true;return}
+  el.hidden=false;
+  const g=c.global,rows=(c.categories||[]).filter(x=>x.n_closed>=2);
+  $('#calSum').textContent=`${c.totals.closed} closed lots graded · ${c.totals.sold} sales recorded${g.basis!=='none'?` · overall x${g.bias.toFixed(2)}`:' · learning'}`;
+  const pct=v=>v==null?'—':Math.round(v*100)+'%';
+  const rat=v=>v==null?'—':v.toFixed(2);
+  let h=`<p class="muted" style="font-size:12px;margin:0 0 8px;line-height:1.5">Every lot the scanner valued gets checked after it closes against the price it actually realized, whether or not you bid. Auction results can only prove a number was too <b>high</b>, so they only ever cut an estimate. Sales you record are ground truth and override them once there are ${c.min_sales||5} in a category.</p>`;
+  h+=`<div style="overflow-x:auto"><table class="cal"><thead><tr><th>Category</th><th class="r">Closed</th><th class="r">Outbid at our own number</th><th class="r">Sales</th><th class="r">Actual ÷ predicted</th><th class="r">Adjustment</th><th>Basis</th></tr></thead><tbody>`;
+  const row=(x,cls)=>`<tr class="${cls||''}"><td class="name">${esc(x.category==='__all__'?'All categories':x.category)}</td><td class="r">${x.n_closed}</td><td class="r">${pct(x.overshoot_rate)}</td><td class="r">${x.n_sold||'—'}</td><td class="r">${rat(x.median_sale_ratio)}</td><td class="r"><span class="bias ${biasClass(x.bias)}">x${x.bias.toFixed(2)}</span></td><td class="basis">${x.basis==='none'?'learning':esc(x.basis)}</td></tr>`;
+  h+=rows.map(x=>row(x)).join('')+row(g,'total')+`</tbody></table></div>`;
+  if(c.totals.realized_profit!=null)h+=`<p class="muted" style="font-size:12px;margin:8px 0 0">Realized profit on recorded sales: <b>${fmt(c.totals.realized_profit)}</b>.</p>`;
+  $('#calBody').innerHTML=h;
+}
+$('#calHead').onclick=()=>{const el=$('#calCard');el.classList.toggle('collapsed');$('#calToggle').textContent=el.classList.contains('collapsed')?'show':'hide'};
 
 // ---------------------------------------------------------------- scan controls
 $('#btnScan').onclick=async()=>{

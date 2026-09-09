@@ -244,3 +244,100 @@ def test_card_detection_and_grading_economics(settings):
                                  {"grader": "PSA", "grade": "8", "price": 50, "source": "", "url": "", "date": ""}], raw_value=40)
     assert grading_economics({"mid": 40.0, "grading": lottery}, sc, settings)["recommendation"].startswith("speculative")
     assert grading_economics({"mid": 10.0, "grading": None}, sc, settings) is None
+
+
+def test_calibration_math(settings):
+    from arb.calibration import build_report, adjustment_for, hammer_ratio, sale_ratio
+
+    def closed(cat, n, ratio, sales=()):
+        """n closed lots in `cat` whose landed-at-hammer is `ratio` x our predicted net."""
+        rows = []
+        for i in range(n):
+            rec = {"lot_id": 1000 + len(rows) + hash(cat) % 500, "title": f"{cat} {i}", "category": cat,
+                   "closed_at": 0, "predicted_low": 80, "predicted_mid": 100, "predicted_high": 120,
+                   "predicted_net": 85, "confidence": 0.7, "method": "claude+web", "score": 50,
+                   "hammer": 85 * ratio / 1.15, "landed_at_hammer": 85 * ratio,
+                   "bought": None, "bought_price": None, "sale_price": None, "sale_at": None,
+                   "sale_channel": "", "notes": "", "recorded_at": 0}
+            if i < len(sales):
+                rec["sale_price"] = 100 * sales[i]
+                rec["bought_price"] = 20
+            rec["lot_id"] = len(rows) * 7 + abs(hash(cat)) % 1000
+            rows.append(rec)
+        return rows
+
+    # A category we are consistently outbid on at our own number is inflated -> haircut, never inflate.
+    bad = build_report(closed("Furniture", 12, 1.3), settings)
+    fur = next(c for c in bad["categories"] if c["category"] == "Furniture")
+    assert fur["overshoot_rate"] == 1.0 and fur["basis"] == "hammer"
+    assert fur["bias"] < 1 and fur["confidence_factor"] < 1
+
+    # A healthy category (hammer well under our net) is left alone.
+    good = build_report(closed("Tools", 12, 0.3), settings)
+    tools = next(c for c in good["categories"] if c["category"] == "Tools")
+    assert tools["overshoot_rate"] == 0.0 and tools["bias"] == 1.0
+
+    # Real sales are ground truth and override the hammer signal, and may raise as well as cut.
+    rows = closed("Coins", 12, 1.3, sales=[1.2, 1.25, 1.15, 1.2, 1.3, 1.2])
+    rep = build_report(rows, settings)
+    coins = next(c for c in rep["categories"] if c["category"] == "Coins")
+    assert coins["basis"] == "sales" and coins["n_sold"] == 6 and coins["bias"] > 1
+
+    # Below the sample floor nothing is applied.
+    thin = build_report(closed("Art", 3, 1.5), settings)
+    assert next(c for c in thin["categories"] if c["category"] == "Art")["basis"] == "none"
+    assert adjustment_for(thin, "Art", settings)["bias"] == 1.0
+
+    # Bias is clamped even on wild data.
+    wild = build_report(closed("Toys", 12, 1.0, sales=[9, 9, 9, 9, 9, 9]), settings)
+    assert next(c for c in wild["categories"] if c["category"] == "Toys")["bias"] == settings.calibration_max_bias
+
+    # Falls back to the global row when the category itself has no basis.
+    assert adjustment_for(bad, "Never Seen", settings)["bias"] < 1
+    assert hammer_ratio({"landed_at_hammer": 50, "predicted_net": 100}) == 0.5
+    assert sale_ratio({"sale_price": 90, "predicted_mid": 100}) == 0.9
+    assert sale_ratio({"sale_price": None, "predicted_mid": 100}) is None
+
+
+def test_settlement_and_feedback(settings, monkeypatch):
+    """A closed lot's realized price is captured, and it bends the next valuation in that category."""
+    from arb.demo import make_demo_outcomes
+    store = Store(settings.db_path)
+    sc = Scanner(settings, store)
+    st = sc.scan(status="OPEN", hours=24, max_pages=3, value=True, max_value=6)
+    assert not st["error"]
+    lots = store.lots()
+    assert lots
+
+    # Pretend those auctions ended with a hammer price well above what we predicted.
+    now = time.time()
+    for lot in lots[:6]:
+        store.upsert_lots([dict(lot, ends_at=now - 60)])
+    monkeypatch.setattr(sc.client, "lot_state",
+                        lambda lot_id: {"isClosed": True, "status": "CLOSED", "priceRealized": 500.0,
+                                        "highBid": 500.0, "minBid": 505.0, "bidCount": 9, "timeLeftSeconds": 0})
+    settled = sc.settle_closed_lots(limit=6)
+    assert settled > 0
+    rec = store.outcomes()[0]
+    assert rec["hammer"] == 500.0 and rec["landed_at_hammer"] > 500.0
+    assert store.get_outcome(rec["lot_id"])["lot_id"] == rec["lot_id"]
+    # Already-settled lots are not re-queued.
+    assert all(o["lot_id"] != rec["lot_id"] for o in store.awaiting_settlement(50))
+
+    # With enough history the pipeline scales a fresh valuation and stamps it.
+    for o in make_demo_outcomes():
+        store.save_outcome(o)
+    report = sc.calibration(force=True)
+    assert report["totals"]["closed"] > 20
+    fur = next(c for c in report["categories"] if c["category"] == "Furniture")
+    assert fur["basis"] == "hammer" and fur["bias"] < 1
+
+    from arb.valuation import ValuationPipeline
+    pipe = ValuationPipeline(settings, store, calibration_fetcher=lambda: report)
+    lot = {"id": 999001, "title": "Herman Miller Aeron chair", "description": "", "quantity": 1,
+           "category": "Furniture", "estimate": "$300 - $400", "is_closed": False}
+    v = pipe.value_lot(lot, force=True)
+    assert v.calibration and v.calibration["bias"] == fur["bias"]
+    assert v.mid == round(350 * fur["bias"], 2)
+    assert "Calibrated" in v.confidence_reason
+    store.close()

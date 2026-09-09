@@ -3,9 +3,10 @@
 import { sendAlerts } from "./alerts";
 import { config, type Config } from "./config";
 import { applyState, HiBidClient, normalizeLot } from "./hibid";
-import { gradingEconomics, listingEconomics, scoreLot, whyUpside } from "./scoring";
+import { buildReport } from "./calibration";
+import { gradingEconomics, landedCost, listingEconomics, scoreLot, whyUpside } from "./scoring";
 import { getStore, type Store } from "./store";
-import type { Lot, Opportunity, ScanParams, Valuation } from "./types";
+import type { CalibrationReport, Lot, Opportunity, Outcome, ScanParams, Valuation } from "./types";
 import { ValuationPipeline } from "./valuation";
 
 export function buildOpportunity(lot: Lot, val: Valuation | null, c: Config = config, now = Date.now() / 1000): Opportunity {
@@ -18,7 +19,69 @@ export class Scanner {
   readonly pipeline: ValuationPipeline;
   constructor(readonly c: Config = config, readonly store: Store = getStore(), client?: HiBidClient) {
     this.client = client ?? new HiBidClient(c.hibidGraphql, c.hibidSite, c.requestDelayMs);
-    this.pipeline = new ValuationPipeline(c, store, undefined, (lot) => this.picturesFor(lot));
+    this.pipeline = new ValuationPipeline(c, store, undefined, (lot) => this.picturesFor(lot), () => this.calibration());
+  }
+
+  private _calibration: { at: number; report: CalibrationReport } | null = null;
+
+  /** The valuer's own report card, rebuilt at most once a minute per instance. */
+  async calibration(force = false): Promise<CalibrationReport | null> {
+    if (!this.c.calibration) return null;
+    const now = Date.now();
+    if (!force && this._calibration && now - this._calibration.at < 60_000) return this._calibration.report;
+    try {
+      const report = buildReport(await this.store.outcomes(), this.c);
+      this._calibration = { at: now, report };
+      return report;
+    } catch (e) {
+      console.warn("calibration report failed", e);
+      return this._calibration?.report ?? null;
+    }
+  }
+
+  /**
+   * Record what actually happened to lots whose auctions have ended. HiBid publishes the realized
+   * price on every closed lot — including ones we never bid on — so the valuer can grade its own
+   * past calls for free, without buying anything.
+   */
+  async settleClosedLots(limit = this.c.settlePerRun, deadline?: number): Promise<number> {
+    if (!this.c.calibration) return 0;
+    const due = await this.store.awaitingSettlement(limit);
+    let n = 0;
+    for (const lot of due) {
+      if (deadline && Date.now() > deadline) break;
+      try {
+        const st = await this.client.lotState(lot.id);
+        const hammer = Number(st?.priceRealized ?? 0) || null;
+        const closed = st && (st.isClosed || st.status === "CLOSED");
+        if (!closed && hammer === null) continue; // still running (soft close extended it)
+        const val = await this.store.getValuation(lot.id);
+        const sc = scoreLot(lot, val, this.c);
+        const outcome: Outcome = {
+          lot_id: lot.id,
+          title: lot.title,
+          category: lot.category || "Uncategorized",
+          closed_at: lot.ends_at ?? Date.now() / 1000,
+          predicted_low: val?.low ?? null,
+          predicted_mid: val?.mid ?? null,
+          predicted_high: val?.high ?? null,
+          predicted_net: sc.net_resale,
+          confidence: val?.confidence ?? 0,
+          method: val?.method ?? "none",
+          score: sc.score,
+          hammer,
+          landed_at_hammer: hammer === null ? null : landedCost(hammer, lot, this.c),
+          bought: null, bought_price: null, sale_price: null, sale_at: null, sale_channel: "", notes: "",
+          recorded_at: Date.now() / 1000,
+        };
+        await this.store.saveOutcome(outcome);
+        n++;
+      } catch (e) {
+        console.warn("settle failed for lot", lot.id, e);
+      }
+    }
+    if (n) this._calibration = null; // force a rebuild on the next read
+    return n;
   }
 
   async pull(p: ScanParams): Promise<Lot[]> {
@@ -42,13 +105,13 @@ export class Scanner {
   }
 
   /** Full run. Returns the scan record id. Safe to call from a cron or a request handler. */
-  async scan(p: ScanParams): Promise<{ id: number; lots_seen: number; lots_valued: number; refreshed: number; alerted: number; error?: string }> {
+  async scan(p: ScanParams): Promise<{ id: number; lots_seen: number; lots_valued: number; refreshed: number; alerted: number; settled: number; error?: string }> {
     const started = Date.now();
     const deadline = started + this.c.runBudgetMs;
     const running = await this.store.runningScan();
-    if (running) return { id: running.id, lots_seen: running.lots_seen, lots_valued: running.lots_valued, refreshed: 0, alerted: 0, error: "scan already running" };
+    if (running) return { id: running.id, lots_seen: running.lots_seen, lots_valued: running.lots_valued, refreshed: 0, alerted: 0, settled: 0, error: "scan already running" };
     const id = await this.store.startScan(p);
-    const out = { id, lots_seen: 0, lots_valued: 0, refreshed: 0, alerted: 0 } as Awaited<ReturnType<Scanner["scan"]>>;
+    const out = { id, lots_seen: 0, lots_valued: 0, refreshed: 0, alerted: 0, settled: 0 } as Awaited<ReturnType<Scanner["scan"]>>;
     try {
       const lots = await this.pull(p);
       out.lots_seen = lots.length;
@@ -91,8 +154,9 @@ export class Scanner {
         const opps = (refreshed.length ? refreshed : closing).filter((l) => !l.is_closed).map((l) => buildOpportunity(l, vals.get(l.id) ?? null, this.c));
         out.alerted = await sendAlerts(this.store, opps);
       }
+      out.settled = await this.settleClosedLots(this.c.settlePerRun, deadline);
       await this.store.purgeClosed();
-      await this.store.updateScan(id, { finished_at: Date.now() / 1000, status: "done", lots_valued: out.lots_valued, message: `done in ${Math.round((Date.now() - started) / 1000)}s: ${out.lots_seen} lots, ${out.lots_valued} valued, ${out.refreshed} refreshed, ${out.alerted} alerted` });
+      await this.store.updateScan(id, { finished_at: Date.now() / 1000, status: "done", lots_valued: out.lots_valued, message: `done in ${Math.round((Date.now() - started) / 1000)}s: ${out.lots_seen} lots, ${out.lots_valued} valued, ${out.refreshed} refreshed, ${out.alerted} alerted, ${out.settled} settled` });
     } catch (e) {
       const msg = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
       console.error("spread scan failed", e);

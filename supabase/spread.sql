@@ -52,3 +52,24 @@ create table if not exists spread_scans (
   lots_valued integer default 0,
   message text
 );
+
+-- Calibration feedback loop: what we predicted vs. what actually happened on every closed lot.
+create table if not exists spread_outcomes (
+  lot_id bigint primary key,
+  title text,
+  category text,
+  closed_at timestamptz,
+  predicted_mid double precision,
+  predicted_net double precision,
+  confidence double precision,
+  method text,
+  score double precision,
+  hammer double precision,
+  landed_at_hammer double precision,
+  sale_price double precision,
+  sale_at timestamptz,
+  recorded_at timestamptz default now(),
+  data jsonb not null
+);
+create index if not exists spread_outcomes_closed on spread_outcomes (closed_at desc);
+create index if not exists spread_outcomes_cat on spread_outcomes (category);

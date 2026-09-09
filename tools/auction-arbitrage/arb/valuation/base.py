@@ -69,6 +69,7 @@ class Valuation:
     grading: dict[str, Any] | None = None  # trading cards: condition read, grade odds, graded comps, pop (see claude.GRADING_SCHEMA)
     standout_item: str = ""
     images_used: int = 0
+    calibration: dict[str, Any] | None = None
     model_used: str = ""
     created_at: float = field(default_factory=time.time)
     error: str = ""

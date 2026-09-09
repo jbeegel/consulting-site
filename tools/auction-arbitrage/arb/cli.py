@@ -102,6 +102,27 @@ def cmd_export(args, s, store):
     print(f"wrote {out} ({out.stat().st_size // 1024} KB). Open it in a browser or share it.")
 
 
+def cmd_settle(args, s, store):
+    sc = Scanner(s, store)
+    n = sc.settle_closed_lots(limit=args.limit)
+    print(f"settled {n} closed lots into the report card")
+    cmd_report(args, s, store)
+
+
+def cmd_report(args, s, store):
+    from .calibration import build_report
+    rep = build_report(store.outcomes(), s)
+    t = rep["totals"]
+    print(f"\n{t['closed']} closed lots graded, {t['sold']} sales recorded"
+          + (f", {t['realized_profit']:+,.2f} realized" if t["realized_profit"] is not None else ""))
+    print(f"{'category':<24}{'closed':>7}{'outbid':>8}{'sales':>7}{'act/pred':>10}{'adjust':>8}  basis")
+    for c in rep["categories"] + [rep["global"]]:
+        name = "ALL" if c["category"] == "__all__" else c["category"][:23]
+        over = f"{c['overshoot_rate'] * 100:.0f}%" if c["overshoot_rate"] is not None else "-"
+        sale = f"{c['median_sale_ratio']:.2f}" if c["median_sale_ratio"] is not None else "-"
+        print(f"{name:<24}{c['n_closed']:>7}{over:>8}{c['n_sold'] or '-':>7}{sale:>10}{'x%.2f' % c['bias']:>8}  {c['basis']}")
+
+
 def cmd_categories(args, s, store):
     from .hibid import HiBidClient
     c = HiBidClient(s.hibid_graphql, site_url=s.hibid_site, delay=s.request_delay)
@@ -151,6 +172,13 @@ def main(argv=None):
     a = sub.add_parser("export", help="write a self-contained HTML snapshot of the dashboard")
     a.add_argument("--out", default="spread-hunter.html")
     a.set_defaults(fn=cmd_export)
+
+    a = sub.add_parser("settle", help="record what closed lots actually sold for, then print the report card")
+    a.add_argument("--limit", type=int, default=200)
+    a.set_defaults(fn=cmd_settle)
+
+    a = sub.add_parser("report", help="the valuer's report card: predictions vs. what actually happened")
+    a.set_defaults(fn=cmd_report)
 
     a = sub.add_parser("categories", help="list HiBid category ids")
     a.add_argument("--parent", type=int)

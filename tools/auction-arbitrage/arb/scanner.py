@@ -6,6 +6,7 @@ import threading
 import time
 from typing import Any, Callable
 
+from .calibration import build_report
 from .config import Settings
 from .db import Store
 from .hibid import HiBidClient, apply_state, normalize_lot
@@ -40,7 +41,9 @@ class Scanner:
         self.store = store
         self.client = client or HiBidClient(settings.hibid_graphql, site_url=settings.hibid_site,
                                             delay=settings.request_delay)
-        self.pipeline = pipeline or ValuationPipeline(settings, store, picture_fetcher=self.pictures_for)
+        self.pipeline = pipeline or ValuationPipeline(settings, store, picture_fetcher=self.pictures_for,
+                                                      calibration_fetcher=self.calibration)
+        self._calibration: tuple[float, dict[str, Any]] | None = None
         self.status = ScanStatus()
 
     # ------------------------------------------------------------------ pull
@@ -104,6 +107,9 @@ class Scanner:
                         st.message = f"valued {done}/{total}: {lot.get('title', '')[:60]}"
 
                 self.pipeline.value_many(todo, max_lots=max_value, progress=progress)
+            settled = self.settle_closed_lots()
+            if settled:
+                log.info("settled %d closed lots into the report card", settled)
             self.store.purge_closed()
             with st.lock:
                 st.phase = "done"
@@ -142,6 +148,58 @@ class Scanner:
         for lid in lot_ids:
             if self.refresh_lot(lid):
                 n += 1
+        return n
+
+    # --------------------------------------------------------------- calibration
+    def calibration(self, force: bool = False) -> dict[str, Any] | None:
+        """The valuer's own report card, rebuilt at most once a minute."""
+        if not self.settings.calibration:
+            return None
+        now = time.time()
+        if not force and self._calibration and now - self._calibration[0] < 60:
+            return self._calibration[1]
+        try:
+            report = build_report(self.store.outcomes(), self.settings)
+            self._calibration = (now, report)
+            return report
+        except Exception as e:
+            log.warning("calibration report failed: %s", e)
+            return self._calibration[1] if self._calibration else None
+
+    def settle_closed_lots(self, limit: int | None = None) -> int:
+        """Record what actually happened to lots whose auctions ended. HiBid publishes the realized
+        price on every closed lot, including ones we never bid on, so the valuer can grade its own
+        past calls for free without buying anything."""
+        if not self.settings.calibration:
+            return 0
+        from .scoring import landed_cost, score_lot
+        due = self.store.awaiting_settlement(limit or self.settings.settle_per_run)
+        n = 0
+        for lot in due:
+            try:
+                st = self.client.lot_state(lot["id"])
+                hammer = float(st.get("priceRealized") or 0) or None
+                closed = bool(st.get("isClosed")) or st.get("status") == "CLOSED"
+                if not closed and hammer is None:
+                    continue  # still running (soft close extended it)
+                val = self.store.get_valuation(lot["id"])
+                sc = score_lot(lot, val, self.settings)
+                self.store.save_outcome({
+                    "lot_id": lot["id"], "title": lot.get("title"), "category": lot.get("category") or "Uncategorized",
+                    "closed_at": lot.get("ends_at") or time.time(),
+                    "predicted_low": (val or {}).get("low"), "predicted_mid": (val or {}).get("mid"),
+                    "predicted_high": (val or {}).get("high"), "predicted_net": sc.get("net_resale"),
+                    "confidence": (val or {}).get("confidence", 0), "method": (val or {}).get("method", "none"),
+                    "score": sc.get("score", 0), "hammer": hammer,
+                    "landed_at_hammer": None if hammer is None else landed_cost(hammer, lot, self.settings),
+                    "bought": None, "bought_price": None, "sale_price": None, "sale_at": None,
+                    "sale_channel": "", "notes": "", "recorded_at": time.time(),
+                })
+                n += 1
+            except Exception as e:
+                log.warning("settle failed for lot %s: %s", lot.get("id"), e)
+        if n:
+            self._calibration = None
         return n
 
     def pictures_for(self, lot: dict[str, Any]) -> list[str]:
