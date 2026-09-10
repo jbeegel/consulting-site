@@ -53,6 +53,8 @@ class Valuation:
     method: str = "none"  # claude+web | claude | ebay_sold | hibid_estimate | none
     demand: str = "unknown"  # high | medium | low | unknown
     days_to_sell: int | None = None
+    demand_signals: dict[str, Any] | None = None
+    category: str = ""  # denormalized from the lot so trend history can group without a join
     best_channel: str = ""
     condition_assumption: str = ""
     value_drivers: list[str] = field(default_factory=list)

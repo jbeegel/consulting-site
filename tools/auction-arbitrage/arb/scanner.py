@@ -6,7 +6,7 @@ import threading
 import time
 from typing import Any, Callable
 
-from .calibration import build_report
+from .calibration import build_report, liquidity_adjustment_for
 from .config import Settings
 from .db import Store
 from .hibid import HiBidClient, apply_state, normalize_lot
@@ -166,6 +166,39 @@ class Scanner:
             log.warning("calibration report failed: %s", e)
             return self._calibration[1] if self._calibration else None
 
+    def score_options(self, category: str, liquidity_weight: float | None = None,
+                      handling_days: float | None = None) -> dict[str, Any]:
+        """Score kwargs for a lot: the user's liquidity weight plus what the feedback loop has learned
+        about how fast this category really moves."""
+        report = self._calibration[1] if self._calibration else None
+        adj = liquidity_adjustment_for((report or {}).get("liquidity"), category)
+        return {
+            "liquidity_weight": liquidity_weight,
+            "handling_days": handling_days,
+            "days_multiplier": adj["days_multiplier"],
+            "measured_n": adj["measured_n"],
+        }
+
+    def intel(self, *, liquidity_weight: float | None = None, handling_days: float | None = None) -> dict[str, Any]:
+        """The market-intel board: category trends, velocity leaders and value traps."""
+        from .intel import build_intel
+        from .scoring import grading_economics, listing_economics, score_lot, why_upside
+        report = self.calibration() or build_report([], self.settings)
+        now = time.time()
+        lots = self.store.lots(limit=5000)
+        vals = self.store.valuations_for([l["id"] for l in lots])
+        opps = []
+        for l in lots:
+            v = vals.get(l["id"])
+            sc = score_lot(l, v, self.settings, now=now,
+                           **self.score_options(l.get("category") or "", liquidity_weight, handling_days))
+            opps.append({"lot": l, "valuation": v, "score": sc,
+                         "why": why_upside(l, v, sc, self.settings) if v else "",
+                         "listing": listing_economics(l, v, sc, self.settings),
+                         "grading": grading_economics(v, sc, self.settings)})
+        history = self.store.valuation_history(now - self.settings.trend_window_days * 86400)
+        return build_intel(opps, history, report.get("liquidity", {}), self.settings, now)
+
     def settle_closed_lots(self, limit: int | None = None) -> int:
         """Record what actually happened to lots whose auctions ended. HiBid publishes the realized
         price on every closed lot, including ones we never bid on, so the valuer can grade its own
@@ -183,7 +216,8 @@ class Scanner:
                 if not closed and hammer is None:
                     continue  # still running (soft close extended it)
                 val = self.store.get_valuation(lot["id"])
-                sc = score_lot(lot, val, self.settings)
+                sc = score_lot(lot, val, self.settings,
+                               **self.score_options(lot.get("category") or ""))
                 self.store.save_outcome({
                     "lot_id": lot["id"], "title": lot.get("title"), "category": lot.get("category") or "Uncategorized",
                     "closed_at": lot.get("ends_at") or time.time(),
@@ -193,7 +227,10 @@ class Scanner:
                     "score": sc.get("score", 0), "hammer": hammer,
                     "landed_at_hammer": None if hammer is None else landed_cost(hammer, lot, self.settings),
                     "bought": None, "bought_price": None, "sale_price": None, "sale_at": None,
-                    "sale_channel": "", "notes": "", "recorded_at": time.time(),
+                    "sale_channel": "", "notes": "",
+                    "listed_at": None, "list_price": None, "still_listed": None, "views": None, "watchers": None,
+                    "predicted_days": (sc.get("liquidity") or {}).get("days_p50"),
+                    "recorded_at": time.time(),
                 })
                 n += 1
             except Exception as e:

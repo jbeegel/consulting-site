@@ -45,7 +45,7 @@ export class ValuationPipeline {
     if (!force) {
       const cached = await this.store.cachedValuation(key, this.c.valuationTtlDays * 86400);
       if (cached) {
-        const v = { ...cached, lot_id: lot.id, cache_hit: true };
+        const v = { ...cached, lot_id: lot.id, cache_hit: true, category: lot.category || "Uncategorized" };
         await this.store.saveValuation(lot.id, v);
         return v;
       }
@@ -76,6 +76,7 @@ export class ValuationPipeline {
       if (comps.length) val.comps = comps.slice(0, 10);
     }
     val.created_at = Date.now() / 1000;
+    val.category = lot.category || "Uncategorized"; // so trends can group history without a join
     val = await this.applyCalibration(lot, val);
     await this.store.saveValuation(lot.id, val);
     return val;

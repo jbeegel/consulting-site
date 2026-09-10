@@ -121,6 +121,55 @@ def cmd_report(args, s, store):
         over = f"{c['overshoot_rate'] * 100:.0f}%" if c["overshoot_rate"] is not None else "-"
         sale = f"{c['median_sale_ratio']:.2f}" if c["median_sale_ratio"] is not None else "-"
         print(f"{name:<24}{c['n_closed']:>7}{over:>8}{c['n_sold'] or '-':>7}{sale:>10}{'x%.2f' % c['bias']:>8}  {c['basis']}")
+    liq = rep["liquidity"]
+    measured = [c for c in liq["categories"] if c["basis"] == "measured"]
+    if measured:
+        print(f"\nSpeed calibration (how long things really take vs. what we said)")
+        print(f"{'category':<24}{'sold':>6}{'observed':>10}{'predicted':>11}{'adjust':>8}")
+        for c in measured:
+            obs = f"{c['observed_days']:.0f}d" if c["observed_days"] is not None else "-"
+            pred = f"{c['predicted_days']:.0f}d" if c["predicted_days"] is not None else "-"
+            print(f"{c['category'][:23]:<24}{c['n_sold']:>6}{obs:>10}{pred:>11}{'x%.2f' % c['days_multiplier']:>8}")
+
+
+def cmd_intel(args, s, store):
+    """Market intel: which categories move, where capital turns fastest, what looks good but is stuck."""
+    sc = Scanner(s, store)
+    board = sc.intel()
+    liq = board["liquidity"]
+    print(f"\nMarket intel over the last {board['window_days']} days")
+
+    print(f"\n{'category':<24}{'liq':>6}{'to sell':>10}{'sell-thru':>11}{'trend':>10}{'n':>6}")
+    for t in board["trends"][:15]:
+        st = f"{t['sell_through'] * 100:.0f}%" if t["sell_through"] is not None else "-"
+        days = f"{t['days_p50']:.0f}d" if t["days_p50"] is not None else "-"
+        arrow = {"warming": "up", "cooling": "down", "steady": "flat", "new": "new"}[t["direction"]]
+        chg = f" {t['change']:+.0f}" if t["change"] is not None else ""
+        print(f"{t['category'][:23]:<24}{t['liquidity'] or 0:>6.0f}{days:>10}{st:>11}{arrow + chg:>10}{t['n']:>6}")
+
+    if board["velocity_leaders"]:
+        print("\nFastest money right now (profit per dollar of capital per month)")
+        for v in board["velocity_leaders"][:8]:
+            print(f"  {v['monthly_roi'] * 100:>7.0f}%/mo  {v['liquidity_grade']}  {v['eta']:<12}"
+                  f"${v['landed_cost']:>7.2f} -> +${v['spread']:<6} {v['title'][:52]}")
+
+    if board["value_traps"]:
+        print("\nValued high, but nobody is buying")
+        for v in board["value_traps"][:8]:
+            print(f"  {v['liquidity_grade']}  ${v['mid'] or 0:>7.0f}  {v['eta']:<12}{v['title'][:44]}  ({v['reason']})")
+
+    measured = [c for c in liq["categories"] if c["basis"] == "measured"]
+    if measured or liq["realized_monthly_roi"] is not None:
+        print(f"\nYour own listings ({'x%.2f' % liq['global']['days_multiplier']} vs the model overall)")
+        print(f"{'category':<24}{'listed':>8}{'sold':>6}{'observed':>10}{'predicted':>11}{'30d rate':>10}{'stuck':>7}")
+        for c in liq["categories"][:12] + [liq["global"]]:
+            name = "ALL" if c["category"] == "__all__" else c["category"][:23]
+            obs = f"{c['observed_days']:.0f}d" if c["observed_days"] is not None else "-"
+            pred = f"{c['predicted_days']:.0f}d" if c["predicted_days"] is not None else "-"
+            rate = f"{c['sell_rate_30d'] * 100:.0f}%" if c["sell_rate_30d"] is not None else "-"
+            print(f"{name:<24}{c['n_listed']:>8}{c['n_sold']:>6}{obs:>10}{pred:>11}{rate:>10}{c['stuck']:>7}")
+        if liq["realized_monthly_roi"] is not None:
+            print(f"\nRealized return on capital: {liq['realized_monthly_roi'] * 100:.0f}%/month (median round trip)")
 
 
 def cmd_categories(args, s, store):
@@ -179,6 +228,9 @@ def main(argv=None):
 
     a = sub.add_parser("report", help="the valuer's report card: predictions vs. what actually happened")
     a.set_defaults(fn=cmd_report)
+
+    a = sub.add_parser("intel", help="market intel: category trends, fastest money, value traps")
+    a.set_defaults(fn=cmd_intel)
 
     a = sub.add_parser("categories", help="list HiBid category ids")
     a.add_argument("--parent", type=int)

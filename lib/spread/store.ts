@@ -21,6 +21,8 @@ export interface Store {
   getValuation(lotId: number): Promise<Valuation | null>;
   valuationsFor(ids: number[]): Promise<Map<number, Valuation>>;
   cachedValuation(titleKey: string, maxAgeSeconds: number): Promise<Valuation | null>;
+  /** Every valuation created since `since`, for the market-trend window. */
+  valuationHistory(sinceSeconds: number, limit?: number): Promise<Valuation[]>;
   startScan(params: ScanParams): Promise<number>;
   updateScan(id: number, fields: Partial<ScanRecord>): Promise<void>;
   lastScan(): Promise<ScanRecord | null>;
@@ -83,6 +85,9 @@ class MemoryStore implements Store {
   async cachedValuation(key: string, maxAge: number) {
     const v = this.cache.get(key);
     return v && Date.now() / 1000 - v.created_at <= maxAge ? v : null;
+  }
+  async valuationHistory(since: number, limit = 5000) {
+    return [...this.vals.values()].filter((v) => v.created_at >= since).sort((a, b) => b.created_at - a.created_at).slice(0, limit);
   }
   async startScan(params: ScanParams) {
     const rec: ScanRecord = { id: this.scans.length + 1, started_at: Date.now() / 1000, finished_at: null, status: "running", params, lots_seen: 0, lots_valued: 0, message: "", trigger: params.trigger ?? "manual" };
@@ -162,7 +167,7 @@ class SupabaseStore implements Store {
   async saveValuation(lotId: number, v: Valuation) {
     const { error } = await this.sb.from("spread_valuations").upsert({
       lot_id: lotId, title_key: v.title_key, low: v.low, mid: v.mid, high: v.high, confidence: v.confidence,
-      method: v.method, created_at: iso(v.created_at), cache_hit: !!v.cache_hit, data: v,
+      method: v.method, created_at: iso(v.created_at), cache_hit: !!v.cache_hit, category: v.category ?? null, data: v,
     }, { onConflict: "lot_id" });
     if (error) throw new Error("spread_valuations upsert: " + error.message);
     if (v.title_key && v.method !== "none" && !v.cache_hit) {
@@ -186,6 +191,11 @@ class SupabaseStore implements Store {
     if (!data) return null;
     const created = secs(data.created_at as string) ?? 0;
     return Date.now() / 1000 - created <= maxAge ? (data.data as Valuation) : null;
+  }
+  async valuationHistory(since: number, limit = 5000) {
+    const { data, error } = await this.sb.from("spread_valuations").select("data").gte("created_at", iso(since)!).order("created_at", { ascending: false }).limit(limit);
+    if (error) throw new Error("spread_valuations history: " + error.message);
+    return (data ?? []).map((r) => r.data as Valuation);
   }
   async startScan(params: ScanParams) {
     const { data, error } = await this.sb.from("spread_scans").insert({ started_at: iso(Date.now() / 1000), status: "running", params, trigger: params.trigger ?? "manual" }).select("id").single();
@@ -228,7 +238,8 @@ class SupabaseStore implements Store {
       lot_id: o.lot_id, title: o.title, category: o.category, closed_at: iso(o.closed_at),
       predicted_mid: o.predicted_mid, predicted_net: o.predicted_net, confidence: o.confidence,
       method: o.method, score: o.score, hammer: o.hammer, landed_at_hammer: o.landed_at_hammer,
-      sale_price: o.sale_price, sale_at: iso(o.sale_at), data: o,
+      sale_price: o.sale_price, sale_at: iso(o.sale_at), listed_at: iso(o.listed_at),
+      still_listed: o.still_listed ?? null, predicted_days: o.predicted_days ?? null, data: o,
     }, { onConflict: "lot_id" });
     if (error) throw new Error("spread_outcomes upsert: " + error.message);
   }

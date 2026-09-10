@@ -133,6 +133,62 @@ AUCTIONS = [
 ]
 
 
+# Items whose resale number looks fine but whose market is genuinely stuck. These are the whole point
+# of the liquidity layer: worth $40 and unsellable is a different thing from worth $40.
+_ILLIQUID = ("Peloton", "oil painting", "Original oil", "encyclopedia", "Piano", "organ", "china cabinet",
+             "Hummel", "Precious Moments", "Franklin Mint", "collector plate")
+
+
+# Categories that are visibly warming or cooling over the demo's trend window, so the intel panel has
+# something real to show rather than a flat line.
+_DRIFT = {"Tools": 1, "Electronics": 1, "Sporting Goods": -1, "Furniture": -1, "Books": -1, "Music": 1}
+
+
+def _demand_signals(title: str, demand: str, mid: float, rng: random.Random,
+                    drift: int = 0, recency: float = 1.0) -> dict[str, Any]:
+    """Plausible eBay sold/active counts. The point of the demo is that these differ wildly for items
+    with similar price tags: that difference is what the intel layer surfaces."""
+    stuck = any(w.lower() in title.lower() for w in _ILLIQUID)
+    if stuck:
+        sold, active = rng.randint(0, 4), rng.randint(60, 240)
+        trend, note = "falling", "Everyone is trying to unload one; almost nobody is buying."
+    elif demand == "high":
+        sold, active = rng.randint(70, 260), rng.randint(25, 110)
+        trend, note = rng.choice(["rising", "flat", "flat"]), "Steady, deep market; priced right it moves in days."
+    elif demand == "medium":
+        sold, active = rng.randint(14, 45), rng.randint(35, 160)
+        trend, note = rng.choice(["flat", "flat", "falling"]), "Moves, but you are one of many sellers."
+    else:
+        sold, active = rng.randint(1, 8), rng.randint(30, 180)
+        trend, note = rng.choice(["falling", "flat"]), "Thin market: a handful of sales a quarter."
+    # Cheap smalls churn faster than their price suggests; expensive things always take longer.
+    if mid < 40:
+        sold = int(sold * 1.4) + 3
+    if mid > 800:
+        sold = max(1, int(sold * 0.4))
+        active = int(active * 0.7)
+    # `recency` is 0 (oldest sample in the window) to 1 (today). A warming category sells more and lists
+    # less as you approach today; a cooling one does the reverse. This is what the trend arrows read.
+    if drift:
+        sold = max(0, round(sold * (1 + drift * 0.45 * recency)))
+        active = max(1, round(active * (1 - drift * 0.25 * recency)))
+        if drift > 0 and trend != "rising" and recency > 0.6:
+            trend = "rising"
+        elif drift < 0 and recency > 0.6:
+            trend = "falling"
+    return {
+        "sold_90d": sold, "active_now": active,
+        "sell_through": round(sold / (sold + active), 3) if sold + active else None,
+        "median_days_to_sell": None,
+        "watchers_typical": round(rng.uniform(0.5, 14), 1),
+        "price_dispersion": round(rng.uniform(0.2, 1.1), 2),
+        "trend": trend,
+        "seasonality": "Sells best Oct-Dec" if rng.random() < 0.25 else "",
+        "buyer_pool": "Collectors and resellers" if demand != "high" else "Broad retail demand",
+        "note": note,
+    }
+
+
 def make_demo(seed: int = 7, now: float | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Return (normalized lots, valuations)."""
     rng = random.Random(seed)
@@ -179,6 +235,11 @@ def make_demo(seed: int = 7, now: float | None = None) -> tuple[list[dict[str, A
                 "category_id": 10000 + idx, "category": top, "category_path": cat_path, "fetched_at": now,
                 "demo": True,
             })
+            # Spread valuations back across the trend window so the intel panel shows a real time series
+            # rather than one flat point; `recency` is 0 for the oldest sample and 1 for today.
+            age_days = rng.uniform(0, 18)
+            recency = 1 - age_days / 18
+            valued_at = now - age_days * 86400
             conf = 0.55 if auth else 0.8
             if demand == "low":
                 conf = 0.35
@@ -194,13 +255,16 @@ def make_demo(seed: int = 7, now: float | None = None) -> tuple[list[dict[str, A
                 "currency": "USD", "confidence": conf,
                 "confidence_reason": "Demo valuation: typical sold-comp range for this item in used/good condition.",
                 "method": "claude+web", "demand": demand, "days_to_sell": {"high": 7, "medium": 21, "low": 60}[demand],
+                "demand_signals": _demand_signals(title, demand, mid, rng, drift=_DRIFT.get(top, 0),
+                                                  recency=recency),
+                "category": top,
                 "best_channel": "eBay" if mid < 3000 else "Facebook Marketplace / dealer",
                 "condition_assumption": "Used, good, fully functional unless the listing says otherwise.",
                 "value_drivers": drivers, "risks": risks,
                 "rationale": f"Recent sold comps cluster between ${lo:,.0f} and ${hi:,.0f}. {('Authentication required before relying on this number. ' if auth else '')}"
                              f"Demand is {demand}.",
                 "comps": comps, "search_query": title, "authenticity_risk": auth, "bulk_lot": False, "unit_count": 1,
-                "sources_consulted": ["ebay_sold (demo)"], "model_used": "demo", "created_at": now, "error": "",
+                "sources_consulted": ["ebay_sold (demo)"], "model_used": "demo", "created_at": valued_at, "error": "",
                 "items": DEMO_ITEMS.get(title, []),
                 "grading": DEMO_GRADING.get(title),
                 "standout_item": DEMO_ITEMS[title][0]["name"] if title in DEMO_ITEMS else "",
@@ -238,6 +302,12 @@ _OUTCOME_MIX = [
     ("Books", 5, (0.2, 0.7), []),
 ]
 
+# How long things ACTUALLY take to sell in each category, as a multiple of what the model predicted.
+# Electronics is roughly honest, Collectibles is optimistic, Furniture is badly optimistic (bulky,
+# local-pickup-only buyers) and Tools actually beat the estimate.
+_SPEED_REALITY = {"Electronics": 1.05, "Tools": 0.7, "Collectibles": 1.8, "Furniture": 2.6,
+                  "Jewelry & Watches": 1.4, "Art": 3.0, "Books": 2.2}
+
 
 def make_demo_outcomes(seed: int = 11, now: float | None = None) -> list[dict[str, Any]]:
     """Closed lots with what we predicted vs. what they actually realized."""
@@ -261,12 +331,38 @@ def make_demo_outcomes(seed: int = 11, now: float | None = None) -> list[dict[st
                 "bought": None, "bought_price": None, "sale_price": None, "sale_at": None,
                 "sale_channel": "", "notes": "", "recorded_at": now,
             }
+            # What the liquidity model would have predicted before you listed it.
+            predicted_days = round(rng.uniform(6, 40), 1)
+            rec["predicted_days"] = predicted_days
+            rec["listed_at"] = None
+            rec["list_price"] = None
+            rec["still_listed"] = None
+            rec["views"] = None
+            rec["watchers"] = None
             if i < len(sales):
                 ratio, _ = sales[i]
+                actual_days = max(1.0, predicted_days * _SPEED_REALITY.get(cat, 1.0) * rng.uniform(0.75, 1.3))
+                listed_at = rec["closed_at"] + rng.uniform(1, 4) * 86400  # picked up, photographed, listed
                 rec["bought"] = True
                 rec["bought_price"] = rec["landed_at_hammer"]
                 rec["sale_price"] = round(mid * ratio, 2)
-                rec["sale_at"] = rec["closed_at"] + rng.uniform(3, 30) * 86400
+                rec["listed_at"] = listed_at
+                rec["list_price"] = round(mid * 1.05, 2)
+                rec["sale_at"] = listed_at + actual_days * 86400
+                rec["still_listed"] = False
+                rec["views"] = rng.randint(40, 600)
+                rec["watchers"] = rng.randint(1, 25)
+                rec["sale_channel"] = "eBay"
+            elif i < len(sales) + 2 and cat in ("Furniture", "Collectibles", "Art"):
+                # Bought, listed, and still sitting. Right-censored evidence the loop must not ignore:
+                # a model that only learns from things that sold concludes everything sells.
+                rec["bought"] = True
+                rec["bought_price"] = rec["landed_at_hammer"]
+                rec["listed_at"] = now - rng.uniform(65, 150) * 86400
+                rec["list_price"] = round(mid * 1.05, 2)
+                rec["still_listed"] = True
+                rec["views"] = rng.randint(2, 40)      # the "max promotion, no views" case
+                rec["watchers"] = rng.randint(0, 2)
                 rec["sale_channel"] = "eBay"
             out.append(rec)
     return out

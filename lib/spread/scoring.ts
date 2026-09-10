@@ -1,5 +1,6 @@
 // Turn (lot, valuation) into an opportunity: landed cost, net resale, spread, multiple, score, heat.
 import type { Config } from "./config";
+import { assessLiquidity, daysAtPrice, liquidityFactor, monthlyRoi, riskAdjustedProfit, type LiquidityOptions } from "./liquidity";
 import type { GradingEconomics, ListingEconomics, Lot, PricePoint, Score, Valuation } from "./types";
 
 export const TIME_BUCKETS: [string, number][] = [
@@ -45,7 +46,16 @@ export function landedCost(bid: number, lot: Lot, c: Config): number {
   return bid * (1 + premium) * (1 + c.salesTax) + c.pickupCost;
 }
 
-export function scoreLot(lot: Lot, val: Valuation | null, c: Config, now = Date.now() / 1000): Score {
+/** Per-lot knobs the user can move from the dashboard without a redeploy. */
+export interface ScoreOptions {
+  /** 0 ignores liquidity, 1 lets a dead market cut the score to a third of its headline. */
+  liquidityWeight?: number;
+  /** From the feedback loop: observed days / modeled days for this lot's category. */
+  liquidity?: LiquidityOptions;
+  now?: number;
+}
+
+export function scoreLot(lot: Lot, val: Valuation | null, c: Config, now = Date.now() / 1000, opts: ScoreOptions = {}): Score {
   let secs = lot.ends_at ? lot.ends_at - now : lot.time_left_seconds;
   if (secs !== null) secs = Math.max(0, secs);
   const highBid = lot.high_bid || 0;
@@ -63,6 +73,7 @@ export function scoreLot(lot: Lot, val: Valuation | null, c: Config, now = Date.
     price_reliability: priceReliability(secs),
     valued: !!(val && val.mid),
     net_resale: null, spread: null, ratio: null, confidence: 0, value_score: 0, score: 0, heat: "unvalued", radar: "scan",
+    liquidity: null, liquidity_factor: 1, score_before_liquidity: 0, monthly_roi: null, expected_profit_60d: null,
   };
   if (!base.valued || !val || !val.mid) return base;
 
@@ -84,11 +95,45 @@ export function scoreLot(lot: Lot, val: Valuation | null, c: Config, now = Date.
   else if (spread < c.minSpread) valueScore *= spread / c.minSpread;
   if (val.authenticity_risk) valueScore *= 0.75;
   valueScore = Math.round(valueScore * 10) / 10;
-  const score = Math.round(valueScore * base.price_reliability * 10) / 10;
-  return { ...base, net_resale: net, net_resale_low: netLow, spread, spread_low: netLow - cost, ratio, confidence: conf, value_score: valueScore, score, heat: heat(score), sweet_spot: sweet, radar: radarLevel(secs, valueScore) };
+  const beforeLiquidity = Math.round(valueScore * base.price_reliability * 10) / 10;
+
+  // Liquidity: worth is not the same as sellable. A number nobody is buying at is a number on paper.
+  const liq = assessLiquidity(val.demand_signals ?? null, val, {
+    handlingDays: c.handlingDays,
+    maxDays: c.maxDaysToSell,
+    ...(opts.liquidity ?? {}),
+  });
+  const weight = opts.liquidityWeight ?? c.liquidityWeight;
+  const factor = liquidityFactor(liq, weight);
+  const score = Math.round(beforeLiquidity * factor * 10) / 10;
+
+  return {
+    ...base, net_resale: net, net_resale_low: netLow, spread, spread_low: netLow - cost, ratio, confidence: conf,
+    value_score: valueScore, score, heat: heat(score), sweet_spot: sweet, radar: radarLevel(secs, valueScore),
+    liquidity: liq, liquidity_factor: factor, score_before_liquidity: beforeLiquidity,
+    monthly_roi: monthlyRoi(spread, cost, liq.capital_days),
+    expected_profit_60d: riskAdjustedProfit(spread, liq),
+  };
 }
 
 const money = (n: number) => "$" + Math.round(n).toLocaleString("en-US");
+/** Monthly return on capital. Past ~10x a percentage stops reading as a number, so switch to multiples:
+ *  a $1 lot that nets $30 in a week is "40x/month", not "4000%". */
+const perMonth = (roi: number) => (roi >= 9.99 ? `${Math.round(roi)}x/month` : `${Math.round(roi * 100)}%/month`);
+
+/** How a lot reads once liquidity is in the picture: the one-line verdict the table shows. */
+export function liquidityVerdict(sc: Score): string {
+  const liq = sc.liquidity;
+  if (!liq || !sc.valued) return "";
+  const roi = sc.monthly_roi;
+  if (liq.grade === "F" || liq.depth === "dead")
+    return `Worth ${money(sc.net_resale ?? 0)} on paper, but almost nothing comparable sells — expect ${liq.eta} or never.`;
+  if (liq.grade === "D")
+    return `Slow money: ${liq.eta} to sell${roi === null ? "" : `, about ${perMonth(roi)} on the capital`}.`;
+  if (roi !== null && roi >= 1 && (liq.grade === "A" || liq.grade === "B"))
+    return `Fast money: sells in ${liq.eta}, roughly ${perMonth(roi)} on what you tie up.`;
+  return `Sells in about ${liq.eta}${roi === null ? "" : ` — ${perMonth(roi)} on the capital`}.`;
+}
 
 export function whyUpside(lot: Lot, val: Valuation | null, sc: Score, c: Config): string {
   if (!sc.valued || !val || val.mid === null) return "";
@@ -103,6 +148,16 @@ export function whyUpside(lot: Lot, val: Valuation | null, sc: Score, c: Config)
     bits.push(`Still ${Math.floor(sc.seconds_left / 86400)}+ days out, so today's bid means little; it stays on the radar and the score climbs as the close approaches.`);
   else bits.push("Plenty of time left; expect the price to rise near close.");
   if (val.standout_item) bits.push(`Standout piece: ${val.standout_item}.`);
+  const liq = sc.liquidity;
+  if (liq) {
+    const parts = [`Liquidity ${liq.grade} (${liq.score}/100)`];
+    if (liq.sold_90d !== null && liq.active_now !== null) parts.push(`${liq.sold_90d} sold in 90 days vs ${liq.active_now} listed now`);
+    if (liq.sell_through !== null) parts.push(`${Math.round(liq.sell_through * 100)}% sell-through`);
+    bits.push(parts.join(", ") + `: expect about ${liq.eta} to sell (${Math.round(liq.sell_probability_30d * 100)}% chance inside 30 days), so roughly ${liq.capital_days} days of your money${sc.monthly_roi === null ? "" : ` at about ${perMonth(sc.monthly_roi)}`}.`);
+    if (liq.grade === "F" || liq.depth === "dead") bits.push("Treat the resale number as theoretical until something comparable actually sells.");
+    if (liq.trend === "falling") bits.push("Demand is trending down; price at the quick number, not the patient one.");
+    if (liq.seasonality) bits.push(`Seasonality: ${liq.seasonality}.`);
+  }
   const ge = gradingEconomics(val, sc, c);
   if (ge) {
     if (ge.upside > 0) bits.push(`Grading: expected net ${money(ge.graded_net)} graded vs ${money(ge.raw_net)} raw after ~${money(ge.grading_cost)} to grade (+${money(ge.upside)}, likely ${ge.predicted_grade || "PSA 8-9"}); recommendation: ${ge.recommendation}.`);
@@ -142,10 +197,16 @@ export function listingEconomics(lot: Lot, val: Valuation | null, sc: Score, c: 
   const patient = Number(lst?.price_patient || val.high || val.mid * 1.2);
   const charged = market < 60 ? ship : 0; // buyer pays shipping on cheap items; seller absorbs on pricey ones
   const promo = c.ebayPromoted || Math.max(0, Math.min(0.2, Number(lst?.promoted_rate) || 0));
-  const points: PricePoint[] = ([["quick", quick, 7], ["market", market, 21], ["patient", patient, 45]] as const).map(([label, price, days]) => {
+  const points: PricePoint[] = ([["quick", quick], ["market", market], ["patient", patient]] as const).map(([label, price]) => {
     const e = netOut(price, cat, ship, c, charged, promo);
     const profit = e.net - sc.landed_cost;
-    return { ...e, label, expected_days: days, profit, roi: sc.landed_cost > 0 ? profit / sc.landed_cost : null };
+    // Days come from the measured market, not a constant: pricing below the comps sells sooner.
+    const days = daysAtPrice(sc.liquidity, label);
+    return {
+      ...e, label, expected_days: days, profit,
+      roi: sc.landed_cost > 0 ? profit / sc.landed_cost : null,
+      monthly_roi: monthlyRoi(profit, sc.landed_cost, days + (sc.liquidity?.handling_days ?? c.handlingDays)),
+    };
   });
   return {
     category: cat, fee_rate: ebayFeeRate(cat, c), shipping_cost: ship, buyer_pays_shipping: charged > 0,

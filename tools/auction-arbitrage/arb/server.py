@@ -14,6 +14,7 @@ from .config import Settings, load
 from .calibration import build_report
 from .db import Store
 from .scanner import Scanner
+from .intel import apply_intel_filters
 from .scoring import TIME_BUCKETS, grading_economics, listing_economics, score_lot, why_upside
 
 log = logging.getLogger(__name__)
@@ -32,8 +33,9 @@ class ScanRequest(BaseModel):
     value: bool = True
 
 
-def build_opportunity(lot: dict[str, Any], val: dict[str, Any] | None, s: Settings, now: float) -> dict[str, Any]:
-    sc = score_lot(lot, val, s, now=now)
+def build_opportunity(lot: dict[str, Any], val: dict[str, Any] | None, s: Settings, now: float,
+                      score_opts: dict[str, Any] | None = None) -> dict[str, Any]:
+    sc = score_lot(lot, val, s, now=now, **(score_opts or {}))
     return {
         "lot": lot,
         "valuation": val,
@@ -71,8 +73,12 @@ def create_app(settings: Settings | None = None, store: Store | None = None, sca
 
     @app.get("/api/opportunities")
     def opportunities(hours: float | None = Query(None), category: str | None = None, min_score: float = 0,
-                      q: str | None = None, include_unvalued: bool = True, limit: int = 2000):
+                      q: str | None = None, include_unvalued: bool = True, limit: int = 2000,
+                      liquidity_weight: float | None = None, handling_days: float | None = None,
+                      min_liquidity_grade: str | None = None, max_days_to_sell: float | None = None,
+                      rank_by: str = "score"):
         now = time.time()
+        sc.calibration()  # warm the report card so every lot gets its category's measured speed
         lots = db.lots(ends_before=(now + hours * 3600) if hours else None, ends_after=now - 60,
                        category=category or None)
         vals = db.valuations_for([l["id"] for l in lots])
@@ -84,12 +90,24 @@ def create_app(settings: Settings | None = None, store: Store | None = None, sca
             v = vals.get(lot["id"])
             if not v and not include_unvalued:
                 continue
-            opp = build_opportunity(lot, v, s, now)
+            opts = sc.score_options(lot.get("category") or "", liquidity_weight, handling_days)
+            opp = build_opportunity(lot, v, s, now, opts)
             if opp["score"]["score"] < min_score and v:
                 continue
             out.append(opp)
-        out.sort(key=lambda o: (o["score"]["score"], o["score"].get("spread") or 0), reverse=True)
-        return {"generated_at": now, "count": len(out), "opportunities": out[:limit]}
+        ranked = apply_intel_filters(out, min_liquidity_grade=(min_liquidity_grade or "").upper() or None,
+                                     max_days_to_sell=max_days_to_sell, rank_by=rank_by)
+        return {"generated_at": now, "count": len(ranked), "opportunities": ranked[:limit]}
+
+    @app.get("/api/intel")
+    def intel(liquidity_weight: float | None = None, handling_days: float | None = None):
+        """Market intel: category trends, velocity leaders and value traps, all from stored data."""
+        board = sc.intel(liquidity_weight=liquidity_weight, handling_days=handling_days)
+        return {**board, "settings": {
+            "liquidity_weight": s.liquidity_weight if liquidity_weight is None else liquidity_weight,
+            "handling_days": s.handling_days if handling_days is None else handling_days,
+            "trend_window_days": s.trend_window_days, "liquidity_min_sales": s.liquidity_min_sales,
+        }}
 
     @app.get("/api/lot/{lot_id}")
     def lot(lot_id: int, enrich: bool = False):
@@ -161,14 +179,17 @@ def create_app(settings: Settings | None = None, store: Store | None = None, sca
             base = existing
         else:
             val = db.get_valuation(lot_id)
-            sc = score_lot(lot, val, s)
+            lot_sc = score_lot(lot, val, s, **sc.score_options(lot.get("category") or ""))
             base = {"lot_id": lot_id, "title": lot.get("title"), "category": lot.get("category") or "Uncategorized",
                     "closed_at": lot.get("ends_at") or time.time(), "predicted_low": (val or {}).get("low"),
                     "predicted_mid": (val or {}).get("mid"), "predicted_high": (val or {}).get("high"),
-                    "predicted_net": sc.get("net_resale"), "confidence": (val or {}).get("confidence", 0),
-                    "method": (val or {}).get("method", "none"), "score": sc.get("score", 0),
+                    "predicted_net": lot_sc.get("net_resale"), "confidence": (val or {}).get("confidence", 0),
+                    "method": (val or {}).get("method", "none"), "score": lot_sc.get("score", 0),
                     "hammer": None, "landed_at_hammer": None, "bought": None, "bought_price": None,
-                    "sale_price": None, "sale_at": None, "sale_channel": "", "notes": ""}
+                    "sale_price": None, "sale_at": None, "sale_channel": "", "notes": "",
+                    "listed_at": None, "list_price": None, "still_listed": None, "views": None,
+                    "watchers": None,
+                    "predicted_days": (lot_sc.get("liquidity") or {}).get("days_p50")}
 
         def num(v):
             try:
@@ -177,17 +198,34 @@ def create_app(settings: Settings | None = None, store: Store | None = None, sca
             except (TypeError, ValueError):
                 return None
 
+        def non_neg(v):
+            try:
+                f = float(v)
+                return f if f >= 0 else None
+            except (TypeError, ValueError):
+                return None
+
         paid, sold = num(body.get("bought_price")), num(body.get("sale_price"))
+        sale_at = body.get("sale_at") or (time.time() if sold is not None else base.get("sale_at"))
+        listed_at = num(body.get("listed_at")) or base.get("listed_at")
         updated = {**base,
                    "bought": body.get("bought", True if paid is not None else base.get("bought")),
                    "bought_price": paid if paid is not None else base.get("bought_price"),
                    "sale_price": sold if sold is not None else base.get("sale_price"),
-                   "sale_at": body.get("sale_at") or (time.time() if sold is not None else base.get("sale_at")),
+                   "sale_at": sale_at,
                    "sale_channel": body.get("sale_channel", base.get("sale_channel", "")),
                    "notes": body.get("notes", base.get("notes", "")),
+                   # Liquidity ground truth. If a sale came in, the listing is no longer sitting.
+                   "listed_at": listed_at,
+                   "list_price": num(body.get("list_price")) or base.get("list_price"),
+                   "still_listed": False if sale_at else body.get(
+                       "still_listed", True if listed_at else base.get("still_listed")),
+                   "views": non_neg(body.get("views")) if body.get("views") is not None else base.get("views"),
+                   "watchers": non_neg(body.get("watchers")) if body.get("watchers") is not None else base.get("watchers"),
                    "recorded_at": time.time()}
         db.save_outcome(updated)
-        return {"outcome": updated}
+        days = round((updated["sale_at"] - listed_at) / 86400, 1) if listed_at and updated.get("sale_at") else None
+        return {"outcome": updated, "days_to_sell": days, "predicted_days": updated.get("predicted_days")}
 
     @app.get("/api/categories")
     def categories():

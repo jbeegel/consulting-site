@@ -50,6 +50,19 @@ Rules:
   country-of-origin stamps, model numbers, hallmarks, edition numbers. For multi-item lots identify EACH
   distinct item, value each one, name the standout piece, and make the lot range the realistic total a
   reseller would net selling the good pieces individually and the rest as a group.
+- LIQUIDITY IS AS IMPORTANT AS PRICE. What something is "worth" is useless if nobody is buying it: an item
+  with 200 active listings and four sales a quarter is not a $40 item, it is a $40 asking price attached to
+  a six-month wait. On every item report `demand_signals`:
+  * sold_90d: how many comparable items SOLD on eBay in the last 90 days (count the sold results, don't guess).
+  * active_now: how many comparable items are listed for sale RIGHT NOW (the active result count).
+  * sell_through: sold / (sold + active), if you can compute it.
+  * median_days_to_sell: from listing to sale, when the data shows it.
+  * watchers_typical, price_dispersion ((p75 - p25) / median across the sold comps).
+  * trend: rising / flat / falling over the last year, and any seasonality (holiday, back-to-school,
+    baseball season, spring yard sales).
+  * buyer_pool: who actually buys this and how many of them there are.
+  Use round honest numbers and report -1 for anything you could not determine rather than inventing counts.
+  A thin market with three sales a quarter must be reported as thin even when those three sales were high.
 - Report prices in USD. Never exceed 3 web searches per item; stop early when you have 3+ solid comps.
 - Also draft the eBay listing you would post, with three price points (quick sale = around the 25th
   percentile of sold comps, market = median, patient = 75th percentile), a best-offer floor, and a shipping
@@ -139,6 +152,65 @@ GRADING_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
+DEMAND_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "description": ("How fast this market actually moves. Counts come from eBay sold/active result counts; "
+                    "use -1 when unknown rather than guessing."),
+    "properties": {
+        "sold_90d": {"type": "integer", "description": "comparable items SOLD on eBay in the last 90 days; -1 if unknown"},
+        "active_now": {"type": "integer", "description": "comparable items listed for sale right now; -1 if unknown"},
+        "sell_through": {"type": "number", "description": "sold / (sold + active), 0-1; -1 if unknown"},
+        "median_days_to_sell": {"type": "number", "description": "-1 if unknown"},
+        "watchers_typical": {"type": "number", "description": "typical watchers on an active listing; -1 if unknown"},
+        "price_dispersion": {"type": "number", "description": "(p75 - p25) / median across the sold comps; -1 if unknown"},
+        "trend": {"type": "string", "enum": ["rising", "flat", "falling", "unknown"]},
+        "seasonality": {"type": "string", "description": "when this sells best, or empty"},
+        "buyer_pool": {"type": "string", "description": "who buys this and how many of them there are"},
+        "note": {"type": "string", "description": "anything that changes how fast it moves: crowded category, niche buyers, shipping friction"},
+    },
+    "required": ["sold_90d", "active_now", "sell_through", "median_days_to_sell", "watchers_typical",
+                 "price_dispersion", "trend", "seasonality", "buyer_pool", "note"],
+    "additionalProperties": False,
+}
+
+
+def parse_demand(raw: Any) -> dict[str, Any] | None:
+    """Pull the demand block out of the model's JSON, keeping unknowns as None.
+
+    -1 (or any negative) is the model's "I could not determine this". It must never become 0: zero sales
+    in 90 days is a real and very different signal from a missing measurement.
+    """
+    if not isinstance(raw, dict):
+        return None
+
+    def num(key: str) -> float | None:
+        v = raw.get(key)
+        if v is None or v == "":
+            return None
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        return f if f >= 0 else None
+
+    trend = str(raw.get("trend") or "unknown")
+    out = {
+        "sold_90d": num("sold_90d"), "active_now": num("active_now"), "sell_through": num("sell_through"),
+        "median_days_to_sell": num("median_days_to_sell"), "watchers_typical": num("watchers_typical"),
+        "price_dispersion": num("price_dispersion"),
+        "trend": trend if trend in ("rising", "flat", "falling") else "unknown",
+        "seasonality": str(raw.get("seasonality") or ""), "buyer_pool": str(raw.get("buyer_pool") or ""),
+        "note": str(raw.get("note") or ""),
+    }
+    if out["sell_through"] is None and out["sold_90d"] is not None and out["active_now"] is not None:
+        total = out["sold_90d"] + out["active_now"]
+        if total > 0:
+            out["sell_through"] = round(out["sold_90d"] / total, 3)
+    empty = (out["sold_90d"] is None and out["active_now"] is None and out["median_days_to_sell"] is None
+             and out["trend"] == "unknown" and not out["note"])
+    return None if empty else out
+
+
 ITEM_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -174,6 +246,7 @@ SCHEMA: dict[str, Any] = {
         "confidence_reason": {"type": "string"},
         "demand": {"type": "string", "enum": ["high", "medium", "low", "unknown"]},
         "days_to_sell": {"type": "integer"},
+        "demand_signals": DEMAND_SCHEMA,
         "best_channel": {"type": "string"},
         "value_drivers": {"type": "array", "items": {"type": "string"}},
         "risks": {"type": "array", "items": {"type": "string"}},
@@ -199,7 +272,7 @@ SCHEMA: dict[str, Any] = {
     },
     "required": ["identified_item", "brand", "model", "condition_assumption", "bulk_lot", "unit_count",
                  "resale_low", "resale_mid", "resale_high", "confidence", "confidence_reason", "demand",
-                 "days_to_sell", "best_channel", "value_drivers", "risks", "rationale", "comps",
+                 "days_to_sell", "demand_signals", "best_channel", "value_drivers", "risks", "rationale", "comps",
                  "authenticity_risk", "search_query", "listing", "items", "standout_item", "grading"],
     "additionalProperties": False,
 }
@@ -361,6 +434,7 @@ class ClaudeValuer:
         v.confidence_reason = data.get("confidence_reason", "")
         v.demand = data.get("demand", "unknown")
         v.days_to_sell = data.get("days_to_sell")
+        v.demand_signals = parse_demand(data.get("demand_signals"))
         v.best_channel = data.get("best_channel", "")
         v.value_drivers = list(data.get("value_drivers") or [])
         v.risks = list(data.get("risks") or [])

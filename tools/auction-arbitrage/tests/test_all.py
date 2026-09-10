@@ -308,16 +308,18 @@ def test_settlement_and_feedback(settings, monkeypatch):
     assert not st["error"]
     lots = store.lots()
     assert lots
+    valued = store.valuations_for([l["id"] for l in lots])
+    assert valued
 
     # Pretend those auctions ended with a hammer price well above what we predicted.
     now = time.time()
-    for lot in lots[:6]:
+    for lot in (l for l in lots if l["id"] in valued):
         store.upsert_lots([dict(lot, ends_at=now - 60)])
     monkeypatch.setattr(sc.client, "lot_state",
                         lambda lot_id: {"isClosed": True, "status": "CLOSED", "priceRealized": 500.0,
                                         "highBid": 500.0, "minBid": 505.0, "bidCount": 9, "timeLeftSeconds": 0})
-    settled = sc.settle_closed_lots(limit=6)
-    assert settled > 0
+    settled = sc.settle_closed_lots(limit=len(valued))
+    assert settled == len(valued)
     rec = store.outcomes()[0]
     assert rec["hammer"] == 500.0 and rec["landed_at_hammer"] > 500.0
     assert store.get_outcome(rec["lot_id"])["lot_id"] == rec["lot_id"]
@@ -341,3 +343,189 @@ def test_settlement_and_feedback(settings, monkeypatch):
     assert v.mid == round(350 * fur["bias"], 2)
     assert "Calibrated" in v.confidence_reason
     store.close()
+
+
+def test_liquidity_math(settings):
+    """The hazard model: sold-vs-active decides how long your money is stuck, not the price tag."""
+    from arb.liquidity import (assess_liquidity, daily_hazard, days_at_price, human_days,
+                               liquidity_factor, monthly_roi, sell_through)
+
+    # 180 sold in 90 days against 20 listed: two sales a day chasing 20 listings.
+    fast = assess_liquidity({"sold_90d": 180, "active_now": 20, "trend": "flat"}, None)
+    assert abs(fast["daily_hazard"] - (180 / 90) / 20) < 1e-4
+    assert fast["days_p50"] < 8 and fast["grade"] == "A" and fast["depth"] == "deep"
+    assert fast["sell_probability_30d"] > 0.95 and fast["basis"] == "market"
+
+    # Same 90-day sales count, ten times the competition: ten times the wait.
+    crowded = assess_liquidity({"sold_90d": 180, "active_now": 200, "trend": "flat"}, None)
+    assert abs(crowded["days_p50"] / fast["days_p50"] - 10) < 0.5
+    assert crowded["grade"] > fast["grade"]  # worse grades sort later in the alphabet
+
+    # The case that motivates the whole layer: real value, no buyers.
+    dead = assess_liquidity({"sold_90d": 2, "active_now": 150, "trend": "falling"}, None)
+    assert dead["depth"] == "dead" and dead["grade"] == "F"
+    # Floored at the max_days horizon: past a year "slower" stops meaning anything.
+    assert dead["days_p50"] >= 360 and dead["sell_probability_30d"] < 0.1
+    assert any("Crowded" in n for n in dead["notes"])
+    assert sell_through(2, 150) == round(2 / 152, 3)
+
+    # Zero sales is a measurement, not a gap: it must not fall through to the optimistic default.
+    assert daily_hazard(0, 50) == 0.0005 and daily_hazard(None, 50) is None
+    never = assess_liquidity({"sold_90d": 0, "active_now": 50, "trend": "flat"}, None)
+    assert never["grade"] == "F" and never["basis"] == "market"
+
+    # Degrading gracefully: researched days beat the demand word, which beats nothing.
+    researched = assess_liquidity({"sold_90d": None, "active_now": None, "median_days_to_sell": 10},
+                                  {"demand": "low"})
+    assert researched["basis"] == "researched" and 9 < researched["days_p50"] < 11
+    assumed = assess_liquidity(None, {"demand": "high", "days_to_sell": None})
+    assert assumed["basis"] == "assumed" and 11 < assumed["days_p50"] < 13
+    # An unresearched guess must not outrank a measured market of the same speed.
+    measured_same = assess_liquidity({"sold_90d": 104, "active_now": 20, "trend": "flat"}, None)
+    assert abs(measured_same["days_p50"] - assumed["days_p50"]) < 3
+    assert measured_same["score"] > assumed["score"]
+    # Nothing known at all is NOT the same as known-slow: it must not touch the score.
+    blank = assess_liquidity(None, {"demand": "unknown", "days_to_sell": None})
+    assert blank["basis"] == "none" and liquidity_factor(blank, 1.0) == 1.0
+    assert "does not affect the score" in " ".join(blank["notes"])
+
+    # The feedback multiplier stretches the estimate and relabels the basis.
+    slow = assess_liquidity({"sold_90d": 180, "active_now": 20}, None, days_multiplier=2.0, measured_n=7)
+    assert abs(slow["days_p50"] / fast["days_p50"] - 2) < 0.05
+    assert slow["basis"] == "measured" and "7 listings" in " ".join(slow["notes"])
+
+    # Velocity: the $25-in-a-week flip beats the $37-in-a-year one, which is the whole point.
+    quick = monthly_roi(25, 3, 7 + 3)
+    slow_big = monthly_roi(37, 3, 300)
+    assert quick > slow_big * 20
+
+    # The weight is the user's dial: 0 ignores liquidity entirely, 1 lets a dead market cut to a third.
+    assert liquidity_factor(dead, 0) == 1.0
+    assert 0.34 < liquidity_factor(dead, 1.0) < 0.4
+    assert liquidity_factor(fast, 1.0) > 0.9   # grade A keeps essentially all of its score
+    assert liquidity_factor(None, 1.0) == 1.0
+
+    assert days_at_price(fast, "quick") < days_at_price(fast, "market") < days_at_price(fast, "patient")
+    assert human_days(1) == "about a day" and human_days(21) == "3 weeks" and human_days(400).startswith("a year")
+
+
+def test_liquidity_in_scoring(settings):
+    """Two lots with identical spreads rank differently once liquidity is priced in."""
+    now = time.time()
+    lot = {"id": 1, "high_bid": 0.0, "min_bid": 2.0, "bid_count": 0, "ends_at": now + 1800,
+           "buyer_premium_rate": 0.15, "quantity": 1, "category": "Collectibles"}
+    liquid = {"mid": 40.0, "low": 30.0, "high": 50.0, "confidence": 0.8,
+              "demand_signals": {"sold_90d": 200, "active_now": 25, "trend": "flat"}}
+    stuck = {"mid": 40.0, "low": 30.0, "high": 50.0, "confidence": 0.8,
+             "demand_signals": {"sold_90d": 2, "active_now": 180, "trend": "falling"}}
+
+    a = score_lot(lot, liquid, settings, now=now)
+    b = score_lot(lot, stuck, settings, now=now)
+    # Same money, same clock: only the market underneath differs.
+    assert abs(a["spread"] - b["spread"]) < 1e-9
+    assert a["value_score"] == b["value_score"] and a["score_before_liquidity"] == b["score_before_liquidity"]
+    assert a["score"] > b["score"] * 1.4
+    assert a["liquidity"]["grade"] == "A" and b["liquidity"]["grade"] == "F"
+    assert a["monthly_roi"] > b["monthly_roi"] * 10
+    # Risk-adjusted profit discounts the one that probably will not sell at all.
+    assert a["expected_profit_60d"] > a["spread"] * 0.9
+    assert b["expected_profit_60d"] < b["spread"] * 0.2
+
+    # Weight 0 must restore the old behaviour exactly.
+    a0 = score_lot(lot, liquid, settings, now=now, liquidity_weight=0)
+    b0 = score_lot(lot, stuck, settings, now=now, liquidity_weight=0)
+    assert a0["score"] == b0["score"] == a0["score_before_liquidity"]
+
+    from arb.scoring import liquidity_verdict, listing_economics
+    assert "Fast money" in liquidity_verdict(a)
+    assert "on paper" in liquidity_verdict(b)
+    assert "sold in 90 days" in why_upside(lot, liquid, a, settings)
+
+    # Price points get their days from the market, so the slow item's are longer.
+    la = listing_economics(lot, liquid, a, settings)
+    lb = listing_economics(lot, stuck, b, settings)
+    assert la["points"][1]["expected_days"] < lb["points"][1]["expected_days"]
+    assert la["points"][0]["monthly_roi"] > la["points"][2]["monthly_roi"]  # quick turns capital faster
+
+
+def test_liquidity_feedback_and_intel(settings):
+    """Recording what your listings actually did bends the speed model — including the unsold ones."""
+    from arb.calibration import build_report, liquidity_adjustment_for, observed_days
+    from arb.intel import apply_intel_filters, build_trends
+    now = time.time()
+
+    def listing(cat, predicted, actual, i, sold=True, age_days=200):
+        listed_at = now - age_days * 86400
+        return {"lot_id": hash((cat, i)) % 100000, "title": f"{cat} {i}", "category": cat,
+                "closed_at": listed_at - 86400, "predicted_low": 80, "predicted_mid": 100,
+                "predicted_high": 120, "predicted_net": 85, "confidence": 0.7, "method": "claude+web",
+                "score": 50, "hammer": 20, "landed_at_hammer": 23,
+                "bought": True, "bought_price": 23,
+                "sale_price": 100 if sold else None,
+                "sale_at": (listed_at + actual * 86400) if sold else None,
+                "sale_channel": "eBay", "notes": "", "listed_at": listed_at,
+                "list_price": 105, "still_listed": not sold, "views": 50, "watchers": 3,
+                "predicted_days": predicted, "recorded_at": now}
+
+    # Furniture: we said 10 days, it took 30. Five sales clears the sample floor (default 4).
+    rows = [listing("Furniture", 10, 30, i) for i in range(5)]
+    # Three unsold listings sitting for 200 days: censored evidence that must count against the rate.
+    rows += [listing("Furniture", 10, 0, 100 + i, sold=False) for i in range(3)]
+    rep = build_report(rows, settings)
+    fur = next(c for c in rep["liquidity"]["categories"] if c["category"] == "Furniture")
+    assert fur["basis"] == "measured" and abs(fur["days_multiplier"] - 3.0) < 0.01
+    assert fur["n_listed"] == 8 and fur["n_sold"] == 5 and fur["stuck"] == 3
+    # 5 of 8 sold, but none inside 30 days, and the 3 unsold are well past 30: the rate is 5/8 at best.
+    assert fur["sell_rate_30d"] == round(5 / 8, 3)
+    assert observed_days(rows[0]) == 30
+
+    adj = liquidity_adjustment_for(rep["liquidity"], "Furniture")
+    assert abs(adj["days_multiplier"] - 3.0) < 0.01 and adj["measured_n"] == 5
+    # An unknown category falls back to the global measurement, not to 1.0.
+    assert liquidity_adjustment_for(rep["liquidity"], "Nonexistent")["days_multiplier"] > 1
+
+    # And that multiplier really does slow a fresh estimate down.
+    lot = {"id": 9, "high_bid": 0.0, "min_bid": 5.0, "bid_count": 0, "ends_at": now + 3600,
+           "buyer_premium_rate": 0.15, "quantity": 1, "category": "Furniture"}
+    val = {"mid": 90.0, "low": 70.0, "high": 110.0, "confidence": 0.8,
+           "demand_signals": {"sold_90d": 90, "active_now": 30, "trend": "flat"}}
+    base = score_lot(lot, val, settings, now=now)
+    bent = score_lot(lot, val, settings, now=now, **{k: v for k, v in adj.items()})
+    assert abs(bent["liquidity"]["days_p50"] / base["liquidity"]["days_p50"] - 3.0) < 0.05
+    assert bent["score"] < base["score"]
+
+    # Below the sample floor nothing is applied: two sales is not a measurement.
+    thin = build_report([listing("Art", 10, 40, i) for i in range(2)], settings)
+    art = next(c for c in thin["liquidity"]["categories"] if c["category"] == "Art")
+    assert art["basis"] == "none" and art["days_multiplier"] == 1.0
+
+    # Trends: a category seen only once cannot claim a direction.
+    def valuation(cat, age_days, sold_90d):
+        return {"lot_id": 1, "mid": 50.0, "category": cat, "created_at": now - age_days * 86400,
+                "demand_signals": {"sold_90d": sold_90d, "active_now": 50, "trend": "flat"},
+                "demand": "medium", "comps": []}
+
+    vals = [valuation("Tools", 18 - i, 20 + i * 12) for i in range(0, 18, 2)]  # steadily improving
+    vals += [valuation("Art", 3, 4)]
+    trends = build_trends(vals, settings, now=now)
+    tools = next(t for t in trends if t["category"] == "Tools")
+    art_t = next(t for t in trends if t["category"] == "Art")
+    assert tools["direction"] == "warming" and tools["change"] > 0 and len(tools["points"]) >= 4
+    assert art_t["direction"] == "new" and art_t["change"] is None
+
+    # User parameters filter and re-rank without touching the underlying scores.
+    opps = [{"lot": {"id": 1, "title": "fast", "category": "Tools"}, "valuation": {"mid": 40},
+             "score": score_lot(dict(lot, id=1), {"mid": 40.0, "low": 30.0, "high": 50.0, "confidence": 0.8,
+                                                  "demand_signals": {"sold_90d": 200, "active_now": 25}},
+                                settings, now=now)},
+            {"lot": {"id": 2, "title": "stuck", "category": "Art"}, "valuation": {"mid": 400},
+             "score": score_lot(dict(lot, id=2), {"mid": 400.0, "low": 300.0, "high": 500.0, "confidence": 0.8,
+                                                  "demand_signals": {"sold_90d": 2, "active_now": 180}},
+                                settings, now=now)}]
+    by_spread = apply_intel_filters(opps, rank_by="spread")
+    by_velocity = apply_intel_filters(opps, rank_by="velocity")
+    assert by_spread[0]["lot"]["id"] == 2      # the big number wins on paper
+    assert by_velocity[0]["lot"]["id"] == 1    # the fast one wins on capital
+    assert [o["lot"]["id"] for o in apply_intel_filters(opps, min_liquidity_grade="B")] == [1]
+    assert [o["lot"]["id"] for o in apply_intel_filters(opps, max_days_to_sell=30)] == [1]
+    assert len(apply_intel_filters(opps)) == 2  # no parameters, nothing dropped

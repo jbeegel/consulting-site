@@ -49,6 +49,14 @@ export const config = {
   calibrationMaxBias: num("SPREAD_CALIBRATION_MAX_BIAS", 1.5),
   settlePerRun: Math.floor(num("SPREAD_SETTLE_PER_RUN", 40)),
 
+  // liquidity: how fast the money comes back. Weight 0 ranks on raw upside only.
+  liquidityWeight: Math.max(0, Math.min(1, num("SPREAD_LIQUIDITY_WEIGHT", 0.7))),
+  handlingDays: num("SPREAD_HANDLING_DAYS", 3),
+  maxDaysToSell: num("SPREAD_MAX_DAYS_TO_SELL", 365),
+  /** Minimum of your own listings in a category before observed speed overrides the model. */
+  liquidityMinSales: Math.floor(num("SPREAD_LIQUIDITY_MIN_SALES", 4)),
+  trendWindowDays: Math.floor(num("SPREAD_TREND_WINDOW_DAYS", 21)),
+
   grading: bool("SPREAD_GRADING", true),
   gradingFee: num("SPREAD_GRADING_FEE", 75), // PSA regular tier; all-in with shipping ~ $90
   gradingShip: num("SPREAD_GRADING_SHIP", 15),

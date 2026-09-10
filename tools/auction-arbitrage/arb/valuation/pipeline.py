@@ -124,7 +124,8 @@ class ValuationPipeline:
         if not force:
             cached = self.store.cached_valuation(key, self.settings.valuation_ttl_days * 86400)
             if cached:
-                cached = dict(cached, lot_id=lot["id"], cache_hit=True)
+                cached = dict(cached, lot_id=lot["id"], cache_hit=True,
+                              category=lot.get("category") or "Uncategorized")
                 self.store.save_valuation(lot["id"], cached)
                 return Valuation(**{k: v for k, v in cached.items() if k in Valuation.__dataclass_fields__})
 
@@ -156,6 +157,7 @@ class ValuationPipeline:
                 val.comps = [c.__dict__ for c in comps[:10]]
 
         val.created_at = time.time()
+        val.category = lot.get("category") or "Uncategorized"  # so trends can group history without a join
         val = self._apply_calibration(lot, val)
         self.store.save_valuation(lot["id"], val.to_dict())
         return val

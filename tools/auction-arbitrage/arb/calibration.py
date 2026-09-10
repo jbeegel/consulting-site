@@ -76,6 +76,108 @@ def _calibrate_group(category: str, rows: list[dict[str, Any]], s: Settings, now
     }
 
 
+# ---------------------------------------------------------------------------- liquidity feedback
+#
+# The price loop above asks "was the number right". This one asks "did it ever actually sell", which is
+# the question a $40 item sitting unviewed for three months answers differently.
+#
+# OBSERVED DAYS -- for the things that sold, listed_at to sale_at. Median observed over median predicted
+# gives a per-category multiplier that stretches (or compresses) every future speed estimate.
+#
+# 30-DAY SELL RATE -- sold within 30 days, over everything that had a fair shot at 30 days. The
+# denominator deliberately includes listings that are STILL SITTING, because those are the whole point:
+# a loop that only learns from things that sold would conclude everything sells. A listing that has been
+# up for 12 days and has not sold is not yet evidence either way, so it is excluded until day 30
+# (right-censoring); one that has been up for 90 days unsold counts fully against the rate.
+
+
+def observed_days(o: dict[str, Any]) -> float | None:
+    """Days from listing to sale, for the ones that sold."""
+    listed, sold = o.get("listed_at"), o.get("sale_at")
+    if not listed or not sold:
+        return None
+    d = (sold - listed) / 86400
+    return d if d >= 0 else None
+
+
+def days_on_market(o: dict[str, Any], now: float) -> float | None:
+    """Days a listing has been up, sold or not."""
+    listed = o.get("listed_at")
+    if not listed:
+        return None
+    d = ((o.get("sale_at") or now) - listed) / 86400
+    return d if d >= 0 else None
+
+
+def _calibrate_liquidity_group(category: str, rows: list[dict[str, Any]], s: Settings, now: float) -> dict[str, Any]:
+    listed = [o for o in rows if o.get("listed_at")]
+    sold = [o for o in listed if o.get("sale_at") and o.get("sale_price") is not None]
+    obs = [d for d in (observed_days(o) for o in sold) if d is not None]
+    # Compare like with like: only the items we both predicted and observed.
+    pairs = [(observed_days(o), o["predicted_days"]) for o in sold
+             if observed_days(o) is not None and o.get("predicted_days")]
+    pairs = [(a, b) for a, b in pairs if b and b > 0]
+
+    multiplier, basis = 1.0, "none"
+    if len(pairs) >= s.liquidity_min_sales:
+        m = _median([a / b for a, b in pairs])
+        if m:
+            multiplier, basis = max(0.3, min(4.0, m)), "measured"
+
+    # Censoring: a listing only enters the 30-day denominator once it has had 30 days, or once it sold.
+    eligible = [o for o in listed
+                if (days_on_market(o, now) or 0) >= 30 or o.get("sale_at")]
+    within30 = [o for o in eligible if (observed_days(o) or 1e9) <= 30]
+    stuck = sum(1 for o in listed if not o.get("sale_at") and (days_on_market(o, now) or 0) >= 60)
+    med_obs = _median(obs)
+    med_pred = _median([b for _, b in pairs])
+    return {
+        "category": category, "n_listed": len(listed), "n_sold": len(sold),
+        "observed_days": round(med_obs, 1) if med_obs is not None else None,
+        "predicted_days": round(med_pred, 1) if med_pred is not None else None,
+        "days_multiplier": round(multiplier, 3),
+        "sell_rate_30d": round(len(within30) / len(eligible), 3) if eligible else None,
+        "stuck": stuck, "basis": basis, "updated_at": now,
+    }
+
+
+def build_liquidity_report(outcomes: Iterable[dict[str, Any]], s: Settings, now: float) -> dict[str, Any]:
+    rows = list(outcomes)
+    by_cat: dict[str, list[dict[str, Any]]] = {}
+    for o in rows:
+        by_cat.setdefault(o.get("category") or "Uncategorized", []).append(o)
+    categories = [g for g in (_calibrate_liquidity_group(c, r, s, now) for c, r in by_cat.items())
+                  if g["n_listed"] > 0]
+    categories.sort(key=lambda x: -x["n_listed"])
+    # Realized monthly ROI: what your capital has actually earned per month, across real round trips.
+    rois = []
+    for o in rows:
+        d = observed_days(o)
+        if d is None or o.get("sale_price") is None or not o.get("bought_price"):
+            continue
+        rois.append(((o["sale_price"] - o["bought_price"]) / o["bought_price"]) * (30 / max(d, 1)))
+    med_roi = _median(rois)
+    return {
+        "global": _calibrate_liquidity_group(GLOBAL, rows, s, now),
+        "categories": categories,
+        "realized_monthly_roi": round(med_roi, 3) if med_roi is not None else None,
+    }
+
+
+def liquidity_adjustment_for(report: dict[str, Any] | None, category: str) -> dict[str, Any]:
+    """The speed adjustment for a new estimate in this category. Category first, then global."""
+    none = {"days_multiplier": 1.0, "measured_n": 0}
+    if not report:
+        return none
+    cats = report.get("categories", [])
+    cat = next((x for x in cats if x["category"] == (category or "Uncategorized")), None)
+    pick = cat if cat and cat["basis"] == "measured" else (
+        report["global"] if report.get("global", {}).get("basis") == "measured" else None)
+    if not pick:
+        return none
+    return {"days_multiplier": pick["days_multiplier"], "measured_n": pick["n_sold"]}
+
+
 def build_report(outcomes: Iterable[dict[str, Any]], s: Settings, now: float | None = None) -> dict[str, Any]:
     now = now or time.time()
     rows = list(outcomes)
@@ -92,6 +194,7 @@ def build_report(outcomes: Iterable[dict[str, Any]], s: Settings, now: float | N
         "categories": categories,
         "totals": {"closed": len(rows), "sold": len(sold),
                    "realized_profit": round(realized, 2) if sold else None},
+        "liquidity": build_liquidity_report(rows, s, now),
     }
 
 

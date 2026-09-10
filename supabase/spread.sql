@@ -73,3 +73,14 @@ create table if not exists spread_outcomes (
 );
 create index if not exists spread_outcomes_closed on spread_outcomes (closed_at desc);
 create index if not exists spread_outcomes_cat on spread_outcomes (category);
+
+-- Liquidity feedback loop: how long your listings actually took, including the ones still sitting.
+-- Safe to re-run; `add column if not exists` is a no-op on an already-migrated database.
+alter table spread_outcomes add column if not exists listed_at timestamptz;
+alter table spread_outcomes add column if not exists still_listed boolean;
+alter table spread_outcomes add column if not exists predicted_days double precision;
+create index if not exists spread_outcomes_listed on spread_outcomes (listed_at desc);
+
+-- Valuations carry their lot's category so market trends can be grouped without a join.
+alter table spread_valuations add column if not exists category text;
+create index if not exists spread_valuations_created on spread_valuations (created_at desc);

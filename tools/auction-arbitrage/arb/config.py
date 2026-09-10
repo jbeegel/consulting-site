@@ -57,6 +57,13 @@ class Settings:
     calibration_max_bias: float = field(default_factory=lambda: _f("ARB_CALIBRATION_MAX_BIAS", 1.5))
     settle_per_run: int = field(default_factory=lambda: int(_f("ARB_SETTLE_PER_RUN", 40)))
 
+    # liquidity: how fast the money comes back. Weight 0 ranks on raw upside only.
+    liquidity_weight: float = field(default_factory=lambda: max(0.0, min(1.0, _f("ARB_LIQUIDITY_WEIGHT", 0.7))))
+    handling_days: float = field(default_factory=lambda: _f("ARB_HANDLING_DAYS", 3.0))
+    max_days_to_sell: float = field(default_factory=lambda: _f("ARB_MAX_DAYS_TO_SELL", 365.0))
+    liquidity_min_sales: int = field(default_factory=lambda: int(_f("ARB_LIQUIDITY_MIN_SALES", 4)))
+    trend_window_days: int = field(default_factory=lambda: int(_f("ARB_TREND_WINDOW_DAYS", 21)))
+
     # grading economics (trading cards)
     grading: bool = field(default_factory=lambda: _b("ARB_GRADING", True))
     grading_fee: float = field(default_factory=lambda: _f("ARB_GRADING_FEE", 75.0))  # PSA regular-tier per card; economy/bulk is lower but slow

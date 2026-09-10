@@ -7,6 +7,8 @@ import time
 from typing import Any
 
 from .config import Settings
+from .liquidity import (assess_liquidity, days_at_price, liquidity_factor, monthly_roi,
+                        risk_adjusted_profit)
 
 TIME_BUCKETS = [  # (label, max_seconds)
     ("<1h", 3600), ("1-3h", 3 * 3600), ("3-6h", 6 * 3600), ("6-12h", 12 * 3600),
@@ -82,7 +84,9 @@ def landed_cost(bid: float, lot: dict[str, Any], s: Settings) -> float:
     return cost + s.pickup_cost
 
 
-def score_lot(lot: dict[str, Any], val: dict[str, Any] | None, s: Settings, *, now: float | None = None) -> dict[str, Any]:
+def score_lot(lot: dict[str, Any], val: dict[str, Any] | None, s: Settings, *, now: float | None = None,
+              liquidity_weight: float | None = None, days_multiplier: float = 1.0,
+              measured_n: int = 0, handling_days: float | None = None) -> dict[str, Any]:
     now = now or time.time()
     ends_at = lot.get("ends_at")
     secs_left = (ends_at - now) if ends_at else lot.get("time_left_seconds")
@@ -110,7 +114,9 @@ def score_lot(lot: dict[str, Any], val: dict[str, Any] | None, s: Settings, *, n
     }
     if not out["valued"]:
         out.update({"net_resale": None, "spread": None, "ratio": None, "score": 0.0, "value_score": 0.0,
-                    "heat": "unvalued", "confidence": 0.0, "radar": "scan"})
+                    "heat": "unvalued", "confidence": 0.0, "radar": "scan", "liquidity": None,
+                    "liquidity_factor": 1.0, "score_before_liquidity": 0.0, "monthly_roi": None,
+                    "expected_profit_60d": None})
         return out
 
     mid = float(val["mid"])
@@ -138,13 +144,48 @@ def score_lot(lot: dict[str, Any], val: dict[str, Any] | None, s: Settings, *, n
     if val.get("authenticity_risk"):
         value_score *= 0.75
     # score: the disparity discounted by how much the current bid can be trusted (time left)
-    score = value_score * out["price_reliability"]
+    before_liquidity = round(value_score * out["price_reliability"], 1)
+
+    # Liquidity: worth is not the same as sellable. A number nobody is buying at is a number on paper.
+    liq = assess_liquidity(val.get("demand_signals"), val,
+                           handling_days=s.handling_days if handling_days is None else handling_days,
+                           max_days=s.max_days_to_sell, days_multiplier=days_multiplier,
+                           measured_n=measured_n)
+    weight = s.liquidity_weight if liquidity_weight is None else liquidity_weight
+    factor = liquidity_factor(liq, weight)
+    score = round(before_liquidity * factor, 1)
     out.update({
         "net_resale": net, "net_resale_low": net_low, "spread": spread, "spread_low": net_low - cost,
-        "ratio": ratio, "confidence": conf, "value_score": round(value_score, 1), "score": round(score, 1),
+        "ratio": ratio, "confidence": conf, "value_score": round(value_score, 1), "score": score,
         "heat": heat(score), "sweet_spot": sweet, "radar": radar_level(secs_left, value_score),
+        "liquidity": liq, "liquidity_factor": factor, "score_before_liquidity": before_liquidity,
+        "monthly_roi": monthly_roi(spread, cost, liq["capital_days"]),
+        "expected_profit_60d": risk_adjusted_profit(spread, liq),
     })
     return out
+
+
+def per_month(roi: float) -> str:
+    """Monthly return on capital. Past ~10x a percentage stops reading as a number, so switch to
+    multiples: a $1 lot that nets $30 in a week is '40x/month', not '4000%'."""
+    return f"{round(roi)}x/month" if roi >= 9.99 else f"{round(roi * 100)}%/month"
+
+
+def liquidity_verdict(sc: dict[str, Any]) -> str:
+    """How a lot reads once liquidity is in the picture: the one-line verdict the table shows."""
+    liq = sc.get("liquidity")
+    if not liq or not sc.get("valued"):
+        return ""
+    roi = sc.get("monthly_roi")
+    tail = "" if roi is None else f", about {per_month(roi)} on the capital"
+    if liq["grade"] == "F" or liq["depth"] == "dead":
+        return (f"Worth ${sc['net_resale']:,.0f} on paper, but almost nothing comparable sells — "
+                f"expect {liq['eta']} or never.")
+    if liq["grade"] == "D":
+        return f"Slow money: {liq['eta']} to sell{tail}."
+    if roi is not None and roi >= 1 and liq["grade"] in ("A", "B"):
+        return f"Fast money: sells in {liq['eta']}, roughly {per_month(roi)} on what you tie up."
+    return f"Sells in about {liq['eta']}" + ("" if roi is None else f" — {per_month(roi)} on the capital") + "."
 
 
 # ---------------------------------------------------------------------------
@@ -185,10 +226,16 @@ def listing_economics(lot: dict[str, Any], val: dict[str, Any] | None, sc: dict[
     charged = ship if market < 60 else 0.0
     promo = s.ebay_promoted or max(0.0, min(0.2, float(lst.get("promoted_rate") or 0)))
     pts = []
-    for label, price, days in (("quick", quick, 7), ("market", market, 21), ("patient", patient, 45)):
+    liq = sc.get("liquidity")
+    handling = liq["handling_days"] if liq else s.handling_days
+    for label, price in (("quick", quick), ("market", market), ("patient", patient)):
         e = net_out(price, category=cat, shipping_cost=ship, s=s, shipping_charged=charged, promoted_rate=promo)
-        e.update({"label": label, "expected_days": days, "profit": e["net"] - sc["landed_cost"],
-                  "roi": (e["net"] - sc["landed_cost"]) / sc["landed_cost"] if sc["landed_cost"] > 0 else None})
+        # Days come from the measured market, not a constant: pricing below the comps sells sooner.
+        days = days_at_price(liq, label)
+        profit = e["net"] - sc["landed_cost"]
+        e.update({"label": label, "expected_days": days, "profit": profit,
+                  "roi": profit / sc["landed_cost"] if sc["landed_cost"] > 0 else None,
+                  "monthly_roi": monthly_roi(profit, sc["landed_cost"], days + handling)})
         pts.append(e)
     return {
         "category": cat, "fee_rate": ebay_fee_rate(cat, s), "shipping_cost": ship, "buyer_pays_shipping": charged > 0,
@@ -223,6 +270,23 @@ def why_upside(lot: dict[str, Any], val: dict[str, Any], sc: dict[str, Any], s: 
         bits.append("Plenty of time left; expect the price to rise near close.")
     if val.get("standout_item"):
         bits.append(f"Standout piece: {val['standout_item']}.")
+    liq = sc.get("liquidity")
+    if liq:
+        parts = [f"Liquidity {liq['grade']} ({liq['score']}/100)"]
+        if liq["sold_90d"] is not None and liq["active_now"] is not None:
+            parts.append(f"{liq['sold_90d']} sold in 90 days vs {liq['active_now']} listed now")
+        if liq["sell_through"] is not None:
+            parts.append(f"{round(liq['sell_through'] * 100)}% sell-through")
+        roi = "" if sc.get("monthly_roi") is None else f" at about {per_month(sc['monthly_roi'])}"
+        bits.append(", ".join(parts) + f": expect about {liq['eta']} to sell "
+                    f"({round(liq['sell_probability_30d'] * 100)}% chance inside 30 days), so roughly "
+                    f"{liq['capital_days']} days of your money{roi}.")
+        if liq["grade"] == "F" or liq["depth"] == "dead":
+            bits.append("Treat the resale number as theoretical until something comparable actually sells.")
+        if liq["trend"] == "falling":
+            bits.append("Demand is trending down; price at the quick number, not the patient one.")
+        if liq["seasonality"]:
+            bits.append(f"Seasonality: {liq['seasonality']}.")
     ge = grading_economics(val, sc, s)
     if ge:
         if ge["upside"] > 0:

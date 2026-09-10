@@ -3,14 +3,25 @@
 import { sendAlerts } from "./alerts";
 import { config, type Config } from "./config";
 import { applyState, HiBidClient, normalizeLot } from "./hibid";
-import { buildReport } from "./calibration";
-import { gradingEconomics, landedCost, listingEconomics, scoreLot, whyUpside } from "./scoring";
+import { buildReport, liquidityAdjustmentFor } from "./calibration";
+import { buildIntel } from "./intel";
+import { gradingEconomics, landedCost, listingEconomics, scoreLot, whyUpside, type ScoreOptions } from "./scoring";
 import { getStore, type Store } from "./store";
-import type { CalibrationReport, Lot, Opportunity, Outcome, ScanParams, Valuation } from "./types";
+import type { CalibrationReport, IntelParams, Lot, MarketIntel, Opportunity, Outcome, ScanParams, Valuation } from "./types";
 import { ValuationPipeline } from "./valuation";
 
-export function buildOpportunity(lot: Lot, val: Valuation | null, c: Config = config, now = Date.now() / 1000): Opportunity {
-  const score = scoreLot(lot, val, c, now);
+/** Score options for one lot: the user's liquidity weight plus whatever the feedback loop knows about
+ *  how fast this category really moves. */
+export function scoreOptionsFor(lot: Lot, report: CalibrationReport | null, p: IntelParams = {}, c: Config = config): ScoreOptions {
+  const adj = liquidityAdjustmentFor(report?.liquidity, lot.category);
+  return {
+    liquidityWeight: p.liquidity_weight ?? c.liquidityWeight,
+    liquidity: { ...adj, handlingDays: p.handling_days ?? c.handlingDays, maxDays: c.maxDaysToSell },
+  };
+}
+
+export function buildOpportunity(lot: Lot, val: Valuation | null, c: Config = config, now = Date.now() / 1000, opts: ScoreOptions = {}): Opportunity {
+  const score = scoreLot(lot, val, c, now, opts);
   return { lot, valuation: val, score, why: val ? whyUpside(lot, val, score, c) : "", listing: listingEconomics(lot, val, score, c), grading: gradingEconomics(val, score, c) };
 }
 
@@ -56,7 +67,7 @@ export class Scanner {
         const closed = st && (st.isClosed || st.status === "CLOSED");
         if (!closed && hammer === null) continue; // still running (soft close extended it)
         const val = await this.store.getValuation(lot.id);
-        const sc = scoreLot(lot, val, this.c);
+        const sc = scoreLot(lot, val, this.c, Date.now() / 1000, scoreOptionsFor(lot, this._calibration?.report ?? null, {}, this.c));
         const outcome: Outcome = {
           lot_id: lot.id,
           title: lot.title,
@@ -72,6 +83,8 @@ export class Scanner {
           hammer,
           landed_at_hammer: hammer === null ? null : landedCost(hammer, lot, this.c),
           bought: null, bought_price: null, sale_price: null, sale_at: null, sale_channel: "", notes: "",
+          listed_at: null, list_price: null, still_listed: null, views: null, watchers: null,
+          predicted_days: sc.liquidity?.days_p50 ?? null,
           recorded_at: Date.now() / 1000,
         };
         await this.store.saveOutcome(outcome);
@@ -151,7 +164,9 @@ export class Scanner {
         }
         if (refreshed.length) await this.store.upsertLots(refreshed);
         out.refreshed = refreshed.length;
-        const opps = (refreshed.length ? refreshed : closing).filter((l) => !l.is_closed).map((l) => buildOpportunity(l, vals.get(l.id) ?? null, this.c));
+        const report = await this.calibration();
+        const opps = (refreshed.length ? refreshed : closing).filter((l) => !l.is_closed)
+          .map((l) => buildOpportunity(l, vals.get(l.id) ?? null, this.c, Date.now() / 1000, scoreOptionsFor(l, report, {}, this.c)));
         out.alerted = await sendAlerts(this.store, opps);
       }
       out.settled = await this.settleClosedLots(this.c.settlePerRun, deadline);
@@ -164,6 +179,18 @@ export class Scanner {
       out.error = msg;
     }
     return out;
+  }
+
+  /** The market-intel board: category trends, velocity leaders and value traps, all from stored data. */
+  async intel(p: IntelParams = {}): Promise<MarketIntel> {
+    const report = await this.calibration();
+    const now = Date.now() / 1000;
+    const lots = await this.store.lots({ limit: 5000 });
+    const vals = await this.store.valuationsFor(lots.map((l) => l.id));
+    const opps = lots.map((l) => buildOpportunity(l, vals.get(l.id) ?? null, this.c, now, scoreOptionsFor(l, report, p, this.c)));
+    const history = await this.store.valuationHistory(now - this.c.trendWindowDays * 86400);
+    const liquidity = report?.liquidity ?? buildReport([], this.c, now).liquidity;
+    return buildIntel(opps, history, liquidity, this.c, now);
   }
 
   async refreshLot(lotId: number): Promise<Lot | null> {

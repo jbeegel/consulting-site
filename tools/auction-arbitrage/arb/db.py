@@ -18,8 +18,9 @@ CREATE INDEX IF NOT EXISTS lots_ends ON lots(ends_at);
 CREATE INDEX IF NOT EXISTS lots_cat ON lots(category);
 CREATE TABLE IF NOT EXISTS valuations (
   lot_id INTEGER PRIMARY KEY, title_key TEXT, low REAL, mid REAL, high REAL, confidence REAL,
-  method TEXT, created_at REAL, data TEXT NOT NULL
+  method TEXT, created_at REAL, category TEXT, data TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS valuations_created ON valuations(created_at);
 CREATE TABLE IF NOT EXISTS valuation_cache (
   title_key TEXT PRIMARY KEY, created_at REAL, data TEXT NOT NULL
 );
@@ -27,6 +28,7 @@ CREATE TABLE IF NOT EXISTS outcomes (
   lot_id INTEGER PRIMARY KEY, title TEXT, category TEXT, closed_at REAL,
   predicted_mid REAL, predicted_net REAL, confidence REAL, method TEXT, score REAL,
   hammer REAL, landed_at_hammer REAL, sale_price REAL, sale_at REAL,
+  listed_at REAL, still_listed INTEGER, predicted_days REAL,
   recorded_at REAL, data TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS outcomes_closed ON outcomes(closed_at);
@@ -114,13 +116,14 @@ class Store:
     def save_valuation(self, lot_id: int, val: dict[str, Any]) -> None:
         with self._lock:
             self._conn.execute(
-                """INSERT INTO valuations (lot_id,title_key,low,mid,high,confidence,method,created_at,data)
-                   VALUES (?,?,?,?,?,?,?,?,?)
+                """INSERT INTO valuations (lot_id,title_key,low,mid,high,confidence,method,created_at,category,data)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(lot_id) DO UPDATE SET title_key=excluded.title_key, low=excluded.low, mid=excluded.mid,
                      high=excluded.high, confidence=excluded.confidence, method=excluded.method,
-                     created_at=excluded.created_at, data=excluded.data""",
+                     created_at=excluded.created_at, category=excluded.category, data=excluded.data""",
                 (lot_id, val.get("title_key"), val.get("low"), val.get("mid"), val.get("high"),
-                 val.get("confidence"), val.get("method"), val.get("created_at", time.time()), json.dumps(val)),
+                 val.get("confidence"), val.get("method"), val.get("created_at", time.time()),
+                 val.get("category"), json.dumps(val)),
             )
             if val.get("title_key") and val.get("method") not in (None, "none"):
                 self._conn.execute(
@@ -132,6 +135,14 @@ class Store:
         with self._lock:
             row = self._conn.execute("SELECT data FROM valuations WHERE lot_id=?", (lot_id,)).fetchone()
         return json.loads(row["data"]) if row else None
+
+    def valuation_history(self, since: float, limit: int = 5000) -> list[dict[str, Any]]:
+        """Every valuation created since `since`, for the market-trend window."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT data FROM valuations WHERE created_at >= ? ORDER BY created_at DESC LIMIT ?",
+                (since, limit)).fetchall()
+        return [json.loads(r["data"]) for r in rows]
 
     def valuations_for(self, lot_ids: Iterable[int]) -> dict[int, dict[str, Any]]:
         ids = list(lot_ids)
@@ -191,17 +202,21 @@ class Store:
         with self._lock:
             self._conn.execute(
                 """INSERT INTO outcomes (lot_id,title,category,closed_at,predicted_mid,predicted_net,confidence,
-                   method,score,hammer,landed_at_hammer,sale_price,sale_at,recorded_at,data)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                   method,score,hammer,landed_at_hammer,sale_price,sale_at,listed_at,still_listed,
+                   predicted_days,recorded_at,data)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(lot_id) DO UPDATE SET title=excluded.title, category=excluded.category,
                      closed_at=excluded.closed_at, predicted_mid=excluded.predicted_mid,
                      predicted_net=excluded.predicted_net, confidence=excluded.confidence, method=excluded.method,
                      score=excluded.score, hammer=excluded.hammer, landed_at_hammer=excluded.landed_at_hammer,
-                     sale_price=excluded.sale_price, sale_at=excluded.sale_at, recorded_at=excluded.recorded_at,
-                     data=excluded.data""",
+                     sale_price=excluded.sale_price, sale_at=excluded.sale_at, listed_at=excluded.listed_at,
+                     still_listed=excluded.still_listed, predicted_days=excluded.predicted_days,
+                     recorded_at=excluded.recorded_at, data=excluded.data""",
                 (o["lot_id"], o.get("title"), o.get("category"), o.get("closed_at"), o.get("predicted_mid"),
                  o.get("predicted_net"), o.get("confidence"), o.get("method"), o.get("score"), o.get("hammer"),
-                 o.get("landed_at_hammer"), o.get("sale_price"), o.get("sale_at"), o.get("recorded_at", time.time()),
+                 o.get("landed_at_hammer"), o.get("sale_price"), o.get("sale_at"), o.get("listed_at"),
+                 None if o.get("still_listed") is None else int(bool(o.get("still_listed"))),
+                 o.get("predicted_days"), o.get("recorded_at", time.time()),
                  json.dumps(o)),
             )
 
