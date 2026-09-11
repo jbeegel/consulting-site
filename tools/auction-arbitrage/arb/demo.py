@@ -82,8 +82,31 @@ CATALOG: list[tuple] = [
     ("G) VINTAGE Metal Calendar Bank - CITIZENS BANK", "Collectibles > Advertising", 20, 45, "medium", ["Advertising still banks with working calendar are a niche", "Local bank collectors"], ["Missing key, stuck calendar"], False, ""),
     ("G) cast plaster native wall hanging 1940's", "Collectibles > Decorative", 25, 60, "medium", ["1940s chalkware wall plaques sold in pairs do well"], ["Chips in plaster are hard to hide"], False, ""),
     ("G) YOUNG Folks SPEAKER 1882 Hardcover", "Books > Antiquarian & Collectible", 15, 35, "low", ["Decorative Victorian binding"], ["Foxing, loose hinges"], False, ""),
+    ("1989 Upper Deck Ken Griffey Jr. #1 Rookie Card RC raw", "Collectibles > Trading Cards > Baseball", 25, 45, "high", ["The iconic junk-wax rookie; liquid at every grade", "Pack-fresh copies gem at a low rate but PSA 10s clear $1,000+"], ["Massive population; only a 9 or 10 moves the needle", "Counterfeits and trimmed copies exist"], False, ""),
     ("G) vintage antique knic knacs", "Collectibles > Decorative", 70, 120, "medium", ["One Deruta Italy hand-painted majolica mini vase carries the lot", "Delft and drip-glaze miniatures sell in groups"], ["Chips on the black glass vase feet", "Shell-art souvenir is near worthless"], False, ""),
 ]
+
+DEMO_GRADING = {
+    "1989 Upper Deck Ken Griffey Jr. #1 Rookie Card RC raw": {
+        "applicable": True,
+        "card": {"year": "1989", "set": "Upper Deck", "card_number": "1", "player_or_subject": "Ken Griffey Jr.", "parallel_or_variation": "base", "rookie": True},
+        "condition": {"centering": "~55/45 L/R, ~60/40 T/B from the front scan", "corners": "sharp at 3; top-left slightly soft", "edges": "clean, no chipping visible", "surface": "no print lines visible; gloss intact; back not shown", "notes": "Back photo needed to rule out the common back-centering issue.", "photo_quality": "limited"},
+        "grade_probabilities": {"psa10": 0.04, "psa9": 0.33, "psa8": 0.40, "psa7_or_below": 0.23},
+        "predicted_grade": "PSA 8",
+        "graded_comps": [
+            {"grader": "PSA", "grade": "10", "price": 1250, "source": "PSA APR (demo)", "url": "https://www.psacard.com/auctionprices", "date": "Aug 2026"},
+            {"grader": "PSA", "grade": "10", "price": 1180, "source": "eBay sold (demo)", "url": "https://www.ebay.com/sch/i.html?_nkw=1989+upper+deck+griffey+psa+10&LH_Sold=1&LH_Complete=1", "date": "Aug 2026"},
+            {"grader": "PSA", "grade": "9", "price": 115, "source": "130point (demo)", "url": "https://130point.com/sales/", "date": "Aug 2026"},
+            {"grader": "PSA", "grade": "9", "price": 105, "source": "eBay sold (demo)", "url": "https://www.ebay.com/sch/i.html?_nkw=1989+upper+deck+griffey+psa+9&LH_Sold=1&LH_Complete=1", "date": "Jul 2026"},
+            {"grader": "PSA", "grade": "8", "price": 48, "source": "SportsCardsPro (demo)", "url": "https://www.sportscardspro.com/", "date": "Aug 2026"},
+            {"grader": "PSA", "grade": "7", "price": 30, "source": "eBay sold (demo)", "url": "https://www.ebay.com/sch/i.html?_nkw=1989+upper+deck+griffey+psa+7&LH_Sold=1&LH_Complete=1", "date": "Aug 2026"},
+        ],
+        "pop": {"psa_total": 118000, "psa_10": 4600, "psa_9": 46000, "note": "Gem rate ~4%; enormous pop caps PSA 9 at ~$110 but PSA 10 holds four figures on demand."},
+        "raw_value": 35,
+        "recommended_grader": "PSA",
+        "grading_notes": "Check back centering and for the '1989' print snow; measure for trimming (2.5 x 3.5 in); confirm the hologram on the back.",
+    }
+}
 
 DEMO_ITEMS = {
     "G) vintage antique knic knacs": [
@@ -108,6 +131,62 @@ AUCTIONS = [
     (776411, "Farm & Construction Equipment Consignment", "Prairie Auction Co", "Lincoln", "NE", 0.10),
     (776550, "Weekly Electronics & Returns Pallet Auction", "QuickBid Liquidators", "Phoenix", "AZ", 0.15),
 ]
+
+
+# Items whose resale number looks fine but whose market is genuinely stuck. These are the whole point
+# of the liquidity layer: worth $40 and unsellable is a different thing from worth $40.
+_ILLIQUID = ("Peloton", "oil painting", "Original oil", "encyclopedia", "Piano", "organ", "china cabinet",
+             "Hummel", "Precious Moments", "Franklin Mint", "collector plate")
+
+
+# Categories that are visibly warming or cooling over the demo's trend window, so the intel panel has
+# something real to show rather than a flat line.
+_DRIFT = {"Tools": 1, "Electronics": 1, "Sporting Goods": -1, "Furniture": -1, "Books": -1, "Music": 1}
+
+
+def _demand_signals(title: str, demand: str, mid: float, rng: random.Random,
+                    drift: int = 0, recency: float = 1.0) -> dict[str, Any]:
+    """Plausible eBay sold/active counts. The point of the demo is that these differ wildly for items
+    with similar price tags: that difference is what the intel layer surfaces."""
+    stuck = any(w.lower() in title.lower() for w in _ILLIQUID)
+    if stuck:
+        sold, active = rng.randint(0, 4), rng.randint(60, 240)
+        trend, note = "falling", "Everyone is trying to unload one; almost nobody is buying."
+    elif demand == "high":
+        sold, active = rng.randint(70, 260), rng.randint(25, 110)
+        trend, note = rng.choice(["rising", "flat", "flat"]), "Steady, deep market; priced right it moves in days."
+    elif demand == "medium":
+        sold, active = rng.randint(14, 45), rng.randint(35, 160)
+        trend, note = rng.choice(["flat", "flat", "falling"]), "Moves, but you are one of many sellers."
+    else:
+        sold, active = rng.randint(1, 8), rng.randint(30, 180)
+        trend, note = rng.choice(["falling", "flat"]), "Thin market: a handful of sales a quarter."
+    # Cheap smalls churn faster than their price suggests; expensive things always take longer.
+    if mid < 40:
+        sold = int(sold * 1.4) + 3
+    if mid > 800:
+        sold = max(1, int(sold * 0.4))
+        active = int(active * 0.7)
+    # `recency` is 0 (oldest sample in the window) to 1 (today). A warming category sells more and lists
+    # less as you approach today; a cooling one does the reverse. This is what the trend arrows read.
+    if drift:
+        sold = max(0, round(sold * (1 + drift * 0.45 * recency)))
+        active = max(1, round(active * (1 - drift * 0.25 * recency)))
+        if drift > 0 and trend != "rising" and recency > 0.6:
+            trend = "rising"
+        elif drift < 0 and recency > 0.6:
+            trend = "falling"
+    return {
+        "sold_90d": sold, "active_now": active,
+        "sell_through": round(sold / (sold + active), 3) if sold + active else None,
+        "median_days_to_sell": None,
+        "watchers_typical": round(rng.uniform(0.5, 14), 1),
+        "price_dispersion": round(rng.uniform(0.2, 1.1), 2),
+        "trend": trend,
+        "seasonality": "Sells best Oct-Dec" if rng.random() < 0.25 else "",
+        "buyer_pool": "Collectors and resellers" if demand != "high" else "Broad retail demand",
+        "note": note,
+    }
 
 
 def make_demo(seed: int = 7, now: float | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -156,6 +235,11 @@ def make_demo(seed: int = 7, now: float | None = None) -> tuple[list[dict[str, A
                 "category_id": 10000 + idx, "category": top, "category_path": cat_path, "fetched_at": now,
                 "demo": True,
             })
+            # Spread valuations back across the trend window so the intel panel shows a real time series
+            # rather than one flat point; `recency` is 0 for the oldest sample and 1 for today.
+            age_days = rng.uniform(0, 18)
+            recency = 1 - age_days / 18
+            valued_at = now - age_days * 86400
             conf = 0.55 if auth else 0.8
             if demand == "low":
                 conf = 0.35
@@ -171,14 +255,18 @@ def make_demo(seed: int = 7, now: float | None = None) -> tuple[list[dict[str, A
                 "currency": "USD", "confidence": conf,
                 "confidence_reason": "Demo valuation: typical sold-comp range for this item in used/good condition.",
                 "method": "claude+web", "demand": demand, "days_to_sell": {"high": 7, "medium": 21, "low": 60}[demand],
+                "demand_signals": _demand_signals(title, demand, mid, rng, drift=_DRIFT.get(top, 0),
+                                                  recency=recency),
+                "category": top,
                 "best_channel": "eBay" if mid < 3000 else "Facebook Marketplace / dealer",
                 "condition_assumption": "Used, good, fully functional unless the listing says otherwise.",
                 "value_drivers": drivers, "risks": risks,
                 "rationale": f"Recent sold comps cluster between ${lo:,.0f} and ${hi:,.0f}. {('Authentication required before relying on this number. ' if auth else '')}"
                              f"Demand is {demand}.",
                 "comps": comps, "search_query": title, "authenticity_risk": auth, "bulk_lot": False, "unit_count": 1,
-                "sources_consulted": ["ebay_sold (demo)"], "model_used": "demo", "created_at": now, "error": "",
+                "sources_consulted": ["ebay_sold (demo)"], "model_used": "demo", "created_at": valued_at, "error": "",
                 "items": DEMO_ITEMS.get(title, []),
+                "grading": DEMO_GRADING.get(title),
                 "standout_item": DEMO_ITEMS[title][0]["name"] if title in DEMO_ITEMS else "",
                 "images_used": 3 if title in DEMO_ITEMS else 0,
                 "listing": {
@@ -202,11 +290,169 @@ def make_demo(seed: int = 7, now: float | None = None) -> tuple[list[dict[str, A
     return lots, vals
 
 
+# (category, n, hammer ratio spread, sales) -- a plausible few weeks of history: the valuer is
+# well calibrated on commodity electronics and tools, and runs optimistic on furniture and art.
+_OUTCOME_MIX = [
+    ("Electronics", 22, (0.18, 0.55), [(0.95, 1), (1.05, 1), (0.9, 1), (1.1, 1), (1.0, 1), (0.97, 1)]),
+    ("Tools", 17, (0.2, 0.6), [(1.02, 1), (0.93, 1), (1.08, 1), (0.99, 1), (1.04, 1)]),
+    ("Collectibles", 14, (0.25, 0.85), [(0.8, 1), (1.15, 1), (0.7, 1)]),
+    ("Furniture", 11, (0.7, 1.4), []),          # consistently outbid at our own number: inflated
+    ("Jewelry & Watches", 9, (0.3, 0.9), []),
+    ("Art", 6, (0.8, 1.6), []),                  # too few to act on yet, but visibly bad
+    ("Books", 5, (0.2, 0.7), []),
+]
+
+# How long things ACTUALLY take to sell in each category, as a multiple of what the model predicted.
+# Electronics is roughly honest, Collectibles is optimistic, Furniture is badly optimistic (bulky,
+# local-pickup-only buyers) and Tools actually beat the estimate.
+_SPEED_REALITY = {"Electronics": 1.05, "Tools": 0.7, "Collectibles": 1.8, "Furniture": 2.6,
+                  "Jewelry & Watches": 1.4, "Art": 3.0, "Books": 2.2}
+
+
+def make_demo_outcomes(seed: int = 11, now: float | None = None) -> list[dict[str, Any]]:
+    """Closed lots with what we predicted vs. what they actually realized."""
+    rng = random.Random(seed)
+    now = now or time.time()
+    out: list[dict[str, Any]] = []
+    lot_id = 320500000
+    for cat, n, (lo_r, hi_r), sales in _OUTCOME_MIX:
+        for i in range(n):
+            lot_id += rng.randint(3, 60)
+            mid = round(rng.uniform(30, 400), 2)
+            net = round(mid * 0.85, 2)
+            hammer = round(net * rng.uniform(lo_r, hi_r) / 1.15, 2)  # back out the premium
+            rec: dict[str, Any] = {
+                "lot_id": lot_id, "title": f"{cat} lot {i + 1}", "category": cat,
+                "closed_at": now - rng.uniform(1, 21) * 86400,
+                "predicted_low": round(mid * 0.8, 2), "predicted_mid": mid, "predicted_high": round(mid * 1.2, 2),
+                "predicted_net": net, "confidence": round(rng.uniform(0.55, 0.85), 2), "method": "claude+web",
+                "score": round(rng.uniform(15, 80), 1), "hammer": hammer,
+                "landed_at_hammer": round(hammer * 1.15, 2),
+                "bought": None, "bought_price": None, "sale_price": None, "sale_at": None,
+                "sale_channel": "", "notes": "", "recorded_at": now,
+            }
+            # What the liquidity model would have predicted before you listed it.
+            predicted_days = round(rng.uniform(6, 40), 1)
+            rec["predicted_days"] = predicted_days
+            rec["listed_at"] = None
+            rec["list_price"] = None
+            rec["still_listed"] = None
+            rec["views"] = None
+            rec["watchers"] = None
+            if i < len(sales):
+                ratio, _ = sales[i]
+                actual_days = max(1.0, predicted_days * _SPEED_REALITY.get(cat, 1.0) * rng.uniform(0.75, 1.3))
+                listed_at = rec["closed_at"] + rng.uniform(1, 4) * 86400  # picked up, photographed, listed
+                rec["bought"] = True
+                rec["bought_price"] = rec["landed_at_hammer"]
+                rec["sale_price"] = round(mid * ratio, 2)
+                rec["listed_at"] = listed_at
+                rec["list_price"] = round(mid * 1.05, 2)
+                rec["sale_at"] = listed_at + actual_days * 86400
+                rec["still_listed"] = False
+                rec["views"] = rng.randint(40, 600)
+                rec["watchers"] = rng.randint(1, 25)
+                rec["sale_channel"] = "eBay"
+            elif i < len(sales) + 2 and cat in ("Furniture", "Collectibles", "Art"):
+                # Bought, listed, and still sitting. Right-censored evidence the loop must not ignore:
+                # a model that only learns from things that sold concludes everything sells.
+                rec["bought"] = True
+                rec["bought_price"] = rec["landed_at_hammer"]
+                rec["listed_at"] = now - rng.uniform(65, 150) * 86400
+                rec["list_price"] = round(mid * 1.05, 2)
+                rec["still_listed"] = True
+                rec["views"] = rng.randint(2, 40)      # the "max promotion, no views" case
+                rec["watchers"] = rng.randint(0, 2)
+                rec["sale_channel"] = "eBay"
+            out.append(rec)
+    return out
+
+
+# Market numbers for the demo playbook. Stand-ins for what a research pass measures, chosen to show the
+# discrimination the model is for: letter openers move (deep and fast), bank giveaways are crowded, and
+# obsolete notes are worth more per piece but take most of a year to sell.
+DEMO_RESEARCH = {
+    "advertising-letter-openers": (30.0, 140, 55, 9),
+    "bank-advertising-giveaways": (38.0, 90, 140, 22),
+    "celluloid-advertising-pocket-mirrors": (26.0, 75, 60, 14),
+    "advertising-and-figural-pinback-buttons": (22.0, 210, 90, 11),
+    "obsolete-bank-notes-and-scrip": (55.0, 60, 300, 45),
+    "antique-stock-and-bond-certificates": (24.0, 110, 260, 38),
+    "railroadiana-smalls": (46.0, 95, 120, 26),
+    "advertising-thermometers-and-rulers": (34.0, 55, 85, 24),
+}
+
+
+def make_demo_theses(settings, now: float | None = None) -> list[dict[str, Any]]:
+    """The seed playbook with plausible research filled in on some of it, so the panel has both
+    researched niches with bid ceilings and un-researched ones still showing a blank."""
+    from .playbook import normalize_thesis, refresh_thesis
+    from .seeds import SEED_THESES
+
+    now = now or time.time()
+    out = []
+    for seed in SEED_THESES:
+        t = normalize_thesis(dict(seed, origin="seed"), settings, now)
+        sim = DEMO_RESEARCH.get(t["id"])
+        if sim:
+            px, sold, active, days = sim
+            t = refresh_thesis(dict(t, price_median=px, price_p25=round(px * 0.65, 2),
+                                    price_p75=round(px * 1.6, 2), sold_90d=sold, active_now=active,
+                                    median_days_to_sell=days, researched_at=now - 3 * 86400,
+                                    sources=["eBay sold listings (demo)"], confidence=0.65),
+                              settings, now)
+        out.append(t)
+    return out
+
+
+def make_demo_playbook_outcomes(now: float | None = None) -> list[dict[str, Any]]:
+    """Round trips that match playbook niches, so the panel shows realized performance and the
+    flywheel has something to propose from."""
+    now = now or time.time()
+    rows = [
+        ("Antique c1918 Citizens Mutual Auto Insurance Howell MI Advertising Letter Opener", 1.15, 30.0, 0.2),
+        ("Vintage advertising letter opener Farmers State Bank Iowa celluloid handle", 2.30, 26.0, 3.0),
+        ("Antique brass advertising letter opener hardware store Ohio", 1.15, 22.0, 6.0),
+        ("Antique advertising letter opener funeral home Indiana figural", 3.45, 41.0, 1.0),
+        ("Celluloid advertising pocket mirror brewery pretty girl", 2.30, 34.0, 9.0),
+        ("Odd Fellows fraternal watch fob gold filled antique", 4.60, 38.0, 21.0),
+    ]
+    out = []
+    lot_id = 320400000
+    for i, (title, paid, sold, days) in enumerate(rows):
+        lot_id += 37
+        listed = now - (40 - i * 4) * 86400
+        out.append({
+            "lot_id": lot_id, "title": title, "category": "Collectibles",
+            "closed_at": listed - 2 * 86400,
+            "predicted_low": sold * 0.7, "predicted_mid": sold * 0.95, "predicted_high": sold * 1.3,
+            "predicted_net": sold * 0.8, "confidence": 0.6, "method": "claude+web", "score": 70.0,
+            "hammer": round(paid / 1.15, 2), "landed_at_hammer": paid,
+            "bought": True, "bought_price": paid, "sale_price": sold,
+            "sale_at": listed + days * 86400, "sale_channel": "eBay", "notes": "",
+            "listed_at": listed, "list_price": round(sold * 1.1, 2), "still_listed": False,
+            "views": 120 + i * 30, "watchers": 3 + i, "predicted_days": 12.0,
+            "recorded_at": now,
+        })
+    return out
+
+
 def load_demo(store, settings=None) -> int:
+    from .config import load as load_settings
+
+    settings = settings or load_settings()
     lots, vals = make_demo()
     store.upsert_lots(lots)
     for v in vals:
         store.save_valuation(v["lot_id"], v)
+    for o in make_demo_outcomes():
+        store.save_outcome(o)
+    for o in make_demo_playbook_outcomes():
+        store.save_outcome(o)
+    store.save_theses(make_demo_theses(settings))
+    # Grade the playbook against those outcomes so the demo shows realized performance straight away.
+    from .playbook import apply_outcome_stats
+    store.save_theses(apply_outcome_stats(store.theses(), store.outcomes(), {}))
     return len(lots)
 
 

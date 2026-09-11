@@ -8,6 +8,7 @@ from pathlib import Path
 from .config import Settings
 from .db import Store
 from .server import STATIC, build_opportunity
+from .calibration import build_report
 from .scoring import TIME_BUCKETS, score_lot
 
 
@@ -34,6 +35,8 @@ def export_html(settings: Settings, store: Store, out: Path, *, demo: bool = Fal
                    "claude_enabled": False, "ebay_sold": False, "hibid": settings.hibid_site,
                    "time_buckets": [b[0] for b in TIME_BUCKETS]},
         "opportunities": opps, "categories": cats,
+        "calibration": {**build_report(store.outcomes(), settings), "enabled": settings.calibration,
+                        "min_closed": settings.calibration_min_closed, "min_sales": settings.calibration_min_sales},
         "status": {"status": {"phase": "done", "lots_seen": len(opps), "lots_valued": len(vals)},
                    "last_scan": {"finished_at": now}, "stats": {"open_lots": len(opps), "valued_lots": len(vals)}},
         "exported_at": now,

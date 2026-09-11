@@ -1,7 +1,7 @@
 // Persistence for Spread Hunter. Supabase when configured (durable across serverless instances);
 // an in-process Map store otherwise so local dev and keyless deployments still work.
 import { db } from "@/lib/db";
-import type { CategorySummary, Lot, ScanParams, ScanRecord, Valuation } from "./types";
+import type { CategorySummary, Lot, Outcome, ScanParams, ScanRecord, Thesis, Valuation } from "./types";
 
 export interface LotQuery {
   includeClosed?: boolean;
@@ -21,6 +21,8 @@ export interface Store {
   getValuation(lotId: number): Promise<Valuation | null>;
   valuationsFor(ids: number[]): Promise<Map<number, Valuation>>;
   cachedValuation(titleKey: string, maxAgeSeconds: number): Promise<Valuation | null>;
+  /** Every valuation created since `since`, for the market-trend window. */
+  valuationHistory(sinceSeconds: number, limit?: number): Promise<Valuation[]>;
   startScan(params: ScanParams): Promise<number>;
   updateScan(id: number, fields: Partial<ScanRecord>): Promise<void>;
   lastScan(): Promise<ScanRecord | null>;
@@ -28,6 +30,16 @@ export interface Store {
   valuationsSince(sinceSeconds: number): Promise<number>;
   markAlerted(ids: number[], at: number): Promise<void>;
   stats(): Promise<{ open_lots: number; valued_lots: number }>;
+  // --- calibration feedback loop
+  saveOutcome(o: Outcome): Promise<void>;
+  getOutcome(lotId: number): Promise<Outcome | null>;
+  outcomes(limit?: number): Promise<Outcome[]>;
+  /** Lots we valued whose auction has ended but whose result we have not recorded yet. */
+  awaitingSettlement(limit: number, now?: number): Promise<Lot[]>;
+  // --- the playbook
+  theses(): Promise<Thesis[]>;
+  saveTheses(rows: Thesis[]): Promise<void>;
+  deleteThesis(id: string): Promise<void>;
   readonly kind: "supabase" | "memory";
 }
 
@@ -37,6 +49,8 @@ class MemoryStore implements Store {
   private lotsMap = new Map<number, Lot>();
   private vals = new Map<number, Valuation>();
   private cache = new Map<string, Valuation>();
+  private outs = new Map<number, Outcome>();
+  private thes = new Map<string, Thesis>();
   private scans: ScanRecord[] = [];
 
   async upsertLots(lots: Lot[]) {
@@ -77,6 +91,9 @@ class MemoryStore implements Store {
     const v = this.cache.get(key);
     return v && Date.now() / 1000 - v.created_at <= maxAge ? v : null;
   }
+  async valuationHistory(since: number, limit = 5000) {
+    return [...this.vals.values()].filter((v) => v.created_at >= since).sort((a, b) => b.created_at - a.created_at).slice(0, limit);
+  }
   async startScan(params: ScanParams) {
     const rec: ScanRecord = { id: this.scans.length + 1, started_at: Date.now() / 1000, finished_at: null, status: "running", params, lots_seen: 0, lots_valued: 0, message: "", trigger: params.trigger ?? "manual" };
     this.scans.push(rec);
@@ -94,6 +111,18 @@ class MemoryStore implements Store {
     const open = [...this.lotsMap.values()].filter((l) => !l.is_closed);
     return { open_lots: open.length, valued_lots: open.filter((l) => this.vals.has(l.id)).length };
   }
+  async saveOutcome(o: Outcome) { this.outs.set(o.lot_id, { ...this.outs.get(o.lot_id), ...o }); }
+  async getOutcome(lotId: number) { return this.outs.get(lotId) ?? null; }
+  async outcomes(limit = 5000) { return [...this.outs.values()].sort((a, b) => b.closed_at - a.closed_at).slice(0, limit); }
+  async awaitingSettlement(limit: number, now = Date.now() / 1000) {
+    return [...this.lotsMap.values()]
+      .filter((l) => l.ends_at !== null && l.ends_at < now && this.vals.has(l.id) && !this.outs.has(l.id))
+      .sort((a, b) => (b.ends_at ?? 0) - (a.ends_at ?? 0))
+      .slice(0, limit);
+  }
+  async theses() { return [...this.thes.values()]; }
+  async saveTheses(rows: Thesis[]) { for (const t of rows) this.thes.set(t.id, t); }
+  async deleteThesis(id: string) { this.thes.delete(id); }
 }
 
 // ----------------------------------------------------------------------------- supabase
@@ -146,7 +175,7 @@ class SupabaseStore implements Store {
   async saveValuation(lotId: number, v: Valuation) {
     const { error } = await this.sb.from("spread_valuations").upsert({
       lot_id: lotId, title_key: v.title_key, low: v.low, mid: v.mid, high: v.high, confidence: v.confidence,
-      method: v.method, created_at: iso(v.created_at), cache_hit: !!v.cache_hit, data: v,
+      method: v.method, created_at: iso(v.created_at), cache_hit: !!v.cache_hit, category: v.category ?? null, data: v,
     }, { onConflict: "lot_id" });
     if (error) throw new Error("spread_valuations upsert: " + error.message);
     if (v.title_key && v.method !== "none" && !v.cache_hit) {
@@ -170,6 +199,11 @@ class SupabaseStore implements Store {
     if (!data) return null;
     const created = secs(data.created_at as string) ?? 0;
     return Date.now() / 1000 - created <= maxAge ? (data.data as Valuation) : null;
+  }
+  async valuationHistory(since: number, limit = 5000) {
+    const { data, error } = await this.sb.from("spread_valuations").select("data").gte("created_at", iso(since)!).order("created_at", { ascending: false }).limit(limit);
+    if (error) throw new Error("spread_valuations history: " + error.message);
+    return (data ?? []).map((r) => r.data as Valuation);
   }
   async startScan(params: ScanParams) {
     const { data, error } = await this.sb.from("spread_scans").insert({ started_at: iso(Date.now() / 1000), status: "running", params, trigger: params.trigger ?? "manual" }).select("id").single();
@@ -207,6 +241,54 @@ class SupabaseStore implements Store {
     const vals = await this.valuationsFor(lots.map((l) => l.id));
     return { open_lots: open ?? 0, valued_lots: vals.size };
   }
+  async saveOutcome(o: Outcome) {
+    const { error } = await this.sb.from("spread_outcomes").upsert({
+      lot_id: o.lot_id, title: o.title, category: o.category, closed_at: iso(o.closed_at),
+      predicted_mid: o.predicted_mid, predicted_net: o.predicted_net, confidence: o.confidence,
+      method: o.method, score: o.score, hammer: o.hammer, landed_at_hammer: o.landed_at_hammer,
+      sale_price: o.sale_price, sale_at: iso(o.sale_at), listed_at: iso(o.listed_at),
+      still_listed: o.still_listed ?? null, predicted_days: o.predicted_days ?? null, data: o,
+    }, { onConflict: "lot_id" });
+    if (error) throw new Error("spread_outcomes upsert: " + error.message);
+  }
+  async getOutcome(lotId: number) {
+    const { data } = await this.sb.from("spread_outcomes").select("data").eq("lot_id", lotId).maybeSingle();
+    return (data?.data as Outcome) ?? null;
+  }
+  async outcomes(limit = 5000) {
+    const { data, error } = await this.sb.from("spread_outcomes").select("data").order("closed_at", { ascending: false }).limit(limit);
+    if (error) throw new Error("spread_outcomes select: " + error.message);
+    return (data ?? []).map((r) => r.data as Outcome);
+  }
+  async awaitingSettlement(limit: number, now = Date.now() / 1000) {
+    const { data } = await this.sb.from("spread_lots").select("data, alerted_at")
+      .lt("ends_at", iso(now)!).order("ends_at", { ascending: false }).limit(Math.max(limit * 4, 200));
+    let lots = (data ?? []).map((r) => this.row2lot(r as { data: Lot; alerted_at: string | null }));
+    if (!lots.length) return [];
+    const valued = await this.valuationsFor(lots.map((l) => l.id));
+    lots = lots.filter((l) => valued.has(l.id));
+    if (!lots.length) return [];
+    const { data: done } = await this.sb.from("spread_outcomes").select("lot_id").in("lot_id", lots.map((l) => l.id));
+    const settled = new Set((done ?? []).map((r) => r.lot_id as number));
+    return lots.filter((l) => !settled.has(l.id)).slice(0, limit);
+  }
+  async theses() {
+    const { data, error } = await this.sb.from("spread_theses").select("data").limit(500);
+    if (error) throw new Error("spread_theses select: " + error.message);
+    return (data ?? []).map((r) => r.data as Thesis);
+  }
+  async saveTheses(rows: Thesis[]) {
+    if (!rows.length) return;
+    const payload = rows.map((t) => ({
+      id: t.id, name: t.name, family: t.family, enabled: t.enabled, origin: t.origin,
+      price_median: t.price_median, max_bid: t.max_bid, sold_90d: t.sold_90d, active_now: t.active_now,
+      researched_at: iso(t.researched_at), last_hunted_at: iso(t.last_hunted_at),
+      updated_at: iso(t.updated_at), data: t,
+    }));
+    const { error } = await this.sb.from("spread_theses").upsert(payload, { onConflict: "id" });
+    if (error) throw new Error("spread_theses upsert: " + error.message);
+  }
+  async deleteThesis(id: string) { await this.sb.from("spread_theses").delete().eq("id", id); }
 }
 
 let memory: MemoryStore | null = null;

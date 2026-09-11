@@ -88,6 +88,7 @@ A typical day: `scan --hours 24` in the morning (valuations are cached 7 days, s
 | `ANTHROPIC_API_KEY` | — | Enables Claude appraisals. Without it you get eBay-sold comps / auctioneer estimates only. |
 | `ARB_MODEL` | `claude-opus-5` | Model for appraisals. `claude-sonnet-5` is ~2.5× cheaper and fine for commodity items. |
 | `ARB_WEB_SEARCH` | `1` | Let Claude search the web for sold comps (≤3 searches per lot). |
+| `ARB_CALIBRATION` / `ARB_CALIBRATION_MIN_CLOSED` / `ARB_CALIBRATION_MIN_SALES` | `1` / `8` / `5` | Feedback loop: grade past calls against realized prices and your recorded sales, then adjust. |
 | `ARB_VISION` / `ARB_MAX_IMAGES` | `1` / `4` | Send the lot's photos so the model reads marks and splits multi-item lots into per-item values. |
 | `ARB_EBAY_SOLD` | `1` | Scrape eBay sold listings as comps (no key; best effort, may be rate-limited). |
 | `ARB_VALUER` | `auto` | `auto` \| `claude` \| `ebay` \| `estimate` \| `none` |
@@ -115,6 +116,13 @@ titles cost nothing. Start with `--max-value 20` and a tight `--hours 6` window 
 * **Dossier drawer** — photo, live bid & countdown, full cost breakdown, valuation range, *Why the upside* paragraph,
   value drivers, risks, comparable sales with links, listing description & photos, **Open on HiBid**, **eBay sold**
   search, **Refresh live**, **Re-value**.
+* **Valuer report card** — every closed lot the scanner valued is checked against the price it actually
+  realized (`priceRealized`, free from HiBid even on lots you never bid on), and any sale you record in the
+  dossier becomes ground truth. Per-category bias and confidence factors feed back into future valuations,
+  clamped and sample-gated (`ARB_CALIBRATION_*`). `python -m arb settle` runs it on demand.
+* **Grading upside** — for trading cards: photo condition read (centering, corners, edges, surface), PSA grade
+  probabilities, graded comps by grade (PSA APR, SportsCardsPro, 130point, eBay sold), pop report, and the
+  expected net of grading vs. selling raw (`ARB_GRADING_*`), with a recommendation.
 * **List it on eBay** — the appraisal also drafts the listing (80-char title, category, condition, item specifics,
   description) and three price points (quick / market / patient) with net after eBay fees (`ARB_EBAY_*`), shipping
   and packaging, and profit vs. landed cost. Copy buttons for the sell form.

@@ -94,6 +94,43 @@ export interface LotItem {
   note: string;
 }
 
+export interface GradedComp { grader: string; grade: string; price: number; source: string; url: string; date: string }
+
+export interface GradingAnalysis {
+  applicable: boolean;
+  card: { year: string; set: string; card_number: string; player_or_subject: string; parallel_or_variation: string; rookie: boolean };
+  condition: { centering: string; corners: string; edges: string; surface: string; notes: string; photo_quality: "good" | "limited" | "unusable" };
+  grade_probabilities: { psa10: number; psa9: number; psa8: number; psa7_or_below: number };
+  predicted_grade: string;
+  graded_comps: GradedComp[];
+  pop: { psa_total: number; psa_10: number; psa_9: number; note: string };
+  raw_value: number;
+  recommended_grader: "PSA" | "BGS" | "SGC" | "CGC" | "none";
+  grading_notes: string;
+}
+
+export interface GradingEconomics {
+  probabilities: Record<"10" | "9" | "8" | "7-", number>;
+  prices: Record<"10" | "9" | "8" | "7-", number | null>;
+  ev_gross: number;
+  graded_net: number;
+  raw_value: number;
+  raw_net: number;
+  upside: number;
+  graded_net_no10: number;
+  upside_no10: number;
+  grading_cost: number;
+  hurdle: number;
+  grading_fee: number;
+  grading_ship: number;
+  days: number;
+  recommendation: string;
+  predicted_grade: string | null;
+  recommended_grader: string | null;
+  photo_quality: string;
+  profit_graded_vs_landed: number;
+}
+
 export interface PricePoint {
   label: "quick" | "market" | "patient";
   price: number;
@@ -105,9 +142,12 @@ export interface PricePoint {
   shipping_cost: number;
   packaging: number;
   net: number;
+  /** Days to sell at this price, from the liquidity model rather than a constant. */
   expected_days: number;
   profit: number;
   roi: number | null;
+  /** Profit per dollar of capital per 30 days at this price point. */
+  monthly_roi?: number | null;
 }
 
 export interface ListingEconomics {
@@ -120,6 +160,52 @@ export interface ListingEconomics {
   auction_start: number | null;
   points: PricePoint[];
   recommended: "market";
+}
+
+// ----------------------------------------------------------------------------- demand & liquidity
+/** What the appraiser found out about how this market actually moves, not what the thing is worth. */
+export interface DemandSignals {
+  /** Comparable items SOLD on eBay in the last 90 days. */
+  sold_90d: number | null;
+  /** Comparable items listed for sale right now. */
+  active_now: number | null;
+  /** sold / (sold + active). Reported because resellers know it; the hazard is what we compute on. */
+  sell_through: number | null;
+  /** Researched median days a listing takes to sell, when counts are unavailable. */
+  median_days_to_sell: number | null;
+  /** Typical watchers on an active listing — interest before money. */
+  watchers_typical: number | null;
+  /** (p75 - p25) / median across sold comps. High means the realized price is a lottery. */
+  price_dispersion: number | null;
+  trend: "rising" | "flat" | "falling" | "unknown";
+  seasonality: string;
+  buyer_pool: string;
+  note: string;
+}
+
+export type LiquidityDepth = "deep" | "moderate" | "thin" | "dead" | "unknown";
+/** Where the speed estimate came from, strongest first. */
+export type LiquidityBasis = "measured" | "market" | "researched" | "assumed" | "none";
+
+export interface Liquidity {
+  score: number; // 0-100
+  grade: "A" | "B" | "C" | "D" | "F";
+  depth: LiquidityDepth;
+  sold_90d: number | null;
+  active_now: number | null;
+  sell_through: number | null;
+  daily_hazard: number; // probability one listing sells on any given day
+  days_p50: number;
+  days_p80: number;
+  sell_probability_30d: number;
+  capital_days: number; // days_p50 plus handling: how long the money is actually tied up
+  handling_days: number;
+  trend: DemandSignals["trend"];
+  seasonality: string;
+  basis: LiquidityBasis;
+  measured_n: number;
+  eta: string;
+  notes: string[];
 }
 
 export type ValuationMethod = "claude+web" | "claude" | "ebay_sold" | "ebay_active" | "hibid_estimate" | "none";
@@ -139,6 +225,9 @@ export interface Valuation {
   method: ValuationMethod;
   demand: "high" | "medium" | "low" | "unknown";
   days_to_sell: number | null;
+  demand_signals?: DemandSignals | null;
+  /** Denormalized from the lot so history can be grouped by category without a join. */
+  category?: string;
   best_channel: string;
   condition_assumption: string;
   value_drivers: string[];
@@ -153,7 +242,9 @@ export interface Valuation {
   listing?: ListingPlan | null;
   items?: LotItem[];
   standout_item?: string;
+  grading?: GradingAnalysis | null;
   images_used?: number;
+  calibration?: { bias: number; confidence_factor: number; basis: string; n: number } | null;
   model_used: string;
   created_at: number;
   error: string;
@@ -175,10 +266,19 @@ export interface Score {
   ratio: number | null;
   confidence: number;
   value_score: number; // disparity at today's price, ignoring the clock
-  score: number; // value_score x price_reliability
+  score: number; // value_score x price_reliability x liquidity_factor
   heat: "hot" | "warm" | "mild" | "cold" | "unvalued";
   sweet_spot?: boolean;
   radar: "strike" | "watch" | "track" | "scan";
+  // --- liquidity: how fast the money comes back
+  liquidity: Liquidity | null;
+  liquidity_factor: number;
+  /** Score before liquidity was applied, so the UI can show what liquidity cost this lot. */
+  score_before_liquidity: number;
+  /** Profit per dollar of capital per 30 days. The ranking metric for a flipper. */
+  monthly_roi: number | null;
+  /** Spread discounted by the chance it actually sells inside the horizon. */
+  expected_profit_60d: number | null;
 }
 
 export interface Opportunity {
@@ -187,6 +287,41 @@ export interface Opportunity {
   score: Score;
   why: string;
   listing: ListingEconomics | null;
+  grading: GradingEconomics | null;
+  /** Playbook niches this lot matches, strongest first. Present even before a valuation exists. */
+  theses?: ThesisMatch[];
+  /** The lowest max_bid across matched theses: the number to stop bidding at. */
+  max_bid?: number | null;
+}
+
+/** User-set risk parameters. Sent by the dashboard, applied server-side so alerts honour them too. */
+export interface IntelParams {
+  /** 0 = rank on raw upside only, 1 = let liquidity fully discount the score. */
+  liquidity_weight?: number;
+  /** Drop anything graded below this. */
+  min_liquidity_grade?: "A" | "B" | "C" | "D" | "F" | null;
+  /** Drop anything the model says will take longer than this to sell. */
+  max_days_to_sell?: number | null;
+  /** Rank by headline score, by profit-per-day-of-capital, or by pure speed. */
+  rank_by?: "score" | "velocity" | "liquidity" | "spread";
+  /** Days of handling time to add before capital comes back. */
+  handling_days?: number;
+}
+
+/** A listing from somewhere that is not an auction: Craigslist, a pasted OfferUp/Marketplace URL. */
+export interface LocalListing {
+  source: string;
+  external_id: string;
+  title: string;
+  description: string;
+  price: number | null;
+  url: string;
+  image: string | null;
+  city: string;
+  state: string;
+  distance_miles: number | null;
+  posted_at: number | null;
+  fetched_at: number;
 }
 
 export interface ScanParams {
@@ -199,6 +334,8 @@ export interface ScanParams {
   max_pages?: number;
   max_value?: number | null;
   value?: boolean;
+  /** Set false to skip the playbook's targeted searches and only do the broad pull. */
+  hunt?: boolean;
   trigger?: "manual" | "cron";
 }
 
@@ -220,4 +357,212 @@ export interface CategorySummary {
   valued: number;
   best_score: number;
   hot: number;
+}
+
+// ----------------------------------------------------------------------------- calibration
+/** One closed lot, recorded after the fact: what we predicted vs. what actually happened. */
+export interface Outcome {
+  lot_id: number;
+  title: string;
+  category: string;
+  closed_at: number;
+  // what we said before it closed
+  predicted_low: number | null;
+  predicted_mid: number | null;
+  predicted_high: number | null;
+  predicted_net: number | null; // mid less selling fees
+  confidence: number;
+  method: string;
+  score: number;
+  // what the auction did (free, from HiBid's priceRealized on every closed lot)
+  hammer: number | null;
+  landed_at_hammer: number | null; // hammer + buyer's premium + tax + pickup
+  // ground truth, filled in when you actually sell it
+  bought: boolean | null;
+  bought_price: number | null;
+  sale_price: number | null;
+  sale_at: number | null;
+  sale_channel: string;
+  // --- liquidity ground truth: how long it actually took, and what the listing did
+  /** When you put it up for sale. With sale_at this gives the real days-to-sell. */
+  listed_at: number | null;
+  list_price: number | null;
+  /** Still sitting unsold. A right-censored observation: it counts against the 30-day sell rate. */
+  still_listed: boolean | null;
+  views: number | null;
+  watchers: number | null;
+  /** What the model predicted before you listed, so the liquidity model can grade itself too. */
+  predicted_days: number | null;
+  notes: string;
+  recorded_at: number;
+}
+
+export interface CategoryCalibration {
+  category: string;
+  n_closed: number;
+  n_sold: number;
+  /** median (landed cost at hammer) / (predicted net). >= 1 means the deal was never there. */
+  median_hammer_ratio: number | null;
+  /** share of closed lots where the hammer alone met or beat our predicted net: provably too optimistic. */
+  overshoot_rate: number | null;
+  /** median (actual sale price) / (predicted mid). 1.0 is perfect. Ground truth. */
+  median_sale_ratio: number | null;
+  /** median absolute percentage error against real sales. */
+  sale_mape: number | null;
+  /** multiplier applied to future mid estimates in this category. */
+  bias: number;
+  /** multiplier applied to future confidence in this category. */
+  confidence_factor: number;
+  basis: "sales" | "hammer" | "none";
+  updated_at: number;
+}
+
+export interface CalibrationReport {
+  generated_at: number;
+  global: CategoryCalibration;
+  categories: CategoryCalibration[];
+  totals: { closed: number; sold: number; realized_profit: number | null };
+  liquidity: LiquidityReport;
+}
+
+// ----------------------------------------------------------------------------- liquidity feedback
+/** How long things in this category ACTUALLY took to sell, versus how long we said they would. */
+export interface CategoryLiquidity {
+  category: string;
+  /** Listings with a start date: sold plus still-sitting. */
+  n_listed: number;
+  n_sold: number;
+  /** Median observed days from listing to sale. */
+  observed_days: number | null;
+  /** Median days the model predicted for those same items. */
+  predicted_days: number | null;
+  /** observed / predicted. >1 means everything takes longer than we say. */
+  days_multiplier: number;
+  /** Sold within 30 days, over everything that had a fair chance to (censoring handled). */
+  sell_rate_30d: number | null;
+  /** Listings still unsold after 60 days. The ones that quietly eat your capital. */
+  stuck: number;
+  basis: "measured" | "none";
+  updated_at: number;
+}
+
+export interface LiquidityReport {
+  global: CategoryLiquidity;
+  categories: CategoryLiquidity[];
+  /** Median realized monthly ROI across everything you have actually bought and sold. */
+  realized_monthly_roi: number | null;
+}
+
+// ----------------------------------------------------------------------------- the playbook
+/** What a thesis has actually done for you, rolled up from recorded outcomes. */
+export interface ThesisStats {
+  lots_matched: number;
+  bought: number;
+  sold: number;
+  spend: number;
+  revenue: number;
+  realized_monthly_roi: number | null;
+  last_match_at: number | null;
+}
+
+/**
+ * A niche worth hunting, with the numbers that make it actionable. See playbook.ts for the model.
+ * Price and volume fields are null until a research pass fills them; a thesis with no median yields
+ * no `max_bid`, which is the point — nothing should hand you a bid it cannot justify.
+ */
+export interface Thesis {
+  id: string;
+  name: string;
+  family: string;
+  /** Search strings for HiBid / eBay / local sources. */
+  queries: string[];
+  /** Any of these in the title or description disqualifies a lot outright. */
+  negative: string[];
+  /** At least one must appear. */
+  must_any: string[];
+  /** All must appear, when a niche needs two words together. */
+  must_all: string[];
+  // --- market, from research
+  sold_90d: number | null;
+  active_now: number | null;
+  sell_through: number | null;
+  price_p25: number | null;
+  price_median: number | null;
+  price_p75: number | null;
+  median_days_to_sell: number | null;
+  ship_cost: number;
+  ebay_category: string;
+  trend: "rising" | "flat" | "falling" | "unknown";
+  seasonality: string;
+  // --- derived
+  /** The most this can cost all-in and still clear the target return. Null without a median. */
+  max_landed: number | null;
+  /** `max_landed` converted back to an auction bid, with the buyer's premium stripped out. */
+  max_bid: number | null;
+  liquidity_score: number | null;
+  liquidity_grade: string | null;
+  days_p50: number | null;
+  // --- provenance and judgement
+  rationale: string;
+  tells: string[];
+  risks: string[];
+  sources: string[];
+  confidence: number;
+  origin: "seed" | "discovered" | "your_sales" | "manual";
+  enabled: boolean;
+  researched_at: number | null;
+  last_hunted_at: number | null;
+  created_at: number;
+  updated_at: number;
+  stats: ThesisStats;
+}
+
+/** A lot that looks like a thesis, with the numbers to act on before any valuation call is spent. */
+export interface ThesisMatch {
+  thesis_id: string;
+  name: string;
+  family: string;
+  /** 0-1. Title hits count double; a negative term anywhere means no match at all. */
+  strength: number;
+  where: "title" | "description";
+  matched: string[];
+  max_bid: number | null;
+  max_landed: number | null;
+  price_median: number | null;
+  eta: string;
+}
+
+// ----------------------------------------------------------------------------- market trends
+export interface TrendPoint {
+  day: string; // YYYY-MM-DD
+  n: number;
+  liquidity: number | null;
+  days_p50: number | null;
+  mid: number | null;
+}
+
+export interface CategoryTrend {
+  category: string;
+  n: number;
+  liquidity: number | null;
+  days_p50: number | null;
+  sell_through: number | null;
+  median_mid: number | null;
+  /** Change in median liquidity score, recent half of the window versus the earlier half. */
+  change: number | null;
+  direction: "warming" | "steady" | "cooling" | "new";
+  points: TrendPoint[];
+}
+
+export interface MarketIntel {
+  generated_at: number;
+  window_days: number;
+  trends: CategoryTrend[];
+  warming: CategoryTrend[];
+  cooling: CategoryTrend[];
+  liquidity: LiquidityReport;
+  /** Live board: the open lots with the best profit-per-day-of-capital right now. */
+  velocity_leaders: { lot_id: number; title: string; category: string; monthly_roi: number; liquidity_grade: string; eta: string; spread: number; landed_cost: number; ends_at: number | null }[];
+  /** Valued high but effectively unsellable — the trap this layer exists to catch. */
+  value_traps: { lot_id: number; title: string; category: string; mid: number | null; liquidity_grade: string; eta: string; reason: string }[];
 }

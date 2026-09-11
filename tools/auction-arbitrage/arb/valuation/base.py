@@ -53,6 +53,8 @@ class Valuation:
     method: str = "none"  # claude+web | claude | ebay_sold | hibid_estimate | none
     demand: str = "unknown"  # high | medium | low | unknown
     days_to_sell: int | None = None
+    demand_signals: dict[str, Any] | None = None
+    category: str = ""  # denormalized from the lot so trend history can group without a join
     best_channel: str = ""
     condition_assumption: str = ""
     value_drivers: list[str] = field(default_factory=list)
@@ -66,8 +68,10 @@ class Valuation:
     sources_consulted: list[str] = field(default_factory=list)
     listing: dict[str, Any] | None = None  # ready-to-post eBay listing plan (see claude.LISTING_SCHEMA)
     items: list[dict[str, Any]] = field(default_factory=list)  # per-item breakdown for multi-item lots (from photos)
+    grading: dict[str, Any] | None = None  # trading cards: condition read, grade odds, graded comps, pop (see claude.GRADING_SCHEMA)
     standout_item: str = ""
     images_used: int = 0
+    calibration: dict[str, Any] | None = None
     model_used: str = ""
     created_at: float = field(default_factory=time.time)
     error: str = ""

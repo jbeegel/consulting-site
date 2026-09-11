@@ -18,11 +18,27 @@ CREATE INDEX IF NOT EXISTS lots_ends ON lots(ends_at);
 CREATE INDEX IF NOT EXISTS lots_cat ON lots(category);
 CREATE TABLE IF NOT EXISTS valuations (
   lot_id INTEGER PRIMARY KEY, title_key TEXT, low REAL, mid REAL, high REAL, confidence REAL,
-  method TEXT, created_at REAL, data TEXT NOT NULL
+  method TEXT, created_at REAL, category TEXT, data TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS valuations_created ON valuations(created_at);
 CREATE TABLE IF NOT EXISTS valuation_cache (
   title_key TEXT PRIMARY KEY, created_at REAL, data TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS outcomes (
+  lot_id INTEGER PRIMARY KEY, title TEXT, category TEXT, closed_at REAL,
+  predicted_mid REAL, predicted_net REAL, confidence REAL, method TEXT, score REAL,
+  hammer REAL, landed_at_hammer REAL, sale_price REAL, sale_at REAL,
+  listed_at REAL, still_listed INTEGER, predicted_days REAL,
+  recorded_at REAL, data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS outcomes_closed ON outcomes(closed_at);
+CREATE INDEX IF NOT EXISTS outcomes_cat ON outcomes(category);
+CREATE TABLE IF NOT EXISTS theses (
+  id TEXT PRIMARY KEY, name TEXT, family TEXT, enabled INTEGER DEFAULT 1, origin TEXT,
+  price_median REAL, max_bid REAL, sold_90d INTEGER, active_now INTEGER,
+  researched_at REAL, last_hunted_at REAL, updated_at REAL, data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS theses_hunt ON theses(enabled, last_hunted_at);
 CREATE TABLE IF NOT EXISTS scans (
   id INTEGER PRIMARY KEY AUTOINCREMENT, started_at REAL, finished_at REAL, status TEXT,
   params TEXT, lots_seen INTEGER DEFAULT 0, lots_valued INTEGER DEFAULT 0, message TEXT
@@ -106,13 +122,14 @@ class Store:
     def save_valuation(self, lot_id: int, val: dict[str, Any]) -> None:
         with self._lock:
             self._conn.execute(
-                """INSERT INTO valuations (lot_id,title_key,low,mid,high,confidence,method,created_at,data)
-                   VALUES (?,?,?,?,?,?,?,?,?)
+                """INSERT INTO valuations (lot_id,title_key,low,mid,high,confidence,method,created_at,category,data)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)
                    ON CONFLICT(lot_id) DO UPDATE SET title_key=excluded.title_key, low=excluded.low, mid=excluded.mid,
                      high=excluded.high, confidence=excluded.confidence, method=excluded.method,
-                     created_at=excluded.created_at, data=excluded.data""",
+                     created_at=excluded.created_at, category=excluded.category, data=excluded.data""",
                 (lot_id, val.get("title_key"), val.get("low"), val.get("mid"), val.get("high"),
-                 val.get("confidence"), val.get("method"), val.get("created_at", time.time()), json.dumps(val)),
+                 val.get("confidence"), val.get("method"), val.get("created_at", time.time()),
+                 val.get("category"), json.dumps(val)),
             )
             if val.get("title_key") and val.get("method") not in (None, "none"):
                 self._conn.execute(
@@ -124,6 +141,14 @@ class Store:
         with self._lock:
             row = self._conn.execute("SELECT data FROM valuations WHERE lot_id=?", (lot_id,)).fetchone()
         return json.loads(row["data"]) if row else None
+
+    def valuation_history(self, since: float, limit: int = 5000) -> list[dict[str, Any]]:
+        """Every valuation created since `since`, for the market-trend window."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT data FROM valuations WHERE created_at >= ? ORDER BY created_at DESC LIMIT ?",
+                (since, limit)).fetchall()
+        return [json.loads(r["data"]) for r in rows]
 
     def valuations_for(self, lot_ids: Iterable[int]) -> dict[int, dict[str, Any]]:
         ids = list(lot_ids)
@@ -177,6 +202,78 @@ class Store:
             valued = self._conn.execute(
                 "SELECT COUNT(*) c FROM valuations v JOIN lots l ON l.id=v.lot_id WHERE l.is_closed=0").fetchone()["c"]
         return {"open_lots": lots, "valued_lots": valued}
+
+    # ------------------------------------------------------------- outcomes
+    def save_outcome(self, o: dict[str, Any]) -> None:
+        with self._lock:
+            self._conn.execute(
+                """INSERT INTO outcomes (lot_id,title,category,closed_at,predicted_mid,predicted_net,confidence,
+                   method,score,hammer,landed_at_hammer,sale_price,sale_at,listed_at,still_listed,
+                   predicted_days,recorded_at,data)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                   ON CONFLICT(lot_id) DO UPDATE SET title=excluded.title, category=excluded.category,
+                     closed_at=excluded.closed_at, predicted_mid=excluded.predicted_mid,
+                     predicted_net=excluded.predicted_net, confidence=excluded.confidence, method=excluded.method,
+                     score=excluded.score, hammer=excluded.hammer, landed_at_hammer=excluded.landed_at_hammer,
+                     sale_price=excluded.sale_price, sale_at=excluded.sale_at, listed_at=excluded.listed_at,
+                     still_listed=excluded.still_listed, predicted_days=excluded.predicted_days,
+                     recorded_at=excluded.recorded_at, data=excluded.data""",
+                (o["lot_id"], o.get("title"), o.get("category"), o.get("closed_at"), o.get("predicted_mid"),
+                 o.get("predicted_net"), o.get("confidence"), o.get("method"), o.get("score"), o.get("hammer"),
+                 o.get("landed_at_hammer"), o.get("sale_price"), o.get("sale_at"), o.get("listed_at"),
+                 None if o.get("still_listed") is None else int(bool(o.get("still_listed"))),
+                 o.get("predicted_days"), o.get("recorded_at", time.time()),
+                 json.dumps(o)),
+            )
+
+    def get_outcome(self, lot_id: int) -> dict[str, Any] | None:
+        with self._lock:
+            row = self._conn.execute("SELECT data FROM outcomes WHERE lot_id=?", (lot_id,)).fetchone()
+        return json.loads(row["data"]) if row else None
+
+    def outcomes(self, limit: int = 5000) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute("SELECT data FROM outcomes ORDER BY closed_at DESC LIMIT ?", (limit,)).fetchall()
+        return [json.loads(r["data"]) for r in rows]
+
+    def awaiting_settlement(self, limit: int, now: float | None = None) -> list[dict[str, Any]]:
+        """Lots we valued whose auction has ended but whose result we have not recorded yet."""
+        now = now or time.time()
+        with self._lock:
+            rows = self._conn.execute(
+                """SELECT l.data FROM lots l JOIN valuations v ON v.lot_id=l.id
+                   LEFT JOIN outcomes o ON o.lot_id=l.id
+                   WHERE o.lot_id IS NULL AND l.ends_at IS NOT NULL AND l.ends_at < ?
+                   ORDER BY l.ends_at DESC LIMIT ?""", (now, limit)).fetchall()
+        return [json.loads(r["data"]) for r in rows]
+
+    # ------------------------------------------------------------- playbook
+    def theses(self) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute("SELECT data FROM theses").fetchall()
+        return [json.loads(r["data"]) for r in rows]
+
+    def save_theses(self, rows: Iterable[dict[str, Any]]) -> None:
+        with self._lock:
+            for t in rows:
+                self._conn.execute(
+                    """INSERT INTO theses (id,name,family,enabled,origin,price_median,max_bid,sold_90d,
+                       active_now,researched_at,last_hunted_at,updated_at,data)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                       ON CONFLICT(id) DO UPDATE SET name=excluded.name, family=excluded.family,
+                         enabled=excluded.enabled, origin=excluded.origin, price_median=excluded.price_median,
+                         max_bid=excluded.max_bid, sold_90d=excluded.sold_90d, active_now=excluded.active_now,
+                         researched_at=excluded.researched_at, last_hunted_at=excluded.last_hunted_at,
+                         updated_at=excluded.updated_at, data=excluded.data""",
+                    (t["id"], t.get("name"), t.get("family"), int(bool(t.get("enabled", True))), t.get("origin"),
+                     t.get("price_median"), t.get("max_bid"), t.get("sold_90d"), t.get("active_now"),
+                     t.get("researched_at"), t.get("last_hunted_at"), t.get("updated_at", time.time()),
+                     json.dumps(t)),
+                )
+
+    def delete_thesis(self, thesis_id: str) -> None:
+        with self._lock:
+            self._conn.execute("DELETE FROM theses WHERE id=?", (thesis_id,))
 
     def close(self) -> None:
         with self._lock:

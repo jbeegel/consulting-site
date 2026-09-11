@@ -9,6 +9,7 @@ import webbrowser
 
 from .config import load
 from .db import Store
+from .playbook import match_theses
 from .scanner import Scanner
 from .scoring import score_lot
 
@@ -102,6 +103,191 @@ def cmd_export(args, s, store):
     print(f"wrote {out} ({out.stat().st_size // 1024} KB). Open it in a browser or share it.")
 
 
+def cmd_settle(args, s, store):
+    sc = Scanner(s, store)
+    n = sc.settle_closed_lots(limit=args.limit)
+    print(f"settled {n} closed lots into the report card")
+    cmd_report(args, s, store)
+
+
+def cmd_report(args, s, store):
+    from .calibration import build_report
+    rep = build_report(store.outcomes(), s)
+    t = rep["totals"]
+    print(f"\n{t['closed']} closed lots graded, {t['sold']} sales recorded"
+          + (f", {t['realized_profit']:+,.2f} realized" if t["realized_profit"] is not None else ""))
+    print(f"{'category':<24}{'closed':>7}{'outbid':>8}{'sales':>7}{'act/pred':>10}{'adjust':>8}  basis")
+    for c in rep["categories"] + [rep["global"]]:
+        name = "ALL" if c["category"] == "__all__" else c["category"][:23]
+        over = f"{c['overshoot_rate'] * 100:.0f}%" if c["overshoot_rate"] is not None else "-"
+        sale = f"{c['median_sale_ratio']:.2f}" if c["median_sale_ratio"] is not None else "-"
+        print(f"{name:<24}{c['n_closed']:>7}{over:>8}{c['n_sold'] or '-':>7}{sale:>10}{'x%.2f' % c['bias']:>8}  {c['basis']}")
+    liq = rep["liquidity"]
+    measured = [c for c in liq["categories"] if c["basis"] == "measured"]
+    if measured:
+        print(f"\nSpeed calibration (how long things really take vs. what we said)")
+        print(f"{'category':<24}{'sold':>6}{'observed':>10}{'predicted':>11}{'adjust':>8}")
+        for c in measured:
+            obs = f"{c['observed_days']:.0f}d" if c["observed_days"] is not None else "-"
+            pred = f"{c['predicted_days']:.0f}d" if c["predicted_days"] is not None else "-"
+            print(f"{c['category'][:23]:<24}{c['n_sold']:>6}{obs:>10}{pred:>11}{'x%.2f' % c['days_multiplier']:>8}")
+
+
+def cmd_intel(args, s, store):
+    """Market intel: which categories move, where capital turns fastest, what looks good but is stuck."""
+    sc = Scanner(s, store)
+    board = sc.intel()
+    liq = board["liquidity"]
+    print(f"\nMarket intel over the last {board['window_days']} days")
+
+    print(f"\n{'category':<24}{'liq':>6}{'to sell':>10}{'sell-thru':>11}{'trend':>10}{'n':>6}")
+    for t in board["trends"][:15]:
+        st = f"{t['sell_through'] * 100:.0f}%" if t["sell_through"] is not None else "-"
+        days = f"{t['days_p50']:.0f}d" if t["days_p50"] is not None else "-"
+        arrow = {"warming": "up", "cooling": "down", "steady": "flat", "new": "new"}[t["direction"]]
+        chg = f" {t['change']:+.0f}" if t["change"] is not None else ""
+        print(f"{t['category'][:23]:<24}{t['liquidity'] or 0:>6.0f}{days:>10}{st:>11}{arrow + chg:>10}{t['n']:>6}")
+
+    if board["velocity_leaders"]:
+        print("\nFastest money right now (profit per dollar of capital per month)")
+        for v in board["velocity_leaders"][:8]:
+            print(f"  {v['monthly_roi'] * 100:>7.0f}%/mo  {v['liquidity_grade']}  {v['eta']:<12}"
+                  f"${v['landed_cost']:>7.2f} -> +${v['spread']:<6} {v['title'][:52]}")
+
+    if board["value_traps"]:
+        print("\nValued high, but nobody is buying")
+        for v in board["value_traps"][:8]:
+            print(f"  {v['liquidity_grade']}  ${v['mid'] or 0:>7.0f}  {v['eta']:<12}{v['title'][:44]}  ({v['reason']})")
+
+    measured = [c for c in liq["categories"] if c["basis"] == "measured"]
+    if measured or liq["realized_monthly_roi"] is not None:
+        print(f"\nYour own listings ({'x%.2f' % liq['global']['days_multiplier']} vs the model overall)")
+        print(f"{'category':<24}{'listed':>8}{'sold':>6}{'observed':>10}{'predicted':>11}{'30d rate':>10}{'stuck':>7}")
+        for c in liq["categories"][:12] + [liq["global"]]:
+            name = "ALL" if c["category"] == "__all__" else c["category"][:23]
+            obs = f"{c['observed_days']:.0f}d" if c["observed_days"] is not None else "-"
+            pred = f"{c['predicted_days']:.0f}d" if c["predicted_days"] is not None else "-"
+            rate = f"{c['sell_rate_30d'] * 100:.0f}%" if c["sell_rate_30d"] is not None else "-"
+            print(f"{name:<24}{c['n_listed']:>8}{c['n_sold']:>6}{obs:>10}{pred:>11}{rate:>10}{c['stuck']:>7}")
+        if liq["realized_monthly_roi"] is not None:
+            print(f"\nRealized return on capital: {liq['realized_monthly_roi'] * 100:.0f}%/month (median round trip)")
+
+
+def cmd_playbook(args, s, store):
+    """The niches we hunt, and the most you can pay for each."""
+    sc = Scanner(s, store)
+    if args.review:
+        out = sc.playbook_review()
+        rows, proposed = out["theses"], out["proposed"]
+    else:
+        rows, proposed = sc.theses(), []
+    rows.sort(key=lambda t: (-(t.get("max_bid") or 0), t.get("name", "")))
+
+    print(f"\n{'niche':<34}{'pay up to':>10}{'sells for':>11}{'liq':>5}{'in':>7}{'sold/active':>13}  basis")
+    for t in rows:
+        bid = f"${t['max_bid']:.2f}" if t.get("max_bid") else "-"
+        px = f"${t['price_median']:.0f}" if t.get("price_median") else "-"
+        liq = t.get("liquidity_grade") or "-"
+        days = f"{t['days_p50']:.0f}d" if t.get("days_p50") else "-"
+        vol = (f"{int(t['sold_90d'])}/{int(t['active_now'])}"
+               if t.get("sold_90d") is not None and t.get("active_now") is not None else "-")
+        basis = "researched" if t.get("researched_at") else "not yet researched"
+        print(f"{t['name'][:33]:<34}{bid:>10}{px:>11}{liq:>5}{days:>7}{vol:>13}  {basis}")
+
+    unresearched = [t for t in rows if not t.get("researched_at")]
+    if unresearched:
+        print(f"\n{len(unresearched)} niche(s) have no market data yet, so they have no bid ceiling. "
+              "Run `arb research` to measure them against eBay sold listings.")
+
+    earned = [t for t in rows if (t.get("stats") or {}).get("sold")]
+    if earned:
+        print(f"\n{'niche':<34}{'matched':>9}{'bought':>8}{'sold':>6}{'spend':>9}{'revenue':>9}{'roi':>8}")
+        for t in earned:
+            st = t["stats"]
+            roi = f"{st['realized_monthly_roi'] * 100:.0f}%" if st.get("realized_monthly_roi") is not None else "-"
+            print(f"{t['name'][:33]:<34}{st['lots_matched']:>9}{st['bought']:>8}{st['sold']:>6}"
+                  f"{st['spend']:>9.0f}{st['revenue']:>9.0f}{roi:>8}")
+
+    if proposed:
+        print(f"\n{len(proposed)} niche(s) proposed from your own sales (re-run with --accept to keep):")
+        for t in proposed:
+            print(f"  {t['name']:<28} median ${t['price_median']:.0f}  {t['rationale']}")
+        if args.accept:
+            sc.save_theses(proposed)
+            print(f"accepted {len(proposed)}")
+
+
+def cmd_research(args, s, store):
+    """Mine recent eBay sold data for new niches, and re-measure stale ones."""
+    sc = Scanner(s, store)
+    out = sc.research(discover=args.discover, refresh=args.refresh, focus=args.focus)
+    if out.get("error"):
+        print("research problem:", out["error"])
+    for t in out["added"]:
+        vol = (f"{int(t['sold_90d'])} sold / {int(t['active_now'])} active"
+               if t.get("sold_90d") is not None and t.get("active_now") is not None else "counts unknown")
+        px = f"${t['price_median']:.0f}" if t.get("price_median") else "no price"
+        bid = f"pay up to ${t['max_bid']:.2f}" if t.get("max_bid") else "no ceiling yet"
+        print(f"+ {t['name']:<34} {px:>8}  {vol:<28} {bid}")
+    for t in out["updated"]:
+        print(f"~ {t['name']:<34} refreshed -> "
+              + (f"${t['price_median']:.0f}, pay up to ${t['max_bid']:.2f}" if t.get("max_bid") else "still no ceiling"))
+    if not out["added"] and not out["updated"]:
+        print("nothing added or updated")
+
+
+def cmd_hunt(args, s, store):
+    """Run the playbook's search terms against HiBid."""
+    sc = Scanner(s, store)
+    out = sc.hunt(max_theses=args.limit)
+    print(f"hunted {len(out['hunted'])} theses: {', '.join(out['hunted']) or 'none'}")
+    print(f"{len(out['lots'])} lots found and stored")
+    theses = sc.theses()
+    hits = [(l, match_theses(l, theses)) for l in out["lots"]]
+    hits = [(l, m) for l, m in hits if m]
+    hits.sort(key=lambda x: -x[1][0]["strength"])
+    for lot, m in hits[:20]:
+        bid = f"${m[0]['max_bid']:.2f}" if m[0].get("max_bid") else "?"
+        print(f"  [{m[0]['name'][:24]:<24} pay<={bid:>7}] ${lot.get('high_bid') or 0:>6.0f}  {lot.get('title', '')[:56]}")
+
+
+def cmd_local(args, s, store):
+    """Local, non-auction buys scored against the playbook."""
+    from .sources import hunt_local, parse_pasted_listing, score_local
+
+    sc = Scanner(s, store)
+    theses = sc.theses()
+    if args.url or args.text:
+        listing = parse_pasted_listing(url=args.url or "", text=args.text or "", price=args.price)
+        if not listing:
+            print("nothing to parse")
+            return
+        if args.miles is not None:
+            listing["distance_miles"] = args.miles
+        h = score_local(listing, theses, s)
+        print(f"\n{h['verdict'].upper()}: {h['note']}")
+        if h["theses"]:
+            print("matches: " + ", ".join(m["name"] for m in h["theses"]))
+        return
+    if not s.craigslist_site:
+        print("Set ARB_CRAIGSLIST_SITE to your local craigslist subdomain (e.g. 'detroit'), or pass\n"
+              "--url / --text to score a pasted OfferUp or Marketplace listing. Those two have no public\n"
+              "API and their terms forbid scraping, so pasting is the supported path.")
+        return
+    listings = hunt_local(theses, s)
+    order = {"buy": 0, "negotiate": 1, "unknown": 2, "pass": 3}
+    hits = [h for h in (score_local(l, theses, s) for l in listings) if h["theses"]]
+    hits.sort(key=lambda h: order[h["verdict"]])
+    print(f"scanned {len(listings)} local listings, {len(hits)} match the playbook\n")
+    for h in hits[:args.limit]:
+        l = h["listing"]
+        price = f"${l['price']:.0f}" if l.get("price") is not None else "ask"
+        print(f"  {h['verdict']:<10}{price:>7}  {l['title'][:54]}")
+        print(f"             {h['note']}")
+        if l.get("url"):
+            print(f"             {l['url']}")
+
+
 def cmd_categories(args, s, store):
     from .hibid import HiBidClient
     c = HiBidClient(s.hibid_graphql, site_url=s.hibid_site, delay=s.request_delay)
@@ -151,6 +337,39 @@ def main(argv=None):
     a = sub.add_parser("export", help="write a self-contained HTML snapshot of the dashboard")
     a.add_argument("--out", default="spread-hunter.html")
     a.set_defaults(fn=cmd_export)
+
+    a = sub.add_parser("settle", help="record what closed lots actually sold for, then print the report card")
+    a.add_argument("--limit", type=int, default=200)
+    a.set_defaults(fn=cmd_settle)
+
+    a = sub.add_parser("report", help="the valuer's report card: predictions vs. what actually happened")
+    a.set_defaults(fn=cmd_report)
+
+    a = sub.add_parser("intel", help="market intel: category trends, fastest money, value traps")
+    a.set_defaults(fn=cmd_intel)
+
+    a = sub.add_parser("playbook", help="the niches we hunt and the most to pay for each")
+    a.add_argument("--review", action="store_true", help="grade the playbook against your recorded sales")
+    a.add_argument("--accept", action="store_true", help="keep the niches proposed from your own sales")
+    a.set_defaults(fn=cmd_playbook)
+
+    a = sub.add_parser("research", help="mine eBay sold data for new niches; re-measure stale ones")
+    a.add_argument("--discover", type=int, help="how many new niches to look for")
+    a.add_argument("--refresh", type=int, default=6, help="how many stale niches to re-measure")
+    a.add_argument("--focus", help="steer the search, e.g. 'bank and insurance advertising'")
+    a.set_defaults(fn=cmd_research)
+
+    a = sub.add_parser("hunt", help="run the playbook's searches against HiBid")
+    a.add_argument("--limit", type=int, help="how many niches to hunt this run")
+    a.set_defaults(fn=cmd_hunt)
+
+    a = sub.add_parser("local", help="local non-auction buys scored against the playbook")
+    a.add_argument("--url", help="score one pasted listing URL (OfferUp, Marketplace, anywhere)")
+    a.add_argument("--text", help="score pasted listing text")
+    a.add_argument("--price", type=float, help="asking price, if the text does not contain it")
+    a.add_argument("--miles", type=float, help="how far away it is, for the trip cost")
+    a.add_argument("--limit", type=int, default=25)
+    a.set_defaults(fn=cmd_local)
 
     a = sub.add_parser("categories", help="list HiBid category ids")
     a.add_argument("--parent", type=int)

@@ -16,6 +16,8 @@ export async function GET(req: Request) {
     time_buckets: TIME_BUCKETS.map((b) => b[0]), store: getStore().kind,
     sweet_spot: { max_landed: config.sweetMaxLanded, min_net: config.sweetMinNet },
     vision: config.vision, radar_levels: ["strike", "watch", "track", "scan"],
+    calibration: { enabled: config.calibration, min_closed: config.calibrationMinClosed, min_sales: config.calibrationMinSales },
+    grading: { enabled: config.grading, fee: config.gradingFee, ship: config.gradingShip, days: config.gradingDays },
     ebay_fees: { fvf: config.ebayFvf, fvf_media: config.ebayFvfMedia, per_order: config.ebayPerOrder, packaging: config.packagingCost },
     alerts: { webhook: !!config.alertWebhook, email: !!(config.resendKey && config.alertEmail), min_score: config.alertMinScore, window_min: config.alertWindowMin },
     cron: { status: config.cronStatus, hours: config.cronHours, value_per_run: config.valuePerRun, daily_cap: config.dailyValuationCap },

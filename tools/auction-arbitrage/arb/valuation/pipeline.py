@@ -7,6 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Iterable
 
+from ..calibration import adjustment_for
 from ..config import Settings
 from ..db import Store
 from .base import Comp, Valuation, title_key
@@ -87,12 +88,14 @@ def triage_score(lot: dict[str, Any]) -> float:
 
 class ValuationPipeline:
     def __init__(self, settings: Settings, store: Store, *, claude_valuer: Any | None = None,
-                 picture_fetcher: Callable[[dict[str, Any]], list[str]] | None = None):
+                 picture_fetcher: Callable[[dict[str, Any]], list[str]] | None = None,
+                 calibration_fetcher: Callable[[], dict[str, Any] | None] | None = None):
         global _VISION
         _VISION = settings.vision
         self.settings = settings
         self.store = store
         self.picture_fetcher = picture_fetcher  # e.g. Scanner.pictures_for: pulls full-size photos from HiBid
+        self.calibration_fetcher = calibration_fetcher  # e.g. Scanner.calibration: the valuer's report card
         self._claude = claude_valuer
         self._claude_tried = claude_valuer is not None
 
@@ -121,7 +124,8 @@ class ValuationPipeline:
         if not force:
             cached = self.store.cached_valuation(key, self.settings.valuation_ttl_days * 86400)
             if cached:
-                cached = dict(cached, lot_id=lot["id"], cache_hit=True)
+                cached = dict(cached, lot_id=lot["id"], cache_hit=True,
+                              category=lot.get("category") or "Uncategorized")
                 self.store.save_valuation(lot["id"], cached)
                 return Valuation(**{k: v for k, v in cached.items() if k in Valuation.__dataclass_fields__})
 
@@ -153,8 +157,33 @@ class ValuationPipeline:
                 val.comps = [c.__dict__ for c in comps[:10]]
 
         val.created_at = time.time()
-        d = val.to_dict()
-        self.store.save_valuation(lot["id"], d)
+        val.category = lot.get("category") or "Uncategorized"  # so trends can group history without a join
+        val = self._apply_calibration(lot, val)
+        self.store.save_valuation(lot["id"], val.to_dict())
+        return val
+
+    def _apply_calibration(self, lot: dict[str, Any], val: Valuation) -> Valuation:
+        """Bend a fresh valuation toward what this category has actually done."""
+        if not self.settings.calibration or not self.calibration_fetcher or not val.mid:
+            return val
+        try:
+            report = self.calibration_fetcher()
+        except Exception as e:
+            log.info("calibration unavailable: %s", e)
+            return val
+        adj = adjustment_for(report, lot.get("category", ""), self.settings)
+        if adj["basis"] == "none" or (adj["bias"] == 1 and adj["confidence_factor"] == 1):
+            return val
+        b = adj["bias"]
+        for f in ("low", "mid", "high"):
+            v = getattr(val, f)
+            if v is not None:
+                setattr(val, f, round(v * b, 2))
+        val.confidence = round(val.confidence * adj["confidence_factor"], 3)
+        src = "your recorded sales" if adj["basis"] == "sales" else "auction results"
+        note = f"Calibrated: {lot.get('category') or 'this category'} valuations adjusted x{b:.2f} from {adj['n']} closed lots ({src})."
+        val.confidence_reason = (val.confidence_reason + " " if val.confidence_reason else "") + note
+        val.calibration = {"bias": b, "confidence_factor": adj["confidence_factor"], "basis": adj["basis"], "n": adj["n"]}
         return val
 
     @staticmethod
@@ -177,10 +206,14 @@ class ValuationPipeline:
 
     # ------------------------------------------------------------ many lots
     def value_many(self, lots: Iterable[dict[str, Any]], *, max_lots: int | None = None,
-                   progress: Callable[[int, int, dict[str, Any]], None] | None = None) -> int:
+                   progress: Callable[[int, int, dict[str, Any]], None] | None = None,
+                   boost: Callable[[dict[str, Any]], float] | None = None) -> int:
+        """`boost` lets the playbook push its own matches to the front: a lot matching a researched
+        niche is a far better use of a valuation call than one that merely contains a hot word."""
+        rank = (lambda l: triage_score(l) + boost(l)) if boost else triage_score
         todo = [l for l in lots if not l.get("is_closed")]
-        todo.sort(key=triage_score, reverse=True)
-        todo = [l for l in todo if triage_score(l) >= 0]
+        todo.sort(key=rank, reverse=True)
+        todo = [l for l in todo if rank(l) >= 0]
         if max_lots:
             todo = todo[:max_lots]
         done = 0

@@ -52,3 +52,53 @@ create table if not exists spread_scans (
   lots_valued integer default 0,
   message text
 );
+
+-- Calibration feedback loop: what we predicted vs. what actually happened on every closed lot.
+create table if not exists spread_outcomes (
+  lot_id bigint primary key,
+  title text,
+  category text,
+  closed_at timestamptz,
+  predicted_mid double precision,
+  predicted_net double precision,
+  confidence double precision,
+  method text,
+  score double precision,
+  hammer double precision,
+  landed_at_hammer double precision,
+  sale_price double precision,
+  sale_at timestamptz,
+  recorded_at timestamptz default now(),
+  data jsonb not null
+);
+create index if not exists spread_outcomes_closed on spread_outcomes (closed_at desc);
+create index if not exists spread_outcomes_cat on spread_outcomes (category);
+
+-- Liquidity feedback loop: how long your listings actually took, including the ones still sitting.
+-- Safe to re-run; `add column if not exists` is a no-op on an already-migrated database.
+alter table spread_outcomes add column if not exists listed_at timestamptz;
+alter table spread_outcomes add column if not exists still_listed boolean;
+alter table spread_outcomes add column if not exists predicted_days double precision;
+create index if not exists spread_outcomes_listed on spread_outcomes (listed_at desc);
+
+-- Valuations carry their lot's category so market trends can be grouped without a join.
+alter table spread_valuations add column if not exists category text;
+create index if not exists spread_valuations_created on spread_valuations (created_at desc);
+
+-- The playbook: niches we hunt, with the market numbers that set each one's bid ceiling.
+create table if not exists spread_theses (
+  id text primary key,
+  name text,
+  family text,
+  enabled boolean default true,
+  origin text,
+  price_median double precision,
+  max_bid double precision,
+  sold_90d integer,
+  active_now integer,
+  researched_at timestamptz,
+  last_hunted_at timestamptz,
+  updated_at timestamptz default now(),
+  data jsonb not null
+);
+create index if not exists spread_theses_enabled on spread_theses (enabled, last_hunted_at);

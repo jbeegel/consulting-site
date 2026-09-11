@@ -150,6 +150,41 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
 .conf{display:inline-block;width:46px;height:6px;background:var(--bg-3);border-radius:3px;vertical-align:middle;overflow:hidden}
 .conf i{display:block;height:100%;background:var(--accent)}
 .flag{font-size:10px;border:1px solid var(--warn);color:var(--warn);border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle}
+.thesis{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.02em;border-radius:3px;padding:1px 5px;background:var(--accent-soft,#eef2ff);color:var(--accent,#3b4ea0);border:1px solid var(--line-2);margin-left:4px;white-space:nowrap}
+.bidcap{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--good,#1a7f4b)}
+.pb h4{margin:14px 0 6px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2)}
+.pb h4:first-child{margin-top:0}
+.pb table{width:100%;border-collapse:collapse;font-size:12px}
+.pb th{text-align:left;font-weight:600;color:var(--ink-3);font-size:11px;padding:3px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+.pb td{padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+.pb td.r,.pb th.r{text-align:right;font-family:var(--mono)}
+.pb tr.off{opacity:.45}
+.pb .fam{color:var(--ink-3);font-size:11px;display:block;text-transform:none;letter-spacing:0;font-weight:400}
+.pb .unres{color:var(--ink-3);font-style:italic}
+.verdict{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-radius:3px;padding:1px 6px;font-family:var(--mono)}
+.verdict.buy{background:#1a7f4b;color:#fff}.verdict.negotiate{background:#c08a1e;color:#fff}
+.verdict.pass{background:var(--line-2);color:var(--ink-3)}.verdict.unknown{background:transparent;border:1px dashed var(--line-2);color:var(--ink-3)}
+.liq{font-family:var(--mono);font-size:11px;font-weight:700;border-radius:3px;padding:1px 5px;display:inline-block;min-width:16px;text-align:center}
+.liq.A{background:#1a7f4b;color:#fff}.liq.B{background:#4a9a55;color:#fff}.liq.C{background:#c08a1e;color:#fff}
+.liq.D{background:#c2601f;color:#fff}.liq.F{background:var(--bad);color:#fff}
+.liq.none{background:transparent;border:1px dashed var(--line-2);color:var(--ink-3);font-weight:500}
+.eta{font-size:11px;color:var(--ink-3);display:block;margin-top:1px;white-space:nowrap}
+.trend{font-family:var(--mono);font-size:11px;font-weight:700}
+.trend.up{color:var(--good,#1a7f4b)}.trend.down{color:var(--bad)}.trend.flat{color:var(--ink-3)}
+.intel h4{margin:14px 0 6px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2)}
+.intel h4:first-child{margin-top:0}
+.intel table{width:100%;border-collapse:collapse;font-size:12px}
+.intel th{text-align:left;font-weight:600;color:var(--ink-3);font-size:11px;padding:3px 6px;border-bottom:1px solid var(--line)}
+.intel td{padding:3px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.intel td.r,.intel th.r{text-align:right;font-family:var(--mono)}
+.intel tr.pick{cursor:pointer}.intel tr.pick:hover{background:var(--line)}
+.intel .cap{color:var(--ink-3);font-size:11px;display:block;text-transform:none;letter-spacing:0;font-weight:400}
+.intel .spark{width:80px;height:16px;vertical-align:middle;margin-left:4px}
+.intel td{vertical-align:middle}
+.params{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+.params .rowline{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--ink-2)}
+.params input[type=number]{width:64px}
+.params select{font-size:12px;padding:3px 4px}
 .radar{font-size:10px;border-radius:3px;padding:1px 6px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-family:var(--mono);display:inline-block}
 .radar.strike{background:var(--bad);color:#fff}
 .radar.watch{background:var(--heat-3);color:#fff}
@@ -162,6 +197,18 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
 .items td.r{text-align:right;font-family:var(--mono);white-space:nowrap}
 .items tr.star td{background:var(--bg);font-weight:600}
 .items .mk{color:var(--ink-3);font-size:11px;display:block;font-weight:400}
+.grade{font-size:10px;background:var(--accent);color:var(--accent-ink);border-radius:3px;padding:1px 5px;margin-left:4px;vertical-align:middle;font-weight:600;font-family:var(--mono)}
+.gbars{display:grid;grid-template-columns:auto 1fr auto auto;gap:4px 10px;align-items:center;font-size:12px;margin-top:6px}
+.gbars .lbl{font-family:var(--mono);color:var(--ink-2)}
+.gbars .bar{height:8px;background:var(--bg-3);border-radius:4px;overflow:hidden}
+.gbars .bar i{display:block;height:100%;background:var(--accent)}
+.gbars .p,.gbars .v{font-family:var(--mono);text-align:right}
+.gev{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+.gev .box{border:1px solid var(--line);border-radius:6px;padding:8px 10px;background:var(--bg)}
+.gev .box.rec{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.gev .amt{font-family:var(--mono);font-size:20px;font-weight:600}
+.cond{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;font-size:12px;margin-top:6px}
+.cond b{color:var(--ink-3);font-weight:600;font-size:11px;letter-spacing:.04em;text-transform:uppercase}
 .sweet{font-size:10px;background:var(--good);color:#fff;border-radius:3px;padding:1px 5px;margin-left:4px;vertical-align:middle;font-weight:600;letter-spacing:.02em}
 .prices{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:6px}
 .price{border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:var(--bg)}
@@ -181,6 +228,26 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
 .specs span{font-size:11px;border:1px solid var(--line);border-radius:999px;padding:1px 8px;background:var(--bg-2)}
 .fees{font-size:11px;color:var(--ink-3);margin-top:6px;line-height:1.5}
 .empty{padding:40px;text-align:center;color:var(--ink-3)}
+.card{background:var(--bg-2);border:1px solid var(--line);border-radius:8px;margin-bottom:16px;overflow:hidden}
+.card .head{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line);cursor:pointer;gap:12px}
+.card .head h2{margin:0;font-size:13px;font-weight:600}
+.card .head .sum{font-size:12px;color:var(--ink-3);font-family:var(--mono);margin-left:auto}
+.card .body{padding:10px 14px 14px}
+.card.collapsed .body{display:none}
+table.cal{width:100%;border-collapse:collapse;font-size:12px}
+table.cal th{text-align:left;font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);font-weight:600;padding:4px 8px;white-space:nowrap}
+table.cal th.r,table.cal td.r{text-align:right}
+table.cal td{padding:5px 8px;border-top:1px solid var(--line);font-family:var(--mono);white-space:nowrap}
+table.cal td.name{font-family:var(--sans);white-space:normal}
+table.cal tr.total td{border-top:2px solid var(--line-2);font-weight:600}
+.bias{display:inline-block;padding:1px 6px;border-radius:3px;font-weight:600}
+.bias.down{background:var(--bad);color:#fff}
+.bias.up{background:var(--good);color:#fff}
+.bias.flat{background:var(--bg-3);color:var(--ink-2)}
+.basis{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3)}
+.saleform{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:8px;font-size:12px}
+.saleform input{width:90px;background:var(--bg);border:1px solid var(--line-2);border-radius:4px;padding:4px 6px}
+.calstamp{font-size:11px;color:var(--ink-3);margin-top:4px}
 
 /* ---------- drawer */
 .scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:40;display:none}
@@ -243,6 +310,13 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
       <label class="toggle"><input type="checkbox" id="noBids"> No bids yet only</label>
       <label class="toggle"><input type="checkbox" id="sweetOnly"> Sweet spots only <span class="muted" id="sweetDef" style="font-size:11px">(≤$6 landed, ≥$15 net)</span></label>
       <label class="toggle"><input type="checkbox" id="hideUnvalued" checked> Hide unvalued lots</label>
+      <h3 title="A thing is only worth what someone will actually buy, and only worth having if they buy it soon.">How much should liquidity count? <span class="num" id="liqWLbl">70%</span></h3>
+      <div class="range"><input type="range" id="liqW" min="0" max="100" step="10" value="70"></div>
+      <div class="params">
+        <div class="rowline"><span>Rank by</span><select id="rankBy"><option value="score">Score</option><option value="velocity">Fastest money (%/mo)</option><option value="liquidity">Most liquid</option><option value="spread">Biggest spread</option></select></div>
+        <div class="rowline"><span>Min. grade</span><select id="minGrade"><option value="">any</option><option value="A">A</option><option value="B">B or better</option><option value="C">C or better</option><option value="D">D or better</option></select></div>
+        <div class="rowline"><span>Sells within</span><input id="maxDays" type="number" min="0" step="1" placeholder="any"><span>days</span></div>
+      </div>
       <h3>Radar level</h3>
       <div class="chips" id="radarChips"></div>
       <h3>Closes within</h3>
@@ -268,6 +342,21 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
       </div>
     </div>
 
+    <div class="card" id="pbCard" hidden>
+      <div class="head" id="pbHead"><h2>Playbook</h2><span class="sum" id="pbSum"></span><span class="muted" style="font-size:11px" id="pbToggle">hide</span></div>
+      <div class="body pb" id="pbBody"></div>
+    </div>
+
+    <div class="card" id="intelCard" hidden>
+      <div class="head" id="intelHead"><h2>Market intel</h2><span class="sum" id="intelSum"></span><span class="muted" style="font-size:11px" id="intelToggle">hide</span></div>
+      <div class="body intel" id="intelBody"></div>
+    </div>
+
+    <div class="card collapsed" id="calCard" hidden>
+      <div class="head" id="calHead"><h2>Valuer report card</h2><span class="sum" id="calSum"></span><span class="muted" style="font-size:11px" id="calToggle">show</span></div>
+      <div class="body" id="calBody"></div>
+    </div>
+
     <div class="tbl">
       <div class="head"><h2>Opportunities <span class="muted num" id="count"></span></h2><span class="muted" style="font-size:12px">click a row for the dossier</span></div>
       <div class="tscroll"><table class="opps"><thead id="thead"></thead><tbody id="tbody"></tbody></table></div>
@@ -283,7 +372,15 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
 (function(){
 const $=s=>document.querySelector(s);
 const API=window.__ARB_API__||'/api';
-const state={opps:[],cats:[],config:{},status:{},filters:{cats:new Set(),buckets:new Set(),radar:new Set(),minScore:0,q:'',noBids:false,sweetOnly:false,hideUnvalued:true},sort:{key:'score',dir:-1},embedded:false,pollTimer:null};
+const state={opps:[],cats:[],config:{},status:{},cal:null,intel:null,playbook:null,local:null,filters:{cats:new Set(),buckets:new Set(),radar:new Set(),minScore:0,q:'',noBids:false,sweetOnly:false,hideUnvalued:true},params:loadParams(),sort:{key:'score',dir:-1},embedded:false,pollTimer:null};
+// The user's own risk appetite. Liquidity weight changes the score itself so it is applied server-side;
+// grade / days / ranking are pure views of data already in hand, so they apply instantly on the client.
+function loadParams(){const d={liqW:0.7,rankBy:'score',minGrade:'',maxDays:null};try{return Object.assign(d,JSON.parse(localStorage.getItem('spread_params')||'{}'))}catch(e){return d}}
+function saveParams(){try{localStorage.setItem('spread_params',JSON.stringify(state.params))}catch(e){}}
+const GRADES='ABCDF';
+function liqOf(o){return o.score&&o.score.liquidity||null}
+function liqChip(l){return l?`<span class="liq ${l.grade}" title="${esc((l.notes||[]).join(' '))}">${l.grade}</span>`:'<span class="liq none">—</span>'}
+const trendMark={rising:['up','&#9650;'],warming:['up','&#9650;'],falling:['down','&#9660;'],cooling:['down','&#9660;'],flat:['flat','&ndash;'],steady:['flat','&ndash;'],unknown:['flat','&ndash;'],'new':['flat','new']};
 const BUCKETS=['<1h','1-3h','3-6h','6-12h','12-24h','1-3d','3d+'];
 const RADAR=[['strike','Strike','< 2h, act now'],['watch','Watch','2–12h, refresh often'],['track','Track','12–48h'],['scan','Scan','far out: valued, waiting on the clock']];
 function radarOf(o){const s=secsLeft(o);const v=o.score.value_score||0;if(s==null||v<20)return 'scan';const h=s/3600;return h<2?'strike':h<12?'watch':h<48?'track':'scan'}
@@ -306,10 +403,14 @@ async function api(path,opts,retry=true){const h={'content-type':'application/js
   if(!r.ok){let m='';try{const j=await r.json();m=j.detail||j.error||''}catch(e){}throw new Error(m||r.statusText)}return r.json()}
 async function load(){
   try{
-    const [cfg,opps,cats,st]=await Promise.all([api('/config'),api('/opportunities'),api('/categories'),api('/scan/status')]);
+    const w=`?liquidity_weight=${state.params.liqW}`;
+    const [cfg,opps,cats,st]=await Promise.all([api('/config'),api('/opportunities'+w),api('/categories'),api('/scan/status')]);
     state.config=cfg;state.opps=opps.opportunities;state.cats=cats;state.status=st;state.embedded=false;
+    try{state.cal=await api('/calibration')}catch(e){state.cal=null}
+    try{state.intel=await api('/intel'+w)}catch(e){state.intel=null}
+    try{state.playbook=await api('/playbook')}catch(e){state.playbook=null}
   }catch(e){
-    if(window.__ARB_DATA__){const d=window.__ARB_DATA__;state.config=d.config;state.opps=d.opportunities;state.cats=d.categories;state.status=d.status||{};state.embedded=true;
+    if(window.__ARB_DATA__){const d=window.__ARB_DATA__;state.config=d.config;state.opps=d.opportunities;state.cats=d.categories;state.status=d.status||{};state.cal=d.calibration||null;state.intel=d.intel||null;state.playbook=d.playbook||null;state.embedded=true;
       $('#banner').hidden=false;$('#banner').innerHTML='<b>Demo snapshot.</b> This page is a static export with example lots (synthetic data). Run <code>python -m arb serve</code> locally to scan hibid.com live, refresh bids, and re-value lots.';
       ['#btnScan','#btnRefresh'].forEach(s=>$(s).disabled=true);
     }else{$('#banner').hidden=false;$('#banner').textContent='Could not reach the API: '+e.message;}
@@ -323,7 +424,7 @@ async function health(){
     el.hidden=false;el.innerHTML=`<b>Setup</b> `+h.checks.map(c=>`<span class="chk ${c.ok?'':c.level==='required'?'bad':'warn'}" title="${esc(c.detail)}"><i></i>${esc(c.name)}${c.ok?'':c.fix?` <span class="fix">→ ${esc(c.fix)}</span>`:''}</span>`).join('')+`<button class="close" title="hide" onclick="this.parentNode.hidden=true">×</button>`;
   }catch(e){}
 }
-function renderAll(){renderStatus();renderKpis();renderChips();renderHeatmap();renderScatter();renderTable()}
+function renderAll(){renderStatus();renderKpis();renderChips();renderHeatmap();renderScatter();renderTable();renderPlaybook();renderIntel();renderCalibration()}
 
 // ---------------------------------------------------------------- filters
 function visible(){
@@ -337,6 +438,11 @@ function visible(){
     if(f.radar.size&&!f.radar.has(radarOf(o)))return false;
     if(f.cats.size&&!f.cats.has(o.lot.category))return false;
     if(f.buckets.size&&!f.buckets.has(bucketOf(s)))return false;
+    const lq=liqOf(o);
+    // Unvalued lots are never filtered out by a liquidity rule: the rule rejects known-illiquid items,
+    // it does not hide things the valuer has not looked at yet.
+    if(lq&&state.params.minGrade&&GRADES.indexOf(lq.grade)>GRADES.indexOf(state.params.minGrade))return false;
+    if(lq&&state.params.maxDays&&lq.days_p50>state.params.maxDays)return false;
     if(ql&&!((o.lot.title||'')+' '+(o.lot.auction_name||'')+' '+(o.valuation?.identified_item||'')).toLowerCase().includes(ql))return false;
     return true;
   });
@@ -360,7 +466,9 @@ function renderKpis(){
   const sweet=v.filter(o=>o.score.sweet_spot);
   const strike=v.filter(o=>radarOf(o)==='strike'&&o.score.score>=40);
   const spread=hot.concat(warm).reduce((a,o)=>a+Math.max(0,o.score.spread||0),0);
-  $('#kpis').innerHTML=[[strike.length,'strike now'],[hot.length,'hot'],[warm.length,'warm'],[sweet.length,'sweet spots'],[v.length,'valued'],[state.opps.length,'lots tracked'],[fmt(spread),'spread in hot+warm']].map(([b,s])=>`<div class="kpi"><b>${b}</b><small>${s}</small></div>`).join('');
+  const fast=v.filter(o=>{const l=liqOf(o);return l&&(l.grade==='A'||l.grade==='B')&&(o.score.spread||0)>0});
+  const stuck=v.filter(o=>{const l=liqOf(o);return l&&(l.grade==='F'||l.depth==='dead')&&(o.score.spread||0)>0});
+  $('#kpis').innerHTML=[[strike.length,'strike now'],[hot.length,'hot'],[warm.length,'warm'],[sweet.length,'sweet spots'],[fast.length,'liquid (A/B)'],[stuck.length,'slow movers'],[v.length,'valued'],[state.opps.length,'lots tracked'],[fmt(spread),'spread in hot+warm']].map(([b,s])=>`<div class="kpi"><b>${b}</b><small>${s}</small></div>`).join('');
 }
 function renderStatus(){
   const st=state.status.status||{};const ls=state.status.last_scan;
@@ -413,8 +521,9 @@ function renderScatter(){
 }
 
 // ---------------------------------------------------------------- table
-const COLS=[['score','Score',''],['radar','Radar',''],['title','Item',''],['category','Category',''],['bids','Bids','r'],['next','Next bid','r'],['landed','Landed','r'],['resale','Est. resale','r'],['net','Net','r'],['ratio','Multiple','r'],['spread','Spread','r'],['conf','Conf.',''],['closes','Closes','r'],['auction','Auction','']];
-function sortVal(o,k){const s=o.score,l=o.lot,v=o.valuation||{};switch(k){case 'score':return s.score;case 'radar':return ['strike','watch','track','scan'].indexOf(radarOf(o))*-1;case 'title':return l.title||'';case 'category':return l.category||'';case 'bids':return l.bid_count;case 'next':return s.next_bid;case 'landed':return s.landed_cost;case 'resale':return v.mid||0;case 'net':return s.net_resale||0;case 'ratio':return s.ratio||0;case 'spread':return s.spread||0;case 'conf':return s.confidence||0;case 'closes':return secsLeft(o)??1e12;case 'auction':return l.auction_name||''}}
+const COLS=[['score','Score',''],['radar','Radar',''],['title','Item',''],['category','Category',''],['bids','Bids','r'],['next','Next bid','r'],['landed','Landed','r'],['resale','Est. resale','r'],['net','Net','r'],['ratio','Multiple','r'],['spread','Spread','r'],['liq','Liquidity',''],['roi','%/mo','r'],['conf','Conf.',''],['closes','Closes','r'],['auction','Auction','']];
+function sortVal(o,k){const s=o.score,l=o.lot,v=o.valuation||{};switch(k){case 'score':return s.score;case 'radar':return ['strike','watch','track','scan'].indexOf(radarOf(o))*-1;case 'title':return l.title||'';case 'category':return l.category||'';case 'bids':return l.bid_count;case 'next':return s.next_bid;case 'landed':return s.landed_cost;case 'resale':return v.mid||0;case 'net':return s.net_resale||0;case 'ratio':return s.ratio||0;case 'spread':return s.spread||0;case 'liq':return (s.liquidity&&s.liquidity.score)??-1;case 'roi':return s.monthly_roi??-1;case 'conf':return s.confidence||0;case 'closes':return secsLeft(o)??1e12;case 'auction':return l.auction_name||''}}
+const RANK_COL={score:'score',velocity:'roi',liquidity:'liq',spread:'spread'};
 function renderTable(){
   const rows=visible();const{key,dir}=state.sort;
   rows.sort((a,b)=>{const x=sortVal(a,key),y=sortVal(b,key);return (typeof x==='string'?x.localeCompare(y):x-y)*dir});
@@ -424,17 +533,19 @@ function renderTable(){
   if(!rows.length){$('#tbody').innerHTML=`<tr><td colspan="${COLS.length}" class="empty">${state.opps.length?'No lots match these filters.':'No lots yet. Set a window and click “Scan HiBid”.'}</td></tr>`;return}
   $('#tbody').innerHTML=rows.map(o=>{const l=o.lot,s=o.score,v=o.valuation||{};const sl=secsLeft(o);
     return `<tr class="row" data-id="${l.id}">
-      <td>${s.valued?`<span class="pill ${s.heat}" title="value ${Math.round(s.value_score||0)} × time ${Math.round((s.price_reliability||0)*100)}%">${Math.round(s.score)}</span>`:'<span class="pill unvalued">n/a</span>'}</td>
+      <td>${s.valued?`<span class="pill ${s.heat}" title="value ${Math.round(s.value_score||0)} × time ${Math.round((s.price_reliability||0)*100)}%${s.liquidity_factor!=null&&s.liquidity_factor<1?` × liquidity ${Math.round(s.liquidity_factor*100)}% (was ${Math.round(s.score_before_liquidity||0)})`:''}">${Math.round(s.score)}</span>`:'<span class="pill unvalued">n/a</span>'}</td>
       <td>${s.valued?`<span class="radar ${radarOf(o)}">${radarOf(o)}</span>`:''}</td>
-      <td class="title"><div class="t">${esc(l.title)}${v.authenticity_risk?'<span class="flag" title="Authenticity risk flagged">auth</span>':''}${s.sweet_spot?'<span class="sweet" title="Penny lot: tiny landed cost, real resale">$→$$</span>':''}</div><div class="s">${esc(v.identified_item&&v.identified_item!==l.title?v.identified_item:'')}${l.bid_count===0?' · no bids':''}${l.estimate?' · est. '+esc(l.estimate):''}</div></td>
+      <td class="title"><div class="t">${esc(l.title)}${v.authenticity_risk?'<span class="flag" title="Authenticity risk flagged">auth</span>':''}${s.sweet_spot?'<span class="sweet" title="Penny lot: tiny landed cost, real resale">$→$$</span>':''}${o.grading&&o.grading.upside>0&&o.grading.recommendation!=='sell raw'?`<span class="grade" title="Grading: ${esc(o.grading.recommendation)}">grade +${fmt(o.grading.upside)}</span>`:''}${thesisChips(o)}</div><div class="s">${esc(v.identified_item&&v.identified_item!==l.title?v.identified_item:'')}${l.bid_count===0?' · no bids':''}${l.estimate?' · est. '+esc(l.estimate):''}</div></td>
       <td>${esc(l.category)}</td>
       <td class="r num">${l.bid_count}</td>
-      <td class="r num">${fmt(s.next_bid)}</td>
+      <td class="r num" title="${o.max_bid?`Playbook ceiling: bid no more than $${o.max_bid.toFixed(2)}`:''}">${fmt(s.next_bid)}${o.max_bid?`<span class="eta">max $${Math.round(o.max_bid)}</span>`:''}</td>
       <td class="r num">${fmt(s.landed_cost)}</td>
       <td class="r num">${s.valued?`${fmt(v.low)}–${fmt(v.high)}`:'—'}</td>
       <td class="r num">${fmt(s.net_resale)}</td>
       <td class="r num">${s.ratio?s.ratio.toFixed(1)+'×':'—'}</td>
       <td class="r num" style="${s.spread>0?'':'color:var(--bad)'}">${s.valued?fmt(s.spread):'—'}</td>
+      <td>${s.valued?`${liqChip(s.liquidity)}${s.liquidity?`<span class="eta">${esc(s.liquidity.eta)}</span>`:''}`:'—'}</td>
+      <td class="r num" title="Profit per dollar of capital per 30 days, at the mid estimate">${roiText(o.score.monthly_roi)}</td>
       <td><span class="conf" title="${Math.round((s.confidence||0)*100)}% confidence"><i style="width:${Math.round((s.confidence||0)*100)}%"></i></span></td>
       <td class="r ${cdClass(sl)}" data-ends="${l.ends_at||''}">${cdText(sl)}</td>
       <td class="muted" style="max-width:220px;overflow:hidden;text-overflow:ellipsis" title="${esc(l.auction_name)}">${esc(l.auctioneer||l.auction_name||'')}</td>
@@ -481,10 +592,51 @@ function renderDossier(o,loading){
       h+=`<h3>What's in the lot <span class="method">· ${v.items.length} item${v.items.length>1?'s':''} identified${v.images_used?' from '+v.images_used+' photo'+(v.images_used>1?'s':''):''}</span></h3><table class="items">${v.items.map(it=>{const star=so&&it.name.toLowerCase().slice(0,30)===so||(v.standout_item&&v.standout_item.toLowerCase().includes(it.name.toLowerCase().slice(0,24)));return `<tr class="${star?'star':''}"><td>${star?'★ ':''}${esc(it.name)}<span class="mk">${esc(it.maker_or_mark||'')}${it.era?' · '+esc(it.era):''}${it.note?' · '+esc(it.note):''}</span></td><td class="r">${fmt(it.est_low)}–${fmt(it.est_high)}</td><td class="r muted">${Math.round((it.confidence||0)*100)}%</td></tr>`}).join('')}</table>`;
       if(v.standout_item)h+=`<p class="muted" style="font-size:12px;margin:6px 0 0">Standout: ${esc(v.standout_item)}</p>`;}
     if(v.confidence_reason)h+=`<p class="muted" style="margin:6px 0 0;font-size:12px">${esc(v.confidence_reason)}</p>`;
+    if(v.calibration)h+=`<div class="calstamp">Adjusted <b>x${v.calibration.bias.toFixed(2)}</b> by the report card, from ${v.calibration.n} closed lots (${esc(v.calibration.basis==='sales'?'your recorded sales':'auction results')}).</div>`;
     if(v.value_drivers?.length)h+=`<h3>Value drivers</h3><ul>${v.value_drivers.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
     if(v.risks?.length||v.authenticity_risk)h+=`<h3>Risks</h3><ul>${v.authenticity_risk?'<li><b>Authenticity risk</b>: get it authenticated before relying on this value.</li>':''}${(v.risks||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+    if(o.theses&&o.theses.length){
+      const top=o.theses[0];
+      h+=`<h3>Playbook match <span class="method">· ${esc(top.family)}</span></h3>`;
+      h+=`<div class="fees">${o.max_bid
+        ? `<b>Bid no more than ${fmt2(o.max_bid)}.</b> ${esc(top.name)} sells for about ${fmt(top.price_median)}${top.eta?` and takes around ${esc(top.eta)} to move`:''}, so that is the most you can pay and still clear your target return.`
+        : `Matches <b>${esc(top.name)}</b>, but that niche has not been researched yet, so there is no ceiling to bid against. Run a research pass from the Playbook panel.`}</div>`;
+      h+=`<div class="specs" style="margin-top:6px">${o.theses.map(m=>`<span><b>${esc(m.name)}</b> · matched "${esc(m.matched.join('", "'))}" in the ${m.where}${m.max_bid?` · pay ≤ ${fmt2(m.max_bid)}`:''}</span>`).join('')}</div>`;
+    }
+    const lq=s.liquidity;
+    if(lq){
+      const ds=v.demand_signals||{};
+      const bar=Math.round(lq.score);
+      h+=`<h3>How fast does it sell? <span class="method">· liquidity ${lq.grade} · ${esc({measured:'measured from your sales',market:'from eBay sold vs active',researched:'from researched time-to-sell',assumed:'assumed, not researched',none:'unknown'}[lq.basis]||lq.basis)}</span></h3>`;
+      h+=`<div class="fees"><b>${esc(liquidityLine(o))}</b></div>`;
+      h+=`<table class="items"><tbody>
+        <tr><td>Sold in the last 90 days vs listed right now</td><td class="r">${lq.sold_90d==null?'—':lq.sold_90d} vs ${lq.active_now==null?'—':lq.active_now}${lq.sell_through==null?'':` <span class="muted">(${Math.round(lq.sell_through*100)}% sell-through)</span>`}</td></tr>
+        <tr><td>Median time to sell at the market price</td><td class="r">${esc(lq.eta)} <span class="muted">(slow case ${Math.round(lq.days_p80)}d)</span></td></tr>
+        <tr><td>Chance it sells inside 30 days</td><td class="r">${Math.round(lq.sell_probability_30d*100)}%</td></tr>
+        <tr><td>Days your money is tied up</td><td class="r">${Math.round(lq.capital_days)} <span class="muted">(incl. ${Math.round(lq.handling_days)}d handling)</span></td></tr>
+        <tr><td>Return on that capital</td><td class="r">${s.monthly_roi==null?'—':roiText(s.monthly_roi)+(s.monthly_roi>=9.99?'':'/month')}</td></tr>
+        <tr><td>Profit weighted by the chance it sells in 60 days</td><td class="r">${s.expected_profit_60d==null?'—':fmt(s.expected_profit_60d)} <span class="muted">of ${fmt(s.spread)}</span></td></tr>
+        <tr><td>Market depth · trend</td><td class="r">${esc(lq.depth)} · ${esc(lq.trend)}</td></tr>
+        ${ds.watchers_typical!=null?`<tr><td>Typical watchers on a live listing</td><td class="r">${ds.watchers_typical}</td></tr>`:''}
+      </tbody></table>`;
+      h+=`<div class="hbar" title="liquidity ${bar}/100" style="margin-top:6px;height:6px;border-radius:3px;background:var(--line);overflow:hidden"><i style="display:block;height:100%;width:${bar}%;background:${bar>=75?'#1a7f4b':bar>=55?'#4a9a55':bar>=35?'#c08a1e':bar>=18?'#c2601f':'var(--bad)'}"></i></div>`;
+      if(lq.notes&&lq.notes.length)h+=`<p class="muted" style="font-size:12px;line-height:1.5;margin:6px 0 0">${esc(lq.notes.join(' '))}${ds.buyer_pool?' Buyers: '+esc(ds.buyer_pool)+'.':''}${ds.note?' '+esc(ds.note):''}</p>`;
+      if(s.liquidity_factor!=null&&s.liquidity_factor<0.999)h+=`<p class="muted" style="font-size:12px;margin:4px 0 0">Liquidity cut this lot's score from <b>${Math.round(s.score_before_liquidity)}</b> to <b>${Math.round(s.score)}</b> at your current weighting.</p>`;
+    }
     if(v.comps?.length)h+=`<h3>Comparable sales (${v.comps.length})</h3><table class="comps">${v.comps.slice(0,12).map(cp=>`<tr><td>${cp.url?`<a href="${esc(cp.url)}" target="_blank" rel="noopener">${esc(cp.title)}</a>`:esc(cp.title)}${cp.note?`<div class="muted" style="font-size:11px">${esc(cp.note)}</div>`:''}</td><td class="muted" style="white-space:nowrap;font-size:11px">${esc(cp.source||'')}${cp.date?'<br>'+esc(cp.date):''}</td><td class="r">${fmt2(cp.price)}</td></tr>`).join('')}</table>`;
     if(v.error)h+=`<p class="muted">valuation note: ${esc(v.error)}</p>`;
+  }
+  const ge=o.grading,ga=v&&v.grading;
+  if(ge&&ga){
+    const B=[['10','PSA 10'],['9','PSA 9'],['8','PSA 8'],['7-','PSA ≤7']];const cd=ga.card||{},cn=ga.condition||{};
+    h+=`<h3>Grading upside <span class="method">· ${esc(ge.recommended_grader||'PSA')} · likely ${esc(ge.predicted_grade||'?')} · photos ${esc(ge.photo_quality)}</span></h3>`;
+    h+=`<div style="font-size:13px"><b>${esc([cd.year,cd.set,'#'+(cd.card_number||'?'),cd.player_or_subject].filter(Boolean).join(' '))}</b>${cd.parallel_or_variation&&cd.parallel_or_variation!=='base'?' · '+esc(cd.parallel_or_variation):''}${cd.rookie?' · rookie':''}</div>`;
+    h+=`<div class="cond"><b>Centering</b><span>${esc(cn.centering||'—')}</span><b>Corners</b><span>${esc(cn.corners||'—')}</span><b>Edges</b><span>${esc(cn.edges||'—')}</span><b>Surface</b><span>${esc(cn.surface||'—')}</span>${cn.notes?`<b>Notes</b><span>${esc(cn.notes)}</span>`:''}</div>`;
+    h+=`<div class="gbars">`+B.map(([k,l])=>`<span class="lbl">${l}</span><span class="bar"><i style="width:${Math.round((ge.probabilities[k]||0)*100)}%"></i></span><span class="p">${Math.round((ge.probabilities[k]||0)*100)}%</span><span class="v">${ge.prices[k]!=null?fmt(ge.prices[k]):'—'}</span>`).join('')+`</div>`;
+    const grade=ge.recommendation==='grade'||ge.recommendation.startsWith('grade if');
+    h+=`<div class="gev"><div class="box${grade?' rec':''}"><div class="cap">Graded · ~${ge.days}d</div><div class="amt">${fmt(ge.graded_net)}</div><div class="muted" style="font-size:11px">EV ${fmt(ge.ev_gross)} − fees − ${fmt(ge.grading_cost)} to grade${ge.graded_net_no10!=null?` · if no 10: ${fmt(ge.graded_net_no10)}`:''}</div></div><div class="box${grade?'':' rec'}"><div class="cap">Sell raw now</div><div class="amt">${fmt(ge.raw_net)}</div><div class="muted" style="font-size:11px">raw value ${fmt(ge.raw_value)} after fees</div></div></div>`;
+    h+=`<div class="fees"><b>${esc(ge.recommendation.charAt(0).toUpperCase()+ge.recommendation.slice(1))}.</b> Grading ${ge.upside>=0?'adds':'loses'} ${fmt(Math.abs(ge.upside))} expected against a ${fmt(ge.hurdle||25)} hurdle${ge.upside_no10!=null?` (${ge.upside_no10>=0?'+':''}${fmt(ge.upside_no10)} if it never gems)`:''}; ${fmt(ge.profit_graded_vs_landed)} profit vs landed if graded.${ga.pop&&ga.pop.psa_total?` Pop: ${ga.pop.psa_total.toLocaleString()} PSA-graded, ${(ga.pop.psa_10||0).toLocaleString()} tens, ${(ga.pop.psa_9||0).toLocaleString()} nines.`:''}${ga.pop&&ga.pop.note?' '+esc(ga.pop.note):''}${ga.grading_notes?` <b>Before submitting:</b> ${esc(ga.grading_notes)}`:''}</div>`;
+    if(ga.graded_comps&&ga.graded_comps.length)h+=`<table class="comps" style="margin-top:6px">${ga.graded_comps.slice(0,10).map(cp=>`<tr><td><b>${esc(cp.grader)} ${esc(cp.grade)}</b> ${cp.url?`<a href="${esc(cp.url)}" target="_blank" rel="noopener">${esc(cp.source)}</a>`:esc(cp.source)}</td><td class="muted" style="font-size:11px;white-space:nowrap">${esc(cp.date||'')}</td><td class="r">${fmt2(cp.price)}</td></tr>`).join('')}</table>`;
   }
   const le=o.listing,lp=v&&v.listing;
   if(le&&le.points){
@@ -503,25 +655,181 @@ function renderDossier(o,loading){
         <div class="actions" style="margin-top:10px"><a class="btn primary" href="https://www.ebay.com/sl/sell" target="_blank" rel="noopener">Open eBay sell form ↗</a><button class="copy" style="padding:6px 12px" data-copy="${esc(`${lp.title}\n\n${lp.description}\n\nCategory: ${lp.category}\nCondition: ${lp.condition}\nPrice: $${Math.round(m.price)} (offers to $${Math.round(le.best_offer_floor||m.price*0.85)})\n${(lp.item_specifics||[]).map(x=>x.name+': '+x.value).join('\n')}`)}">Copy whole listing</button></div></div>`;
     }
   }
+  if(!state.embedded)h+=`<h3>Record what happened</h3><p class="muted" style="font-size:12px;margin:0">Feeding real numbers back is what makes the valuations get better. Leave a box blank to skip it.</p>
+    <div class="saleform"><label>Paid <input id="sPaid" type="number" step="0.01" placeholder="${Math.round(s.landed_cost)}"></label><label>Listed on <input id="sListed" type="date"></label><label>Sold for <input id="sSold" type="number" step="0.01"></label><label>Sold on <input id="sSoldAt" type="date"></label><label class="toggle" style="margin:0"><input type="checkbox" id="sStill"> still listed</label><input id="sNote" placeholder="note (optional)" style="width:150px"><button class="btn" id="sSave">Save</button><span class="muted" id="sMsg"></span></div>
+    <p class="muted" style="font-size:12px;margin:4px 0 0">Recording a listing that has <em>not</em> sold is just as useful as one that has: that is how the model learns which things sit.</p>`;
   h+=`<h3>HiBid listing</h3>${pics.length?`<div class="pics">${pics.map(p=>`<img src="${esc(p)}" alt="">`).join('')}</div>`:''}<div class="desc" style="margin-top:8px">${esc(l.description||'(no description cached)')}</div>`;
   if(l.estimate)h+=`<p class="muted" style="font-size:12px">Auctioneer estimate: ${esc(l.estimate)}${l.buyer_premium_text?' · Buyer\'s premium: '+esc(l.buyer_premium_text):''}</p>`;
   if(loading&&!state.embedded)h+='<p class="muted" style="font-size:12px">fetching full listing…</p>';
   $('#drawerInner').innerHTML=h;
   $('#drawerInner').querySelectorAll('.copy').forEach(b=>b.onclick=async()=>{try{await navigator.clipboard.writeText(b.dataset.copy);const t=b.textContent;b.textContent='Copied';setTimeout(()=>b.textContent=t,1200)}catch(e){prompt('Copy:',b.dataset.copy)}});
   const r=$('#dRefresh');if(r)r.onclick=async()=>{r.disabled=true;r.textContent='refreshing…';try{const n=await api(`/lot/${l.id}/refresh`,{method:'POST'});Object.assign(state.opps.find(z=>z.lot.id===l.id)||{},n);renderDossier(n,false);renderTable();renderScatter()}catch(e){r.textContent='failed: '+e.message}};
+  const sv=$('#sSave');if(sv)sv.onclick=async()=>{
+    const paid=parseFloat($('#sPaid').value),sold=parseFloat($('#sSold').value);
+    const dateSecs=el=>{const v=$(el).value;return v?Date.parse(v+'T12:00:00Z')/1000:undefined};
+    const listed=dateSecs('#sListed'),soldAt=dateSecs('#sSoldAt'),still=$('#sStill').checked;
+    if(!isFinite(paid)&&!isFinite(sold)&&!listed){$('#sMsg').textContent='enter a price or a listing date first';return}
+    sv.disabled=true;$('#sMsg').textContent='saving…';
+    try{const r=await api(`/lot/${l.id}/sale`,{method:'POST',body:JSON.stringify({bought_price:isFinite(paid)?paid:undefined,sale_price:isFinite(sold)?sold:undefined,listed_at:listed,sale_at:soldAt,still_listed:still||undefined,notes:$('#sNote').value||undefined})});
+      const d=r&&r.days_to_sell;
+      $('#sMsg').textContent=d!=null?`saved — ${d} days to sell (we said ${r.predicted_days==null?'?':Math.round(r.predicted_days)})`:'saved — it will show up in the report card';
+      state.cal=await api('/calibration').catch(()=>state.cal);
+      state.intel=await api('/intel?liquidity_weight='+state.params.liqW).catch(()=>state.intel);
+      renderCalibration();renderIntel()}
+    catch(e){$('#sMsg').textContent='failed: '+e.message}
+    sv.disabled=false};
   const rv=$('#dRevalue');if(rv)rv.onclick=async()=>{rv.disabled=true;rv.textContent='valuing… (10–60s)';try{const n=await api(`/lot/${l.id}/revalue`,{method:'POST'});Object.assign(state.opps.find(z=>z.lot.id===l.id)||{},n);renderDossier(n,false);renderAll()}catch(e){rv.textContent='failed: '+e.message}};
 }
+
+function liquidityLine(o){
+  const s=o.score,l=s.liquidity;if(!l)return '';
+  const roi=s.monthly_roi==null?null:Math.round(s.monthly_roi*100);
+  if(l.grade==='F'||l.depth==='dead')return `Worth ${fmt(s.net_resale)} on paper, but almost nothing comparable sells — expect ${l.eta} or never.`;
+  if(l.grade==='D')return `Slow money: ${l.eta} to sell${roi==null?'':`, about ${roi}%/month on the capital`}.`;
+  if(roi!=null&&roi>=100&&(l.grade==='A'||l.grade==='B'))return `Fast money: sells in ${l.eta}, roughly ${roi}%/month on what you tie up.`;
+  return `Sells in about ${l.eta}${roi==null?'':` — ${roi}%/month on the capital`}.`;
+}
+
+// ---------------------------------------------------------------- playbook
+function thesisChips(o,limit=2){
+  const t=o.theses||[];if(!t.length)return '';
+  return t.slice(0,limit).map(m=>`<span class="thesis" title="${esc(m.name)} — matched on ${esc(m.matched.join(', '))}${m.max_bid?`; pay up to $${Math.round(m.max_bid)}`:''}">${esc(m.name.length>22?m.name.slice(0,21)+'…':m.name)}</span>`).join('');
+}
+function renderPlaybook(){
+  const pb=state.playbook,el=$('#pbCard');
+  if(!pb||!pb.theses||!pb.theses.length){el.hidden=true;return}
+  el.hidden=false;
+  const rows=pb.theses,researched=rows.filter(t=>t.researched_at),earning=rows.filter(t=>(t.stats||{}).sold>0);
+  $('#pbSum').textContent=`${rows.length} niches · ${researched.length} researched`
+    +(earning.length?` · ${earning.length} earning`:'');
+
+  const target=Math.round((pb.settings?.target_monthly_roi??1)*100);
+  let h=`<p class="muted" style="font-size:12px;margin:0 0 10px;line-height:1.5">Niches worth hunting, each with the most you can pay for one. The ceiling is arithmetic, not nerve: given what the thing sells for, how long it takes and a target of <b>${target}%/month</b> on the capital, there is exactly one bid above which the trade stops being worth doing. A niche with no researched price shows no ceiling — nothing here invents a number to bid on.</p>`;
+
+  if(!state.embedded)h+=`<div class="actions" style="margin-bottom:10px"><button class="btn primary" id="pbHunt">Hunt these on HiBid</button><button class="btn" id="pbResearch">Research new niches</button><button class="btn" id="pbReview">Grade against my sales</button><span class="muted" id="pbMsg" style="font-size:12px"></span></div>`;
+
+  h+=`<table><thead><tr><th>Niche</th><th class="r">Pay up to</th><th class="r">Sells for</th><th>Liquidity</th><th class="r">Sold/listed</th><th class="r">Matched</th><th class="r">Your ROI</th></tr></thead><tbody>`;
+  h+=rows.map(t=>{
+    const st=t.stats||{};
+    const bid=t.max_bid?`<span class="bidcap">$${t.max_bid.toFixed(2)}</span>`:'<span class="unres">—</span>';
+    const px=t.price_median?`$${Math.round(t.price_median)}`:'<span class="unres">not researched</span>';
+    const liq=t.liquidity_grade?`<span class="liq ${t.liquidity_grade}">${t.liquidity_grade}</span>${t.days_p50?` <span class="eta" style="display:inline">${Math.round(t.days_p50)}d</span>`:''}`:'—';
+    const vol=(t.sold_90d!=null&&t.active_now!=null)?`${t.sold_90d}/${t.active_now}`:'—';
+    const roi=st.realized_monthly_roi!=null?roiText(st.realized_monthly_roi):'—';
+    return `<tr class="${t.enabled?'':'off'}" title="${esc(t.rationale||'')}"><td>${esc(t.name)}<span class="fam">${esc(t.family)}${t.origin==='your_sales'?' · from your sales':t.origin==='discovered'?' · discovered':''}</span></td><td class="r">${bid}</td><td class="r">${px}</td><td>${liq}</td><td class="r">${vol}</td><td class="r">${st.lots_matched||'—'}</td><td class="r">${roi}</td></tr>`;
+  }).join('')+`</tbody></table>`;
+
+  const tells=rows.find(t=>t.tells&&t.tells.length);
+  if(tells)h+=`<h4>What to look for — ${esc(tells.name)}</h4><div class="specs">${tells.tells.map(x=>`<span>${esc(x)}</span>`).join('')}</div>`;
+
+  if(!state.embedded)h+=`<h4>Score a listing from anywhere</h4><p class="muted" style="font-size:12px;margin:0 0 6px;line-height:1.5">OfferUp and Facebook Marketplace have no public API and their terms forbid scraping, so paste a link or the listing text and it runs through the same playbook. Craigslist is searched automatically when <code>SPREAD_CRAIGSLIST_SITE</code> is set.</p>
+    <div class="saleform"><input id="pbUrl" placeholder="paste a listing URL" style="width:240px"><input id="pbText" placeholder="or paste the title/price" style="width:200px"><label>Miles <input id="pbMiles" type="number" step="1" style="width:60px"></label><button class="btn" id="pbScore">Score it</button></div><div id="pbVerdict" style="margin-top:8px"></div>`;
+
+  $('#pbBody').innerHTML=h;
+  const msg=$('#pbMsg');
+  const run=async(btn,label,fn)=>{if(!btn)return;btn.onclick=async()=>{btn.disabled=true;const t0=btn.textContent;btn.textContent=label;msg.textContent='';
+    try{msg.textContent=await fn()}catch(e){msg.textContent='failed: '+e.message}
+    btn.disabled=false;btn.textContent=t0;state.playbook=await api('/playbook').catch(()=>state.playbook);renderPlaybook()}};
+  run($('#pbHunt'),'hunting…',async()=>{const r=await api('/hunt',{method:'POST',body:'{}'});
+    const opps=await api('/opportunities?liquidity_weight='+state.params.liqW);state.opps=opps.opportunities;renderTable();renderKpis();
+    return `hunted ${r.hunted.length} niches, ${r.lots_found} lots found`});
+  run($('#pbResearch'),'researching… (1-3 min)',async()=>{const r=await api('/playbook/research',{method:'POST',body:'{}'});
+    return r.error?('research problem: '+r.error):`added ${r.added.length}, refreshed ${r.updated.length}`});
+  run($('#pbReview'),'grading…',async()=>{const r=await api('/playbook/review',{method:'POST',body:'{}'});
+    return r.proposed.length?`${r.proposed.length} new niche(s) proposed from your sales: ${r.proposed.map(t=>t.name).join(', ')}`:'graded; nothing new to propose'});
+  const sc=$('#pbScore');
+  if(sc)sc.onclick=async()=>{sc.disabled=true;const out=$('#pbVerdict');out.textContent='scoring…';
+    try{const miles=parseFloat($('#pbMiles').value);
+      const r=await api('/local',{method:'POST',body:JSON.stringify({url:$('#pbUrl').value||undefined,text:$('#pbText').value||undefined,distance_miles:isFinite(miles)?miles:undefined})});
+      out.innerHTML=`<span class="verdict ${r.verdict}">${r.verdict}</span> <span style="font-size:13px">${esc(r.note)}</span>`;
+    }catch(e){out.textContent='failed: '+e.message}
+    sc.disabled=false};
+}
+$('#pbHead').onclick=()=>{const el=$('#pbCard');el.classList.toggle('collapsed');$('#pbToggle').textContent=el.classList.contains('collapsed')?'show':'hide'};
+
+// ---------------------------------------------------------------- market intel
+function sparkline(points,change,w=80,h=16){
+  const ys=points.map(p=>p.liquidity).filter(v=>v!=null);
+  // Fewer than four days is not a shape, it is two dots and a ruler. Drawing one would imply a trend
+  // the data cannot support, so we draw nothing and the row reads "new".
+  if(ys.length<4||change==null)return '';
+  const lo=Math.min(...ys),hi=Math.max(...ys),span=hi-lo||1;
+  const d=ys.map((v,i)=>`${(i/(ys.length-1)*w).toFixed(1)},${(h-((v-lo)/span)*h).toFixed(1)}`).join(' ');
+  const col=change>=5?'#1a7f4b':change<=-5?'#c2401f':'var(--ink-3)';
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true"><polyline points="${d}" fill="none" stroke="${col}" stroke-width="1.5" vector-effect="non-scaling-stroke"/></svg>`;
+}
+/** Percent-per-month reads badly past 1000%: a $1 lot that nets $30 in a week is 40x, not "4000%". */
+function roiText(r){if(r==null)return '—';return r>=9.99?Math.round(r)+'\u00d7/mo':Math.round(r*100)+'%'}
+function renderIntel(){
+  const it=state.intel,el=$('#intelCard');
+  if(!it||!(it.trends||[]).length&&!(it.velocity_leaders||[]).length){el.hidden=true;return}
+  el.hidden=false;
+  const liq=it.liquidity||{global:{},categories:[]};
+  const measured=(liq.categories||[]).filter(c=>c.basis==='measured');
+  $('#intelSum').textContent=`${it.trends.length} categories over ${it.window_days} days`
+    +(it.warming.length?` · ${it.warming.length} warming`:'')
+    +(measured.length?` · speed calibrated from ${measured.reduce((a,c)=>a+c.n_sold,0)} of your sales`:'');
+
+  let h=`<p class="muted" style="font-size:12px;margin:0 0 10px;line-height:1.5">Worth $40 and <em>sells</em> for $40 are different claims. Liquidity is estimated from how many comparable items sold on eBay in the last 90 days against how many are listed right now: that ratio gives each listing a daily chance of selling, and from it a median time to sell. Everything below ranks on what that does to your money, not to the sticker.</p>`;
+
+  if(it.velocity_leaders.length){
+    h+=`<h4>Fastest money right now</h4><table><thead><tr><th class="r">%/mo</th><th>Item</th><th>Liquidity</th><th class="r">In</th><th class="r">Profit</th></tr></thead><tbody>`;
+    h+=it.velocity_leaders.slice(0,8).map(v=>`<tr class="pick" data-id="${v.lot_id}"><td class="r"><b>${roiText(v.monthly_roi)}</b></td><td>${esc(v.title.slice(0,64))}<span class="cap">${esc(v.category)}</span></td><td><span class="liq ${v.liquidity_grade}">${v.liquidity_grade}</span> <span class="eta" style="display:inline">${esc(v.eta)}</span></td><td class="r">${fmt(v.landed_cost)}</td><td class="r">+${fmt(v.spread)}</td></tr>`).join('')+`</tbody></table>`;
+  }
+
+  if(it.value_traps.length){
+    h+=`<h4>Valued high, but nobody is buying</h4><table><thead><tr><th>Item</th><th>Liquidity</th><th class="r">Est.</th><th>Why</th></tr></thead><tbody>`;
+    h+=it.value_traps.slice(0,6).map(v=>`<tr class="pick" data-id="${v.lot_id}"><td>${esc(v.title.slice(0,58))}<span class="cap">${esc(v.category)}</span></td><td><span class="liq ${v.liquidity_grade}">${v.liquidity_grade}</span> <span class="eta" style="display:inline">${esc(v.eta)}</span></td><td class="r">${fmt(v.mid)}</td><td class="cap">${esc(v.reason)}</td></tr>`).join('')+`</tbody></table>`;
+  }
+
+  if(it.trends.length){
+    h+=`<h4>Category heat, last ${it.window_days} days</h4><table><thead><tr><th>Category</th><th class="r">Liquidity</th><th class="r">Time to sell</th><th class="r">Sell-through</th><th>Trend</th><th class="r">Seen</th></tr></thead><tbody>`;
+    h+=it.trends.slice(0,12).map(t=>{const[m,g]=trendMark[t.direction]||trendMark.unknown;
+      return `<tr><td>${esc(t.category)}</td><td class="r">${t.liquidity==null?'—':Math.round(t.liquidity)}</td><td class="r">${t.days_p50==null?'—':Math.round(t.days_p50)+'d'}</td><td class="r">${t.sell_through==null?'—':Math.round(t.sell_through*100)+'%'}</td><td><span class="trend ${m}">${g}</span> ${t.change==null?'':`<span class="cap" style="display:inline">${t.change>0?'+':''}${t.change}</span>`} ${sparkline(t.points,t.change)}</td><td class="r">${t.n}</td></tr>`}).join('')+`</tbody></table>`;
+  }
+
+  if(measured.length||liq.realized_monthly_roi!=null){
+    h+=`<h4>What your own listings actually did</h4><p class="muted" style="font-size:12px;margin:0 0 6px;line-height:1.5">Recorded listings, sold and unsold. Anything still sitting after 30 days counts against the sell rate — a model that only learned from things that sold would conclude everything sells. Once a category has ${(state.config.liquidity_min_sales)||4} completed sales, its measured speed replaces the model's guess.</p>`;
+    h+=`<table><thead><tr><th>Category</th><th class="r">Listed</th><th class="r">Sold</th><th class="r">Took</th><th class="r">We said</th><th class="r">Sold in 30d</th><th class="r">Still sitting</th><th class="r">Adjustment</th></tr></thead><tbody>`;
+    const rows=(liq.categories||[]).slice(0,10).concat([liq.global]).filter(Boolean);
+    h+=rows.map(c=>`<tr${c.category==='__all__'?' class="total"':''}><td>${esc(c.category==='__all__'?'All categories':c.category)}</td><td class="r">${c.n_listed}</td><td class="r">${c.n_sold||'—'}</td><td class="r">${c.observed_days==null?'—':Math.round(c.observed_days)+'d'}</td><td class="r">${c.predicted_days==null?'—':Math.round(c.predicted_days)+'d'}</td><td class="r">${c.sell_rate_30d==null?'—':Math.round(c.sell_rate_30d*100)+'%'}</td><td class="r">${c.stuck||'—'}</td><td class="r">${c.basis==='measured'?`<span class="bias ${c.days_multiplier>1.03?'down':c.days_multiplier<0.97?'up':'flat'}">x${c.days_multiplier.toFixed(2)}</span>`:'<span class="basis">learning</span>'}</td></tr>`).join('')+`</tbody></table>`;
+    if(liq.realized_monthly_roi!=null)h+=`<p class="muted" style="font-size:12px;margin:8px 0 0">Your realized return on capital: <b>${roiText(liq.realized_monthly_roi)}</b> on the median round trip.</p>`;
+  }
+  $('#intelBody').innerHTML=h;
+  $('#intelBody').querySelectorAll('tr.pick').forEach(tr=>tr.onclick=()=>openDrawer(+tr.dataset.id));
+}
+$('#intelHead').onclick=()=>{const el=$('#intelCard');el.classList.toggle('collapsed');$('#intelToggle').textContent=el.classList.contains('collapsed')?'show':'hide'};
+
+// ---------------------------------------------------------------- report card
+function biasClass(b){return b<0.97?'down':b>1.03?'up':'flat'}
+function renderCalibration(){
+  const c=state.cal,el=$('#calCard');
+  if(!c||!c.totals||!c.totals.closed){el.hidden=true;return}
+  el.hidden=false;
+  const g=c.global,rows=(c.categories||[]).filter(x=>x.n_closed>=2);
+  $('#calSum').textContent=`${c.totals.closed} closed lots graded · ${c.totals.sold} sales recorded${g.basis!=='none'?` · overall x${g.bias.toFixed(2)}`:' · learning'}`;
+  const pct=v=>v==null?'—':Math.round(v*100)+'%';
+  const rat=v=>v==null?'—':v.toFixed(2);
+  let h=`<p class="muted" style="font-size:12px;margin:0 0 8px;line-height:1.5">Every lot the scanner valued gets checked after it closes against the price it actually realized, whether or not you bid. Auction results can only prove a number was too <b>high</b>, so they only ever cut an estimate. Sales you record are ground truth and override them once there are ${c.min_sales||5} in a category.</p>`;
+  h+=`<div style="overflow-x:auto"><table class="cal"><thead><tr><th>Category</th><th class="r">Closed</th><th class="r">Outbid at our own number</th><th class="r">Sales</th><th class="r">Actual ÷ predicted</th><th class="r">Adjustment</th><th>Basis</th></tr></thead><tbody>`;
+  const row=(x,cls)=>`<tr class="${cls||''}"><td class="name">${esc(x.category==='__all__'?'All categories':x.category)}</td><td class="r">${x.n_closed}</td><td class="r">${pct(x.overshoot_rate)}</td><td class="r">${x.n_sold||'—'}</td><td class="r">${rat(x.median_sale_ratio)}</td><td class="r"><span class="bias ${biasClass(x.bias)}">x${x.bias.toFixed(2)}</span></td><td class="basis">${x.basis==='none'?'learning':esc(x.basis)}</td></tr>`;
+  h+=rows.map(x=>row(x)).join('')+row(g,'total')+`</tbody></table></div>`;
+  if(c.totals.realized_profit!=null)h+=`<p class="muted" style="font-size:12px;margin:8px 0 0">Realized profit on recorded sales: <b>${fmt(c.totals.realized_profit)}</b>.</p>`;
+  $('#calBody').innerHTML=h;
+}
+$('#calHead').onclick=()=>{const el=$('#calCard');el.classList.toggle('collapsed');$('#calToggle').textContent=el.classList.contains('collapsed')?'show':'hide'};
 
 // ---------------------------------------------------------------- scan controls
 $('#btnScan').onclick=async()=>{
   const body={status:$('#fStatus').value,hours:+$('#fHours').value||null,search_text:$('#fSearch').value||null,zip:$('#fZip').value||null,miles:+$('#fMiles').value||null,max_value:+$('#fMaxValue').value,value:+$('#fMaxValue').value>0};
   $('#btnScan').disabled=true;const p=api('/scan',{method:'POST',body:JSON.stringify(body)}).catch(e=>{$('#statusText').textContent='scan failed: '+e.message});setTimeout(poll,1500);p.finally(()=>{$('#btnScan').disabled=false;poll()})
 };
-$('#btnRefresh').onclick=async()=>{const ids=visible().slice(0,60).map(o=>o.lot.id);if(!ids.length)return;$('#btnRefresh').disabled=true;try{await api('/refresh',{method:'POST',body:JSON.stringify({ids})});const opps=await api('/opportunities');state.opps=opps.opportunities;renderAll()}catch(e){$('#statusText').textContent='refresh failed: '+e.message}$('#btnRefresh').disabled=false};
+$('#btnRefresh').onclick=async()=>{const ids=visible().slice(0,60).map(o=>o.lot.id);if(!ids.length)return;$('#btnRefresh').disabled=true;try{await api('/refresh',{method:'POST',body:JSON.stringify({ids})});const opps=await api('/opportunities?liquidity_weight='+state.params.liqW);state.opps=opps.opportunities;renderAll()}catch(e){$('#statusText').textContent='refresh failed: '+e.message}$('#btnRefresh').disabled=false};
 async function poll(){
   clearTimeout(state.pollTimer);
   try{state.status=await api('/scan/status');renderStatus();
-    if(state.status.status.running){state.pollTimer=setTimeout(poll,2000)}else{const [opps,cats]=await Promise.all([api('/opportunities'),api('/categories')]);state.opps=opps.opportunities;state.cats=cats;renderAll()}
+    if(state.status.status.running){state.pollTimer=setTimeout(poll,2000)}else{const [opps,cats]=await Promise.all([api('/opportunities?liquidity_weight='+state.params.liqW),api('/categories')]);state.opps=opps.opportunities;state.cats=cats;
+      state.intel=await api('/intel?liquidity_weight='+state.params.liqW).catch(()=>state.intel);renderAll()}
   }catch(e){state.pollTimer=setTimeout(poll,4000)}
 }
 // ---------------------------------------------------------------- filter inputs
@@ -531,6 +839,30 @@ $('#noBids').onchange=e=>{state.filters.noBids=e.target.checked;renderScatter();
 $('#sweetOnly').onchange=e=>{state.filters.sweetOnly=e.target.checked;renderScatter();renderTable()};
 $('#hideUnvalued').onchange=e=>{state.filters.hideUnvalued=e.target.checked;renderTable()};
 
-load().then(()=>{if(!state.embedded){poll()}});
+// ---------------------------------------------------------------- liquidity parameters
+// Grade / days / ranking are views of data already loaded, so they apply instantly. The weight changes
+// the score itself, so it goes back to the server -- debounced, because it is a drag-able slider.
+function applyRank(){const col=RANK_COL[state.params.rankBy]||'score';state.sort={key:col,dir:-1};renderTable()}
+let weightTimer=null;
+function refetchWeighted(){
+  if(state.embedded)return;
+  clearTimeout(weightTimer);
+  weightTimer=setTimeout(async()=>{
+    const w='?liquidity_weight='+state.params.liqW;
+    try{const [opps,intel]=await Promise.all([api('/opportunities'+w),api('/intel'+w).catch(()=>state.intel)]);
+      state.opps=opps.opportunities;state.intel=intel;renderAll()}catch(e){}
+  },350);
+}
+$('#liqW').value=Math.round(state.params.liqW*100);
+$('#liqWLbl').textContent=Math.round(state.params.liqW*100)+'%';
+$('#rankBy').value=state.params.rankBy;
+$('#minGrade').value=state.params.minGrade;
+$('#maxDays').value=state.params.maxDays??'';
+$('#liqW').oninput=e=>{state.params.liqW=+e.target.value/100;$('#liqWLbl').textContent=e.target.value+'%';saveParams();refetchWeighted()};
+$('#rankBy').onchange=e=>{state.params.rankBy=e.target.value;saveParams();applyRank()};
+$('#minGrade').onchange=e=>{state.params.minGrade=e.target.value;saveParams();renderHeatmap();renderScatter();renderTable()};
+$('#maxDays').oninput=e=>{const v=parseFloat(e.target.value);state.params.maxDays=isFinite(v)&&v>0?v:null;saveParams();renderHeatmap();renderScatter();renderTable()};
+
+load().then(()=>{applyRank();if(!state.embedded){poll()}});
 })();
 </script>

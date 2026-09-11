@@ -9,12 +9,26 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import re
 import time
 from typing import Any
 
 import httpx
 
 from .base import Comp, Valuation, title_key
+
+_CARD_WORDS = re.compile(
+    r"\b(topps|bowman|fleer|upper deck|panini|donruss|o-?pee-?chee|leaf|prizm|select|optic|mosaic|chrome|refractor|"
+    r"rookie|\brc\b|psa|bgs|sgc|cgc|pokemon|pokémon|magic the gathering|mtg|yu-?gi-?oh|trading card|baseball card|"
+    r"football card|basketball card|hockey card|sports card|wax pack|graded card|slab)\b", re.I)
+
+
+def is_card(lot: dict[str, Any]) -> bool:
+    """Trading card lot? Title/category keywords; a bare '#123' only counts alongside a card word."""
+    text = f"{lot.get('title', '')} {lot.get('category_path', '')}"
+    if _CARD_WORDS.search(text):
+        return True
+    return bool(re.search(r"\bcards?\b", text, re.I) and re.search(r"\b(19|20)\d\d\b", text))
 
 log = logging.getLogger(__name__)
 
@@ -36,6 +50,19 @@ Rules:
   country-of-origin stamps, model numbers, hallmarks, edition numbers. For multi-item lots identify EACH
   distinct item, value each one, name the standout piece, and make the lot range the realistic total a
   reseller would net selling the good pieces individually and the rest as a group.
+- LIQUIDITY IS AS IMPORTANT AS PRICE. What something is "worth" is useless if nobody is buying it: an item
+  with 200 active listings and four sales a quarter is not a $40 item, it is a $40 asking price attached to
+  a six-month wait. On every item report `demand_signals`:
+  * sold_90d: how many comparable items SOLD on eBay in the last 90 days (count the sold results, don't guess).
+  * active_now: how many comparable items are listed for sale RIGHT NOW (the active result count).
+  * sell_through: sold / (sold + active), if you can compute it.
+  * median_days_to_sell: from listing to sale, when the data shows it.
+  * watchers_typical, price_dispersion ((p75 - p25) / median across the sold comps).
+  * trend: rising / flat / falling over the last year, and any seasonality (holiday, back-to-school,
+    baseball season, spring yard sales).
+  * buyer_pool: who actually buys this and how many of them there are.
+  Use round honest numbers and report -1 for anything you could not determine rather than inventing counts.
+  A thin market with three sales a quarter must be reported as thin even when those three sales were high.
 - Report prices in USD. Never exceed 3 web searches per item; stop early when you have 3+ solid comps.
 - Also draft the eBay listing you would post, with three price points (quick sale = around the 25th
   percentile of sold comps, market = median, patient = 75th percentile), a best-offer floor, and a shipping
@@ -90,6 +117,100 @@ LISTING_SCHEMA: dict[str, Any] = {
     "additionalProperties": False,
 }
 
+GRADING_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "description": "Trading-card grading analysis. applicable=false (and empty fields) for anything that is not a card.",
+    "properties": {
+        "applicable": {"type": "boolean"},
+        "card": {"type": "object", "properties": {
+            "year": {"type": "string"}, "set": {"type": "string"}, "card_number": {"type": "string"},
+            "player_or_subject": {"type": "string"}, "parallel_or_variation": {"type": "string"}, "rookie": {"type": "boolean"}},
+            "required": ["year", "set", "card_number", "player_or_subject", "parallel_or_variation", "rookie"], "additionalProperties": False},
+        "condition": {"type": "object", "properties": {
+            "centering": {"type": "string", "description": "e.g. '55/45 L/R, 60/40 T/B' or what the photo allows"},
+            "corners": {"type": "string"}, "edges": {"type": "string"}, "surface": {"type": "string"},
+            "notes": {"type": "string"}, "photo_quality": {"type": "string", "enum": ["good", "limited", "unusable"]}},
+            "required": ["centering", "corners", "edges", "surface", "notes", "photo_quality"], "additionalProperties": False},
+        "grade_probabilities": {"type": "object", "description": "probabilities that PSA would return each grade; sum to 1",
+            "properties": {"psa10": {"type": "number"}, "psa9": {"type": "number"}, "psa8": {"type": "number"}, "psa7_or_below": {"type": "number"}},
+            "required": ["psa10", "psa9", "psa8", "psa7_or_below"], "additionalProperties": False},
+        "predicted_grade": {"type": "string"},
+        "graded_comps": {"type": "array", "items": {"type": "object", "properties": {
+            "grader": {"type": "string"}, "grade": {"type": "string"}, "price": {"type": "number"},
+            "source": {"type": "string"}, "url": {"type": "string"}, "date": {"type": "string"}},
+            "required": ["grader", "grade", "price", "source", "url", "date"], "additionalProperties": False}},
+        "pop": {"type": "object", "properties": {
+            "psa_total": {"type": "integer"}, "psa_10": {"type": "integer"}, "psa_9": {"type": "integer"},
+            "note": {"type": "string", "description": "gem rate, pop trend, whether the pop suppresses prices"}},
+            "required": ["psa_total", "psa_10", "psa_9", "note"], "additionalProperties": False},
+        "raw_value": {"type": "number", "description": "what it sells for ungraded, USD"},
+        "recommended_grader": {"type": "string", "enum": ["PSA", "BGS", "SGC", "CGC", "none"]},
+        "grading_notes": {"type": "string", "description": "what to verify in hand before submitting; risks (trimming, print lines, reprints)"},
+    },
+    "required": ["applicable", "card", "condition", "grade_probabilities", "predicted_grade", "graded_comps", "pop",
+                 "raw_value", "recommended_grader", "grading_notes"],
+    "additionalProperties": False,
+}
+
+DEMAND_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "description": ("How fast this market actually moves. Counts come from eBay sold/active result counts; "
+                    "use -1 when unknown rather than guessing."),
+    "properties": {
+        "sold_90d": {"type": "integer", "description": "comparable items SOLD on eBay in the last 90 days; -1 if unknown"},
+        "active_now": {"type": "integer", "description": "comparable items listed for sale right now; -1 if unknown"},
+        "sell_through": {"type": "number", "description": "sold / (sold + active), 0-1; -1 if unknown"},
+        "median_days_to_sell": {"type": "number", "description": "-1 if unknown"},
+        "watchers_typical": {"type": "number", "description": "typical watchers on an active listing; -1 if unknown"},
+        "price_dispersion": {"type": "number", "description": "(p75 - p25) / median across the sold comps; -1 if unknown"},
+        "trend": {"type": "string", "enum": ["rising", "flat", "falling", "unknown"]},
+        "seasonality": {"type": "string", "description": "when this sells best, or empty"},
+        "buyer_pool": {"type": "string", "description": "who buys this and how many of them there are"},
+        "note": {"type": "string", "description": "anything that changes how fast it moves: crowded category, niche buyers, shipping friction"},
+    },
+    "required": ["sold_90d", "active_now", "sell_through", "median_days_to_sell", "watchers_typical",
+                 "price_dispersion", "trend", "seasonality", "buyer_pool", "note"],
+    "additionalProperties": False,
+}
+
+
+def parse_demand(raw: Any) -> dict[str, Any] | None:
+    """Pull the demand block out of the model's JSON, keeping unknowns as None.
+
+    -1 (or any negative) is the model's "I could not determine this". It must never become 0: zero sales
+    in 90 days is a real and very different signal from a missing measurement.
+    """
+    if not isinstance(raw, dict):
+        return None
+
+    def num(key: str) -> float | None:
+        v = raw.get(key)
+        if v is None or v == "":
+            return None
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return None
+        return f if f >= 0 else None
+
+    trend = str(raw.get("trend") or "unknown")
+    out = {
+        "sold_90d": num("sold_90d"), "active_now": num("active_now"), "sell_through": num("sell_through"),
+        "median_days_to_sell": num("median_days_to_sell"), "watchers_typical": num("watchers_typical"),
+        "price_dispersion": num("price_dispersion"),
+        "trend": trend if trend in ("rising", "flat", "falling") else "unknown",
+        "seasonality": str(raw.get("seasonality") or ""), "buyer_pool": str(raw.get("buyer_pool") or ""),
+        "note": str(raw.get("note") or ""),
+    }
+    if out["sell_through"] is None and out["sold_90d"] is not None and out["active_now"] is not None:
+        total = out["sold_90d"] + out["active_now"]
+        if total > 0:
+            out["sell_through"] = round(out["sold_90d"] / total, 3)
+    empty = (out["sold_90d"] is None and out["active_now"] is None and out["median_days_to_sell"] is None
+             and out["trend"] == "unknown" and not out["note"])
+    return None if empty else out
+
+
 ITEM_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -111,6 +232,7 @@ SCHEMA: dict[str, Any] = {
         "items": {"type": "array", "items": ITEM_SCHEMA, "description": "every distinct item identified in the lot (one entry for a single-item lot)"},
         "standout_item": {"type": "string", "description": "the single most valuable item in the lot and why, or empty"},
         "listing": LISTING_SCHEMA,
+        "grading": GRADING_SCHEMA,
         "identified_item": {"type": "string"},
         "brand": {"type": "string"},
         "model": {"type": "string"},
@@ -124,6 +246,7 @@ SCHEMA: dict[str, Any] = {
         "confidence_reason": {"type": "string"},
         "demand": {"type": "string", "enum": ["high", "medium", "low", "unknown"]},
         "days_to_sell": {"type": "integer"},
+        "demand_signals": DEMAND_SCHEMA,
         "best_channel": {"type": "string"},
         "value_drivers": {"type": "array", "items": {"type": "string"}},
         "risks": {"type": "array", "items": {"type": "string"}},
@@ -149,8 +272,8 @@ SCHEMA: dict[str, Any] = {
     },
     "required": ["identified_item", "brand", "model", "condition_assumption", "bulk_lot", "unit_count",
                  "resale_low", "resale_mid", "resale_high", "confidence", "confidence_reason", "demand",
-                 "days_to_sell", "best_channel", "value_drivers", "risks", "rationale", "comps",
-                 "authenticity_risk", "search_query", "listing", "items", "standout_item"],
+                 "days_to_sell", "demand_signals", "best_channel", "value_drivers", "risks", "rationale", "comps",
+                 "authenticity_risk", "search_query", "listing", "items", "standout_item", "grading"],
     "additionalProperties": False,
 }
 
@@ -185,6 +308,30 @@ def lot_image_urls(lot: dict[str, Any]) -> list[str]:
     return urls
 
 
+CARD_PROMPT = """
+THIS LOT IS A TRADING CARD. Do the full grading analysis (schema field `grading`, applicable=true):
+1. Identify the card exactly: year, set, card number, player/subject, parallel/variation, rookie or not.
+2. Read condition from the photos like a grader: centering (estimate left/right and top/bottom ratios),
+   corners (sharp / soft / dinged / rounded), edges (clean / chipping / rough cut), surface (print lines,
+   scratches, stains, wax, creases, snow). Say when the photo cannot show something.
+3. Turn that into PSA grade probabilities (10 / 9 / 8 / 7-or-below) that sum to 1. TENS ARE RARE: use the
+   set's PSA gem rate (pop 10 / total pop) as your prior for a 10 and only go above it with clear photo
+   evidence of razor corners, dead centering and a flawless surface; most raw vintage cards are 5-7s;
+   print-defect-prone sets almost never gem; modern pack-fresh cards can gem but rarely above 30%.
+   Grading costs roughly $90 all-in per card and takes ~2 months, so the analysis must show whether the
+   EXPECTED value (not the best case) clears that cost.
+4. Search deeply for GRADED sales by grade: PSA Auction Prices Realized (psacard.com/auctionprices),
+   SportsCardsPro / PriceCharting (price by grade), 130point.com (eBay sold aggregator), eBay sold filtered
+   by 'PSA 10' / 'PSA 9' / 'PSA 8', Goldin/Heritage for high-end. Record grader, grade, price, source, URL, date.
+5. Check the PSA population report (psacard.com/pop) and note the gem rate and whether a huge pop caps
+   PSA 10 prices. Beckett (BGS 9.5 / Black Label) and SGC where they trade higher for that era.
+6. Give the raw (ungraded) value, the recommended grader, and what to verify in hand before submitting
+   (trimming, re-coloring, reprints, print lines that photos hide).
+7. resale_low / resale_mid / resale_high MUST be the RAW (ungraded) sale value of the card as it sits. Never
+   put a graded price in the main range; grading upside lives only in the `grading` field.
+You may use up to 5 web searches for a card."""
+
+
 def _lot_prompt(lot: dict[str, Any], comps: list[Comp]) -> str:
     desc = (lot.get("description") or "").strip()
     if len(desc) > 2500:
@@ -204,6 +351,8 @@ def _lot_prompt(lot: dict[str, Any], comps: list[Comp]) -> str:
         for c in comps[:15]:
             parts.append(f"- ${c.price:,.2f} | {c.title} | {c.date} | {c.url}")
     parts.append("Search the web for sold comps if the evidence above is thin or ambiguous, then return the appraisal.")
+    if is_card(lot):
+        parts.append(CARD_PROMPT)
     return "\n".join(parts)
 
 
@@ -229,7 +378,7 @@ class ClaudeValuer:
         self.vision = vision
         self.max_images = max_images
 
-    def _request(self, messages: list[dict[str, Any]]):
+    def _request(self, messages: list[dict[str, Any]], max_searches: int | None = None):
         kwargs: dict[str, Any] = dict(
             model=self.model,
             max_tokens=8000,
@@ -238,7 +387,7 @@ class ClaudeValuer:
             output_config={"effort": self.effort, "format": {"type": "json_schema", "schema": SCHEMA}},
         )
         if self.web_search:
-            kwargs["tools"] = [{"type": "web_search_20260209", "name": "web_search", "max_uses": self.max_searches}]
+            kwargs["tools"] = [{"type": "web_search_20260209", "name": "web_search", "max_uses": max_searches or self.max_searches}]
         return self.client.messages.create(**kwargs)
 
     def value(self, lot: dict[str, Any], comps: list[Comp] | None = None) -> Valuation:
@@ -248,13 +397,14 @@ class ClaudeValuer:
         images = load_images(lot_image_urls(lot), self.max_images) if self.vision else []
         v.images_used = len(images)
         messages: list[dict[str, Any]] = [{"role": "user", "content": _lot_content(lot, comps, images)}]
+        searches = 5 if is_card(lot) else None  # cards get a deeper pass: APR, pop report, price-by-grade
         try:
-            resp = self._request(messages)
+            resp = self._request(messages, searches)
             for _ in range(3):  # server tools can pause a long turn; resume it
                 if resp.stop_reason != "pause_turn":
                     break
                 messages.append({"role": "assistant", "content": resp.content})
-                resp = self._request(messages)
+                resp = self._request(messages, searches)
             if resp.stop_reason == "refusal":
                 v.error = "model declined"
                 v.method = "none"
@@ -284,6 +434,7 @@ class ClaudeValuer:
         v.confidence_reason = data.get("confidence_reason", "")
         v.demand = data.get("demand", "unknown")
         v.days_to_sell = data.get("days_to_sell")
+        v.demand_signals = parse_demand(data.get("demand_signals"))
         v.best_channel = data.get("best_channel", "")
         v.value_drivers = list(data.get("value_drivers") or [])
         v.risks = list(data.get("risks") or [])
@@ -296,6 +447,14 @@ class ClaudeValuer:
         v.authenticity_risk = bool(data.get("authenticity_risk"))
         v.search_query = data.get("search_query", "")
         v.items = [i for i in (data.get("items") or []) if isinstance(i, dict) and i.get("name")]
+        g = data.get("grading")
+        v.grading = g if isinstance(g, dict) and g.get("applicable") else None
+        # Everything upstream (score, spread, radar) evaluates RAW. If the model slipped a graded price into
+        # the main range, pull it back to its own raw_value and say so.
+        if v.grading and float(v.grading.get("raw_value") or 0) > 0 and v.mid and v.mid > float(v.grading["raw_value"]) * 1.25:
+            raw = float(v.grading["raw_value"])
+            v.low, v.mid, v.high = raw * 0.8, raw, raw * 1.25
+            v.confidence_reason = (v.confidence_reason + " " if v.confidence_reason else "") + "Main range reset to the raw (ungraded) value; graded prices are in the grading section."
         v.standout_item = data.get("standout_item", "") or ""
         lst = data.get("listing")
         if isinstance(lst, dict) and lst.get("title"):

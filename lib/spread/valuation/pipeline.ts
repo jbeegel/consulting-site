@@ -1,7 +1,8 @@
 // Orchestrates: cache -> eBay comps -> Claude appraisal -> auctioneer estimate fallback.
 import type { Config } from "../config";
 import type { Store } from "../store";
-import type { Comp, Lot, Valuation } from "../types";
+import type { CalibrationReport, Comp, Lot, Valuation } from "../types";
+import { adjustmentFor } from "../calibration";
 import { titleKey, usable, emptyValuation } from "./base";
 import { ClaudeValuer } from "./claude";
 import { cleanQuery, fetchActiveComps, fetchSoldComps, summarize } from "./ebay";
@@ -28,7 +29,7 @@ export function triageScore(lot: Lot): number {
 
 export class ValuationPipeline {
   private claude: ClaudeValuer | null | undefined;
-  constructor(private c: Config, private store: Store, claude?: ClaudeValuer | null, private pictureFetcher?: (lot: Lot) => Promise<string[]>) {
+  constructor(private c: Config, private store: Store, claude?: ClaudeValuer | null, private pictureFetcher?: (lot: Lot) => Promise<string[]>, private calibrationFetcher?: () => Promise<CalibrationReport | null>) {
     this.claude = claude;
     VISION = c.vision;
   }
@@ -44,7 +45,7 @@ export class ValuationPipeline {
     if (!force) {
       const cached = await this.store.cachedValuation(key, this.c.valuationTtlDays * 86400);
       if (cached) {
-        const v = { ...cached, lot_id: lot.id, cache_hit: true };
+        const v = { ...cached, lot_id: lot.id, cache_hit: true, category: lot.category || "Uncategorized" };
         await this.store.saveValuation(lot.id, v);
         return v;
       }
@@ -75,8 +76,32 @@ export class ValuationPipeline {
       if (comps.length) val.comps = comps.slice(0, 10);
     }
     val.created_at = Date.now() / 1000;
+    val.category = lot.category || "Uncategorized"; // so trends can group history without a join
+    val = await this.applyCalibration(lot, val);
     await this.store.saveValuation(lot.id, val);
     return val;
+  }
+
+  /** Bend a fresh valuation toward what this category has actually done. */
+  private async applyCalibration(lot: Lot, val: Valuation): Promise<Valuation> {
+    if (!this.c.calibration || !this.calibrationFetcher || !val.mid) return val;
+    let report: CalibrationReport | null = null;
+    try {
+      report = await this.calibrationFetcher();
+    } catch {
+      return val;
+    }
+    const adj = adjustmentFor(report, lot.category, this.c);
+    if (adj.basis === "none" || (adj.bias === 1 && adj.confidence_factor === 1)) return val;
+    const scale = (x: number | null) => (x === null ? null : Math.round(x * adj.bias * 100) / 100);
+    const note = `Calibrated: ${lot.category || "this category"} valuations adjusted x${adj.bias.toFixed(2)} from ${adj.n} closed lots (${adj.basis === "sales" ? "your recorded sales" : "auction results"}).`;
+    return {
+      ...val,
+      low: scale(val.low), mid: scale(val.mid), high: scale(val.high),
+      confidence: Math.round(val.confidence * adj.confidence_factor * 1000) / 1000,
+      confidence_reason: (val.confidence_reason ? val.confidence_reason + " " : "") + note,
+      calibration: { bias: adj.bias, confidence_factor: adj.confidence_factor, basis: adj.basis, n: adj.n },
+    };
   }
 
   private fromComps(lot: Lot, comps: Comp[], key: string): Valuation | null {
@@ -100,9 +125,12 @@ export class ValuationPipeline {
     return v;
   }
 
-  /** Value the most promising lots, `maxLots` at most, stopping when `deadline` (ms epoch) passes. */
-  async valueMany(lots: Lot[], opts: { maxLots?: number; deadline?: number; onDone?: (n: number, total: number, lot: Lot) => void } = {}): Promise<number> {
-    let todo = lots.filter((l) => !l.is_closed && triageScore(l) >= 0).sort((a, b) => triageScore(b) - triageScore(a));
+  /** Value the most promising lots, `maxLots` at most, stopping when `deadline` (ms epoch) passes.
+   *  `boost` lets the playbook push its own matches to the front: a lot that matches a researched
+   *  niche is a far better use of a valuation call than one that merely contains a hot word. */
+  async valueMany(lots: Lot[], opts: { maxLots?: number; deadline?: number; boost?: (lot: Lot) => number; onDone?: (n: number, total: number, lot: Lot) => void } = {}): Promise<number> {
+    const rank = (l: Lot) => triageScore(l) + (opts.boost?.(l) ?? 0);
+    let todo = lots.filter((l) => !l.is_closed && rank(l) >= 0).sort((a, b) => rank(b) - rank(a));
     if (opts.maxLots !== undefined) todo = todo.slice(0, Math.max(0, opts.maxLots));
     let idx = 0, done = 0;
     const worker = async () => {

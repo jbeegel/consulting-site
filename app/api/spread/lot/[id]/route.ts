@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authorized, deny } from "@/lib/spread/auth";
-import { buildOpportunity, Scanner } from "@/lib/spread/scanner";
+import { buildOpportunity, Scanner, scoreOptionsFor } from "@/lib/spread/scanner";
 import { getStore } from "@/lib/spread/store";
 
 export const dynamic = "force-dynamic";
@@ -18,5 +18,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
       console.warn("enrich failed", e);
     }
   }
-  return NextResponse.json(buildOpportunity(lot, await store.getValuation(id)));
+  const scanner = new Scanner();
+  const report = await scanner.calibration().catch(() => null);
+  const weight = Number(new URL(req.url).searchParams.get("liquidity_weight"));
+  const opts = scoreOptionsFor(lot, report, Number.isFinite(weight) ? { liquidity_weight: weight } : {});
+  const theses = await scanner.theses().catch(() => []);
+  return NextResponse.json(buildOpportunity(lot, await store.getValuation(id), undefined, Date.now() / 1000, opts, theses));
 }
