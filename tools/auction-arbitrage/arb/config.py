@@ -64,6 +64,24 @@ class Settings:
     liquidity_min_sales: int = field(default_factory=lambda: int(_f("ARB_LIQUIDITY_MIN_SALES", 4)))
     trend_window_days: int = field(default_factory=lambda: int(_f("ARB_TREND_WINDOW_DAYS", 21)))
 
+    # the playbook: hunt known niches instead of waiting for them to float past
+    playbook: bool = field(default_factory=lambda: _b("ARB_PLAYBOOK", True))
+    target_monthly_roi: float = field(default_factory=lambda: _f("ARB_TARGET_MONTHLY_ROI", 1.0))
+    min_buy_multiple: float = field(default_factory=lambda: _f("ARB_MIN_BUY_MULTIPLE", 3.0))
+    hunt_per_run: int = field(default_factory=lambda: int(_f("ARB_HUNT_PER_RUN", 4)))
+    hunt_pages: int = field(default_factory=lambda: int(_f("ARB_HUNT_PAGES", 2)))
+    thesis_min_sales: int = field(default_factory=lambda: int(_f("ARB_THESIS_MIN_SALES", 3)))
+    thesis_min_roi: float = field(default_factory=lambda: _f("ARB_THESIS_MIN_ROI", 1.5))
+    thesis_max_from_sales: int = field(default_factory=lambda: int(_f("ARB_THESIS_MAX_FROM_SALES", 8)))
+    discover_count: int = field(default_factory=lambda: int(_f("ARB_DISCOVER_COUNT", 8)))
+    research_ttl_days: float = field(default_factory=lambda: _f("ARB_RESEARCH_TTL_DAYS", 30))
+
+    # local, non-auction sources
+    local: bool = field(default_factory=lambda: _b("ARB_LOCAL", True))
+    craigslist_site: str = field(default_factory=lambda: os.environ.get("ARB_CRAIGSLIST_SITE", ""))
+    local_trip_cost: float = field(default_factory=lambda: _f("ARB_LOCAL_TRIP_COST", 4.0))
+    local_cost_per_mile: float = field(default_factory=lambda: _f("ARB_LOCAL_COST_PER_MILE", 0.2))
+
     # grading economics (trading cards)
     grading: bool = field(default_factory=lambda: _b("ARB_GRADING", True))
     grading_fee: float = field(default_factory=lambda: _f("ARB_GRADING_FEE", 75.0))  # PSA regular-tier per card; economy/bulk is lower but slow

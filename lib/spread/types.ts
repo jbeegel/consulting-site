@@ -288,6 +288,10 @@ export interface Opportunity {
   why: string;
   listing: ListingEconomics | null;
   grading: GradingEconomics | null;
+  /** Playbook niches this lot matches, strongest first. Present even before a valuation exists. */
+  theses?: ThesisMatch[];
+  /** The lowest max_bid across matched theses: the number to stop bidding at. */
+  max_bid?: number | null;
 }
 
 /** User-set risk parameters. Sent by the dashboard, applied server-side so alerts honour them too. */
@@ -304,6 +308,22 @@ export interface IntelParams {
   handling_days?: number;
 }
 
+/** A listing from somewhere that is not an auction: Craigslist, a pasted OfferUp/Marketplace URL. */
+export interface LocalListing {
+  source: string;
+  external_id: string;
+  title: string;
+  description: string;
+  price: number | null;
+  url: string;
+  image: string | null;
+  city: string;
+  state: string;
+  distance_miles: number | null;
+  posted_at: number | null;
+  fetched_at: number;
+}
+
 export interface ScanParams {
   status?: string;
   hours?: number | null;
@@ -314,6 +334,8 @@ export interface ScanParams {
   max_pages?: number;
   max_value?: number | null;
   value?: boolean;
+  /** Set false to skip the playbook's targeted searches and only do the broad pull. */
+  hunt?: boolean;
   trigger?: "manual" | "cron";
 }
 
@@ -429,6 +451,85 @@ export interface LiquidityReport {
   categories: CategoryLiquidity[];
   /** Median realized monthly ROI across everything you have actually bought and sold. */
   realized_monthly_roi: number | null;
+}
+
+// ----------------------------------------------------------------------------- the playbook
+/** What a thesis has actually done for you, rolled up from recorded outcomes. */
+export interface ThesisStats {
+  lots_matched: number;
+  bought: number;
+  sold: number;
+  spend: number;
+  revenue: number;
+  realized_monthly_roi: number | null;
+  last_match_at: number | null;
+}
+
+/**
+ * A niche worth hunting, with the numbers that make it actionable. See playbook.ts for the model.
+ * Price and volume fields are null until a research pass fills them; a thesis with no median yields
+ * no `max_bid`, which is the point — nothing should hand you a bid it cannot justify.
+ */
+export interface Thesis {
+  id: string;
+  name: string;
+  family: string;
+  /** Search strings for HiBid / eBay / local sources. */
+  queries: string[];
+  /** Any of these in the title or description disqualifies a lot outright. */
+  negative: string[];
+  /** At least one must appear. */
+  must_any: string[];
+  /** All must appear, when a niche needs two words together. */
+  must_all: string[];
+  // --- market, from research
+  sold_90d: number | null;
+  active_now: number | null;
+  sell_through: number | null;
+  price_p25: number | null;
+  price_median: number | null;
+  price_p75: number | null;
+  median_days_to_sell: number | null;
+  ship_cost: number;
+  ebay_category: string;
+  trend: "rising" | "flat" | "falling" | "unknown";
+  seasonality: string;
+  // --- derived
+  /** The most this can cost all-in and still clear the target return. Null without a median. */
+  max_landed: number | null;
+  /** `max_landed` converted back to an auction bid, with the buyer's premium stripped out. */
+  max_bid: number | null;
+  liquidity_score: number | null;
+  liquidity_grade: string | null;
+  days_p50: number | null;
+  // --- provenance and judgement
+  rationale: string;
+  tells: string[];
+  risks: string[];
+  sources: string[];
+  confidence: number;
+  origin: "seed" | "discovered" | "your_sales" | "manual";
+  enabled: boolean;
+  researched_at: number | null;
+  last_hunted_at: number | null;
+  created_at: number;
+  updated_at: number;
+  stats: ThesisStats;
+}
+
+/** A lot that looks like a thesis, with the numbers to act on before any valuation call is spent. */
+export interface ThesisMatch {
+  thesis_id: string;
+  name: string;
+  family: string;
+  /** 0-1. Title hits count double; a negative term anywhere means no match at all. */
+  strength: number;
+  where: "title" | "description";
+  matched: string[];
+  max_bid: number | null;
+  max_landed: number | null;
+  price_median: number | null;
+  eta: string;
 }
 
 // ----------------------------------------------------------------------------- market trends

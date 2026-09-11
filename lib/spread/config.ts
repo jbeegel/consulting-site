@@ -57,6 +57,32 @@ export const config = {
   liquidityMinSales: Math.floor(num("SPREAD_LIQUIDITY_MIN_SALES", 4)),
   trendWindowDays: Math.floor(num("SPREAD_TREND_WINDOW_DAYS", 21)),
 
+  // the playbook: hunt known niches instead of waiting for them to float past
+  playbook: bool("SPREAD_PLAYBOOK", true),
+  /** Return on capital a buy must clear to be worth doing. 1.0 = 100%/month. Drives every max bid. */
+  targetMonthlyRoi: num("SPREAD_TARGET_MONTHLY_ROI", 1.0),
+  /** Never pay within this multiple of net resale, however fast it sells. */
+  minBuyMultiple: num("SPREAD_MIN_BUY_MULTIPLE", 3),
+  /** Theses to run as targeted searches per scan, least-recently-hunted first. */
+  huntPerRun: Math.floor(num("SPREAD_HUNT_PER_RUN", 4)),
+  huntPages: Math.floor(num("SPREAD_HUNT_PAGES", 2)),
+  /** Sales of the same keyword before your own history proposes it as a thesis. */
+  thesisMinSales: Math.floor(num("SPREAD_THESIS_MIN_SALES", 3)),
+  thesisMinRoi: num("SPREAD_THESIS_MIN_ROI", 1.5),
+  thesisMaxFromSales: Math.floor(num("SPREAD_THESIS_MAX_FROM_SALES", 8)),
+  /** How many niches a discovery pass asks for, and how stale research may get. */
+  discoverCount: Math.floor(num("SPREAD_DISCOVER_COUNT", 8)),
+  researchTtlDays: num("SPREAD_RESEARCH_TTL_DAYS", 30),
+
+  // local, non-auction sources
+  local: bool("SPREAD_LOCAL", true),
+  localRadiusMiles: num("SPREAD_LOCAL_RADIUS_MILES", 40),
+  /** Craigslist site subdomain, e.g. "detroit" for detroit.craigslist.org. */
+  craigslistSite: str("SPREAD_CRAIGSLIST_SITE"),
+  /** Going to collect something costs money: a flat cost per trip plus mileage. */
+  localTripCost: num("SPREAD_LOCAL_TRIP_COST", 4),
+  localCostPerMile: num("SPREAD_LOCAL_COST_PER_MILE", 0.2),
+
   grading: bool("SPREAD_GRADING", true),
   gradingFee: num("SPREAD_GRADING_FEE", 75), // PSA regular tier; all-in with shipping ~ $90
   gradingShip: num("SPREAD_GRADING_SHIP", 15),

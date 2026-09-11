@@ -7,6 +7,9 @@ import time
 from typing import Any, Callable
 
 from .calibration import build_report, liquidity_adjustment_for
+from .playbook import (apply_outcome_stats, hunt_order, match_theses, normalize_thesis, refresh_all,
+                       theses_from_outcomes)
+from .seeds import SEED_THESES
 from .config import Settings
 from .db import Store
 from .hibid import HiBidClient, apply_state, normalize_lot
@@ -44,6 +47,7 @@ class Scanner:
         self.pipeline = pipeline or ValuationPipeline(settings, store, picture_fetcher=self.pictures_for,
                                                       calibration_fetcher=self.calibration)
         self._calibration: tuple[float, dict[str, Any]] | None = None
+        self._theses: tuple[float, list[dict[str, Any]]] | None = None
         self.status = ScanStatus()
 
     # ------------------------------------------------------------------ pull
@@ -78,7 +82,8 @@ class Scanner:
         return kept
 
     # ------------------------------------------------------------------ scan
-    def scan(self, *, value: bool = True, max_value: int | None = 40, **pull_kwargs) -> dict[str, Any]:
+    def scan(self, *, value: bool = True, max_value: int | None = 40, hunt: bool = True,
+             **pull_kwargs) -> dict[str, Any]:
         st = self.status
         with st.lock:
             if st.running:
@@ -91,6 +96,18 @@ class Scanner:
         st.scan_id = scan_id
         try:
             lots = self.pull(**pull_kwargs)
+
+            # Hunt: the broad pull sees whatever is closing; these searches go looking for the niches
+            # we already know pay. Cheap (no valuation), and the results join the same pool.
+            theses = self.theses() if hunt else []
+            if theses:
+                with st.lock:
+                    st.message = "hunting the playbook"
+                found = self.hunt(theses=theses)
+                seen = {l["id"] for l in lots}
+                lots = lots + [l for l in found["lots"] if l["id"] not in seen]
+                log.info("hunted %d theses, %d extra lots", len(found["hunted"]), len(lots) - len(seen))
+
             with st.lock:
                 st.lots_seen = len(lots)
                 st.phase = "valuing" if value else "done"
@@ -106,10 +123,24 @@ class Scanner:
                         st.lots_valued = done
                         st.message = f"valued {done}/{total}: {lot.get('title', '')[:60]}"
 
-                self.pipeline.value_many(todo, max_lots=max_value, progress=progress)
+                # A lot matching a researched niche outranks one that merely contains a hot word.
+                boost = None
+                if theses:
+                    def boost(lot: dict[str, Any]) -> float:
+                        m = match_theses(lot, theses)
+                        return 2 + 2 * m[0]["strength"] if m else 0.0
+
+                self.pipeline.value_many(todo, max_lots=max_value, progress=progress, boost=boost)
             settled = self.settle_closed_lots()
             if settled:
                 log.info("settled %d closed lots into the report card", settled)
+            if theses:
+                # Local arithmetic over outcomes we already hold, so the playbook never goes stale
+                # waiting for someone to press a button.
+                try:
+                    self.playbook_review()
+                except Exception as e:
+                    log.warning("playbook review failed: %s", e)
             self.store.purge_closed()
             with st.lock:
                 st.phase = "done"
@@ -165,6 +196,111 @@ class Scanner:
         except Exception as e:
             log.warning("calibration report failed: %s", e)
             return self._calibration[1] if self._calibration else None
+
+    # ----------------------------------------------------------------- playbook
+    def theses(self, force: bool = False) -> list[dict[str, Any]]:
+        """The playbook, seeded on first use and cached for a minute.
+
+        Seeding on read rather than on deploy means a fresh install has something to hunt immediately,
+        and the seeds carry no invented market data -- their prices stay None until research runs.
+        """
+        if not self.settings.playbook:
+            return []
+        now = time.time()
+        if not force and self._theses and now - self._theses[0] < 60:
+            return self._theses[1]
+        rows = self.store.theses()
+        if not rows:
+            rows = [normalize_thesis(s, self.settings) for s in SEED_THESES]
+            self.store.save_theses(rows)
+            log.info("seeded playbook with %d theses", len(rows))
+        else:
+            # Config can change under stored theses (a new target ROI moves every ceiling), so re-derive.
+            rows = refresh_all(rows, self.settings)
+        self._theses = (now, rows)
+        return rows
+
+    def save_theses(self, rows: list[dict[str, Any]]) -> None:
+        self.store.save_theses(rows)
+        self._theses = None
+
+    def playbook_review(self) -> dict[str, Any]:
+        """Roll recorded outcomes onto each thesis, and propose new ones from what you have flipped."""
+        rows = self.theses()
+        outcomes = self.store.outcomes()
+        lots = {l["id"]: l for l in self.store.lots(include_closed=True, limit=5000)}
+        with_stats = apply_outcome_stats(rows, outcomes, lots)
+        proposed = theses_from_outcomes(outcomes, self.settings, with_stats)
+        self.save_theses(with_stats)
+        return {"theses": with_stats, "proposed": proposed}
+
+    def research(self, *, discover: int | None = None, refresh: int = 6,
+                 focus: str | None = None) -> dict[str, Any]:
+        """Discover new niches and re-measure stale ones. Costs Claude calls with web search."""
+        from .discovery import researcher_for, stale_theses
+
+        r = researcher_for(self.settings)
+        if r is None:
+            return {"added": [], "updated": [], "error": "no Anthropic key: set ANTHROPIC_API_KEY to run research"}
+        existing = self.theses()
+        added: list[dict[str, Any]] = []
+        updated: list[dict[str, Any]] = []
+        error = None
+        try:
+            stale = stale_theses(existing, self.settings)[:refresh]
+            if stale:
+                by_name = {t["name"].lower(): t for t in existing}
+                for raw in r.refresh(stale):
+                    prev = by_name.get(raw["name"].lower())
+                    if not prev:
+                        continue
+                    # Keep identity, provenance and accumulated stats; replace what research measures.
+                    merged = {**prev, **raw, "id": prev["id"], "origin": prev["origin"],
+                              "stats": prev.get("stats"), "created_at": prev.get("created_at")}
+                    updated.append(normalize_thesis(merged, self.settings))
+            n = self.settings.discover_count if discover is None else discover
+            if n > 0:
+                avoid = [t["name"] for t in existing]
+                focus = focus or "small advertising ephemera, and bank / insurance / financial memorabilia"
+                seen = {t["id"] for t in existing}
+                for raw in r.discover(n, avoid, focus):
+                    t = normalize_thesis({**raw, "origin": "discovered"}, self.settings)
+                    if t["id"] in seen:
+                        continue
+                    seen.add(t["id"])
+                    added.append(t)
+        except Exception as e:
+            log.warning("thesis research failed: %s", e)
+            error = f"{type(e).__name__}: {e}"
+        if added or updated:
+            self.save_theses(updated + added)
+        return {"added": added, "updated": updated, "error": error}
+
+    def hunt(self, *, theses: list[dict[str, Any]] | None = None, max_theses: int | None = None,
+             deadline: float | None = None) -> dict[str, Any]:
+        """Run the playbook's own search terms against HiBid rather than waiting for a match to drift
+        past in a broad scan. Rotates least-recently-hunted first."""
+        rows = theses if theses is not None else self.theses()
+        picks = hunt_order(rows, self.settings.hunt_per_run if max_theses is None else max_theses)
+        kept: dict[int, dict[str, Any]] = {}
+        hunted: list[str] = []
+        for t in picks:
+            if deadline and time.time() > deadline:
+                break
+            for q in (t.get("queries") or [])[:2]:
+                if deadline and time.time() > deadline:
+                    break
+                try:
+                    for lot in self.pull(status="OPEN", hours=None, search_text=q,
+                                         max_pages=self.settings.hunt_pages):
+                        kept[lot["id"]] = lot
+                except Exception as e:
+                    log.warning("hunt failed for %s %r: %s", t["id"], q, e)
+            hunted.append(t["id"])
+            t["last_hunted_at"] = time.time()
+        if hunted:
+            self.save_theses(picks)
+        return {"hunted": hunted, "lots": list(kept.values())}
 
     def score_options(self, category: str, liquidity_weight: float | None = None,
                       handling_days: float | None = None) -> dict[str, Any]:

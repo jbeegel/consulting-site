@@ -37,6 +37,7 @@ export async function GET(req: Request) {
   // One report card for the whole request; it feeds each lot the measured speed of its category.
   const scanner = new Scanner();
   const report = await scanner.calibration().catch(() => null);
+  const theses = await scanner.theses().catch(() => []);
   const lots = await store.lots({ endsBefore: hours ? now + hours * 3600 : null, endsAfter: now - 60, category });
   const vals = await store.valuationsFor(lots.map((l) => l.id));
   const out = [];
@@ -44,7 +45,7 @@ export async function GET(req: Request) {
     if (q && !`${lot.title} ${lot.auction_name ?? ""}`.toLowerCase().includes(q)) continue;
     const v = vals.get(lot.id) ?? null;
     if (!v && !includeUnvalued) continue;
-    const opp = buildOpportunity(lot, v, undefined, now, scoreOptionsFor(lot, report, intelParams));
+    const opp = buildOpportunity(lot, v, undefined, now, scoreOptionsFor(lot, report, intelParams), theses);
     if (v && opp.score.score < minScore) continue;
     out.push(opp);
   }

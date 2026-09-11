@@ -22,5 +22,6 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const report = await scanner.calibration().catch(() => null);
   const weight = Number(new URL(req.url).searchParams.get("liquidity_weight"));
   const opts = scoreOptionsFor(lot, report, Number.isFinite(weight) ? { liquidity_weight: weight } : {});
-  return NextResponse.json(buildOpportunity(lot, await store.getValuation(id), undefined, Date.now() / 1000, opts));
+  const theses = await scanner.theses().catch(() => []);
+  return NextResponse.json(buildOpportunity(lot, await store.getValuation(id), undefined, Date.now() / 1000, opts, theses));
 }

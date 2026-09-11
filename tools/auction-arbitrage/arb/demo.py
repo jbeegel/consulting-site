@@ -368,13 +368,91 @@ def make_demo_outcomes(seed: int = 11, now: float | None = None) -> list[dict[st
     return out
 
 
+# Market numbers for the demo playbook. Stand-ins for what a research pass measures, chosen to show the
+# discrimination the model is for: letter openers move (deep and fast), bank giveaways are crowded, and
+# obsolete notes are worth more per piece but take most of a year to sell.
+DEMO_RESEARCH = {
+    "advertising-letter-openers": (30.0, 140, 55, 9),
+    "bank-advertising-giveaways": (38.0, 90, 140, 22),
+    "celluloid-advertising-pocket-mirrors": (26.0, 75, 60, 14),
+    "advertising-and-figural-pinback-buttons": (22.0, 210, 90, 11),
+    "obsolete-bank-notes-and-scrip": (55.0, 60, 300, 45),
+    "antique-stock-and-bond-certificates": (24.0, 110, 260, 38),
+    "railroadiana-smalls": (46.0, 95, 120, 26),
+    "advertising-thermometers-and-rulers": (34.0, 55, 85, 24),
+}
+
+
+def make_demo_theses(settings, now: float | None = None) -> list[dict[str, Any]]:
+    """The seed playbook with plausible research filled in on some of it, so the panel has both
+    researched niches with bid ceilings and un-researched ones still showing a blank."""
+    from .playbook import normalize_thesis, refresh_thesis
+    from .seeds import SEED_THESES
+
+    now = now or time.time()
+    out = []
+    for seed in SEED_THESES:
+        t = normalize_thesis(dict(seed, origin="seed"), settings, now)
+        sim = DEMO_RESEARCH.get(t["id"])
+        if sim:
+            px, sold, active, days = sim
+            t = refresh_thesis(dict(t, price_median=px, price_p25=round(px * 0.65, 2),
+                                    price_p75=round(px * 1.6, 2), sold_90d=sold, active_now=active,
+                                    median_days_to_sell=days, researched_at=now - 3 * 86400,
+                                    sources=["eBay sold listings (demo)"], confidence=0.65),
+                              settings, now)
+        out.append(t)
+    return out
+
+
+def make_demo_playbook_outcomes(now: float | None = None) -> list[dict[str, Any]]:
+    """Round trips that match playbook niches, so the panel shows realized performance and the
+    flywheel has something to propose from."""
+    now = now or time.time()
+    rows = [
+        ("Antique c1918 Citizens Mutual Auto Insurance Howell MI Advertising Letter Opener", 1.15, 30.0, 0.2),
+        ("Vintage advertising letter opener Farmers State Bank Iowa celluloid handle", 2.30, 26.0, 3.0),
+        ("Antique brass advertising letter opener hardware store Ohio", 1.15, 22.0, 6.0),
+        ("Antique advertising letter opener funeral home Indiana figural", 3.45, 41.0, 1.0),
+        ("Celluloid advertising pocket mirror brewery pretty girl", 2.30, 34.0, 9.0),
+        ("Odd Fellows fraternal watch fob gold filled antique", 4.60, 38.0, 21.0),
+    ]
+    out = []
+    lot_id = 320400000
+    for i, (title, paid, sold, days) in enumerate(rows):
+        lot_id += 37
+        listed = now - (40 - i * 4) * 86400
+        out.append({
+            "lot_id": lot_id, "title": title, "category": "Collectibles",
+            "closed_at": listed - 2 * 86400,
+            "predicted_low": sold * 0.7, "predicted_mid": sold * 0.95, "predicted_high": sold * 1.3,
+            "predicted_net": sold * 0.8, "confidence": 0.6, "method": "claude+web", "score": 70.0,
+            "hammer": round(paid / 1.15, 2), "landed_at_hammer": paid,
+            "bought": True, "bought_price": paid, "sale_price": sold,
+            "sale_at": listed + days * 86400, "sale_channel": "eBay", "notes": "",
+            "listed_at": listed, "list_price": round(sold * 1.1, 2), "still_listed": False,
+            "views": 120 + i * 30, "watchers": 3 + i, "predicted_days": 12.0,
+            "recorded_at": now,
+        })
+    return out
+
+
 def load_demo(store, settings=None) -> int:
+    from .config import load as load_settings
+
+    settings = settings or load_settings()
     lots, vals = make_demo()
     store.upsert_lots(lots)
     for v in vals:
         store.save_valuation(v["lot_id"], v)
     for o in make_demo_outcomes():
         store.save_outcome(o)
+    for o in make_demo_playbook_outcomes():
+        store.save_outcome(o)
+    store.save_theses(make_demo_theses(settings))
+    # Grade the playbook against those outcomes so the demo shows realized performance straight away.
+    from .playbook import apply_outcome_stats
+    store.save_theses(apply_outcome_stats(store.theses(), store.outcomes(), {}))
     return len(lots)
 
 

@@ -125,9 +125,12 @@ export class ValuationPipeline {
     return v;
   }
 
-  /** Value the most promising lots, `maxLots` at most, stopping when `deadline` (ms epoch) passes. */
-  async valueMany(lots: Lot[], opts: { maxLots?: number; deadline?: number; onDone?: (n: number, total: number, lot: Lot) => void } = {}): Promise<number> {
-    let todo = lots.filter((l) => !l.is_closed && triageScore(l) >= 0).sort((a, b) => triageScore(b) - triageScore(a));
+  /** Value the most promising lots, `maxLots` at most, stopping when `deadline` (ms epoch) passes.
+   *  `boost` lets the playbook push its own matches to the front: a lot that matches a researched
+   *  niche is a far better use of a valuation call than one that merely contains a hot word. */
+  async valueMany(lots: Lot[], opts: { maxLots?: number; deadline?: number; boost?: (lot: Lot) => number; onDone?: (n: number, total: number, lot: Lot) => void } = {}): Promise<number> {
+    const rank = (l: Lot) => triageScore(l) + (opts.boost?.(l) ?? 0);
+    let todo = lots.filter((l) => !l.is_closed && rank(l) >= 0).sort((a, b) => rank(b) - rank(a));
     if (opts.maxLots !== undefined) todo = todo.slice(0, Math.max(0, opts.maxLots));
     let idx = 0, done = 0;
     const worker = async () => {

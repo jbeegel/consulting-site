@@ -15,6 +15,8 @@ from .calibration import build_report
 from .db import Store
 from .scanner import Scanner
 from .intel import apply_intel_filters
+from .playbook import match_theses, normalize_thesis, refresh_thesis
+from .sources import hunt_local, parse_pasted_listing, score_local
 from .scoring import TIME_BUCKETS, grading_economics, listing_economics, score_lot, why_upside
 
 log = logging.getLogger(__name__)
@@ -34,8 +36,13 @@ class ScanRequest(BaseModel):
 
 
 def build_opportunity(lot: dict[str, Any], val: dict[str, Any] | None, s: Settings, now: float,
-                      score_opts: dict[str, Any] | None = None) -> dict[str, Any]:
+                      score_opts: dict[str, Any] | None = None,
+                      theses: list[dict[str, Any]] | None = None) -> dict[str, Any]:
     sc = score_lot(lot, val, s, now=now, **(score_opts or {}))
+    # Playbook matches attach whether or not a valuation exists: a matched, unvalued penny lot already
+    # has a researched price and a bid ceiling behind it, which is the whole point of hunting.
+    hits = match_theses(lot, theses) if theses else []
+    ceilings = [h["max_bid"] for h in hits if h.get("max_bid") is not None]
     return {
         "lot": lot,
         "valuation": val,
@@ -43,6 +50,8 @@ def build_opportunity(lot: dict[str, Any], val: dict[str, Any] | None, s: Settin
         "why": why_upside(lot, val, sc, s) if val else "",
         "listing": listing_economics(lot, val, sc, s),
         "grading": grading_economics(val, sc, s),
+        "theses": hits,
+        "max_bid": min(ceilings) if ceilings else None,
     }
 
 
@@ -79,6 +88,7 @@ def create_app(settings: Settings | None = None, store: Store | None = None, sca
                       rank_by: str = "score"):
         now = time.time()
         sc.calibration()  # warm the report card so every lot gets its category's measured speed
+        theses = sc.theses()
         lots = db.lots(ends_before=(now + hours * 3600) if hours else None, ends_after=now - 60,
                        category=category or None)
         vals = db.valuations_for([l["id"] for l in lots])
@@ -91,7 +101,7 @@ def create_app(settings: Settings | None = None, store: Store | None = None, sca
             if not v and not include_unvalued:
                 continue
             opts = sc.score_options(lot.get("category") or "", liquidity_weight, handling_days)
-            opp = build_opportunity(lot, v, s, now, opts)
+            opp = build_opportunity(lot, v, s, now, opts, theses)
             if opp["score"]["score"] < min_score and v:
                 continue
             out.append(opp)
@@ -226,6 +236,76 @@ def create_app(settings: Settings | None = None, store: Store | None = None, sca
         db.save_outcome(updated)
         days = round((updated["sale_at"] - listed_at) / 86400, 1) if listed_at and updated.get("sale_at") else None
         return {"outcome": updated, "days_to_sell": days, "predicted_days": updated.get("predicted_days")}
+
+    # ------------------------------------------------------------- playbook
+    @app.get("/api/playbook")
+    def playbook():
+        rows = sc.theses()
+        rows.sort(key=lambda t: (-(t.get("max_bid") or 0), t.get("name", "")))
+        return {"theses": rows, "settings": {
+            "target_monthly_roi": s.target_monthly_roi, "min_buy_multiple": s.min_buy_multiple,
+            "research_ttl_days": s.research_ttl_days, "hunt_per_run": s.hunt_per_run,
+        }}
+
+    @app.post("/api/playbook")
+    def upsert_thesis(body: dict[str, Any]):
+        existing = {t["id"]: t for t in sc.theses()}
+        prev = existing.get(body.get("id", ""))
+        if not prev and not body.get("name"):
+            raise HTTPException(400, "name required for a new thesis")
+        merged = refresh_thesis({**prev, **body}, s) if prev else normalize_thesis(body, s)
+        sc.save_theses([merged])
+        return {"thesis": merged}
+
+    @app.delete("/api/playbook/{thesis_id}")
+    def delete_thesis(thesis_id: str):
+        db.delete_thesis(thesis_id)
+        return {"deleted": thesis_id}
+
+    @app.post("/api/playbook/research")
+    def research(body: dict[str, Any] | None = None):
+        body = body or {}
+        return sc.research(discover=body.get("discover"), refresh=body.get("refresh", 6),
+                           focus=body.get("focus"))
+
+    @app.post("/api/playbook/review")
+    def review(accept: bool = False):
+        out = sc.playbook_review()
+        if accept and out["proposed"]:
+            sc.save_theses(out["proposed"])
+        return {**out, "accepted": len(out["proposed"]) if accept else 0}
+
+    @app.post("/api/hunt")
+    def hunt(body: dict[str, Any] | None = None):
+        body = body or {}
+        rows = sc.theses()
+        picked = [t for t in rows if t["id"] in body["ids"]] if body.get("ids") else None
+        out = sc.hunt(theses=picked, max_theses=body.get("max_theses"))
+        return {"hunted": out["hunted"], "lots_found": len(out["lots"])}
+
+    @app.get("/api/local")
+    def local(limit: int = 60):
+        theses = sc.theses()
+        if not s.local or not s.craigslist_site:
+            return {"hits": [], "enabled": False, "detail":
+                    "Set ARB_CRAIGSLIST_SITE to your local craigslist subdomain (e.g. 'detroit') to search "
+                    "automatically. OfferUp and Facebook Marketplace have no public API and their terms "
+                    "forbid scraping, so POST a pasted link to this endpoint instead."}
+        listings = hunt_local(theses, s)
+        order = {"buy": 0, "negotiate": 1, "unknown": 2, "pass": 3}
+        hits = [h for h in (score_local(l, theses, s) for l in listings) if h["theses"]]
+        hits.sort(key=lambda h: order[h["verdict"]])
+        return {"enabled": True, "site": s.craigslist_site, "scanned": len(listings), "hits": hits[:limit]}
+
+    @app.post("/api/local")
+    def local_paste(body: dict[str, Any]):
+        listing = parse_pasted_listing(url=body.get("url", ""), text=body.get("text", ""),
+                                       price=body.get("price"), title=body.get("title", ""))
+        if not listing:
+            raise HTTPException(400, "send a url or some text")
+        if body.get("distance_miles") is not None:
+            listing["distance_miles"] = body["distance_miles"]
+        return score_local(listing, sc.theses(), s)
 
     @app.get("/api/categories")
     def categories():

@@ -33,6 +33,12 @@ CREATE TABLE IF NOT EXISTS outcomes (
 );
 CREATE INDEX IF NOT EXISTS outcomes_closed ON outcomes(closed_at);
 CREATE INDEX IF NOT EXISTS outcomes_cat ON outcomes(category);
+CREATE TABLE IF NOT EXISTS theses (
+  id TEXT PRIMARY KEY, name TEXT, family TEXT, enabled INTEGER DEFAULT 1, origin TEXT,
+  price_median REAL, max_bid REAL, sold_90d INTEGER, active_now INTEGER,
+  researched_at REAL, last_hunted_at REAL, updated_at REAL, data TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS theses_hunt ON theses(enabled, last_hunted_at);
 CREATE TABLE IF NOT EXISTS scans (
   id INTEGER PRIMARY KEY AUTOINCREMENT, started_at REAL, finished_at REAL, status TEXT,
   params TEXT, lots_seen INTEGER DEFAULT 0, lots_valued INTEGER DEFAULT 0, message TEXT
@@ -240,6 +246,34 @@ class Store:
                    WHERE o.lot_id IS NULL AND l.ends_at IS NOT NULL AND l.ends_at < ?
                    ORDER BY l.ends_at DESC LIMIT ?""", (now, limit)).fetchall()
         return [json.loads(r["data"]) for r in rows]
+
+    # ------------------------------------------------------------- playbook
+    def theses(self) -> list[dict[str, Any]]:
+        with self._lock:
+            rows = self._conn.execute("SELECT data FROM theses").fetchall()
+        return [json.loads(r["data"]) for r in rows]
+
+    def save_theses(self, rows: Iterable[dict[str, Any]]) -> None:
+        with self._lock:
+            for t in rows:
+                self._conn.execute(
+                    """INSERT INTO theses (id,name,family,enabled,origin,price_median,max_bid,sold_90d,
+                       active_now,researched_at,last_hunted_at,updated_at,data)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                       ON CONFLICT(id) DO UPDATE SET name=excluded.name, family=excluded.family,
+                         enabled=excluded.enabled, origin=excluded.origin, price_median=excluded.price_median,
+                         max_bid=excluded.max_bid, sold_90d=excluded.sold_90d, active_now=excluded.active_now,
+                         researched_at=excluded.researched_at, last_hunted_at=excluded.last_hunted_at,
+                         updated_at=excluded.updated_at, data=excluded.data""",
+                    (t["id"], t.get("name"), t.get("family"), int(bool(t.get("enabled", True))), t.get("origin"),
+                     t.get("price_median"), t.get("max_bid"), t.get("sold_90d"), t.get("active_now"),
+                     t.get("researched_at"), t.get("last_hunted_at"), t.get("updated_at", time.time()),
+                     json.dumps(t)),
+                )
+
+    def delete_thesis(self, thesis_id: str) -> None:
+        with self._lock:
+            self._conn.execute("DELETE FROM theses WHERE id=?", (thesis_id,))
 
     def close(self) -> None:
         with self._lock:

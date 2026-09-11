@@ -206,10 +206,14 @@ class ValuationPipeline:
 
     # ------------------------------------------------------------ many lots
     def value_many(self, lots: Iterable[dict[str, Any]], *, max_lots: int | None = None,
-                   progress: Callable[[int, int, dict[str, Any]], None] | None = None) -> int:
+                   progress: Callable[[int, int, dict[str, Any]], None] | None = None,
+                   boost: Callable[[dict[str, Any]], float] | None = None) -> int:
+        """`boost` lets the playbook push its own matches to the front: a lot matching a researched
+        niche is a far better use of a valuation call than one that merely contains a hot word."""
+        rank = (lambda l: triage_score(l) + boost(l)) if boost else triage_score
         todo = [l for l in lots if not l.get("is_closed")]
-        todo.sort(key=triage_score, reverse=True)
-        todo = [l for l in todo if triage_score(l) >= 0]
+        todo.sort(key=rank, reverse=True)
+        todo = [l for l in todo if rank(l) >= 0]
         if max_lots:
             todo = todo[:max_lots]
         done = 0

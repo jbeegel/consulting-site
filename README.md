@@ -42,6 +42,9 @@ Keyless deployments degrade gracefully to deterministic demo mode.
 | `SPREAD_SWEET_MAX_LANDED` / `SPREAD_SWEET_MIN_NET` | Sweet-spot definition: landed ≤ $6 and net ≥ $15 flags the $1–$3 buys that resell for $20–$50 |
 | `SPREAD_VISION` / `SPREAD_MAX_IMAGES` | Send lot photos to the model (default on, 4 photos) so it reads marks and splits multi-item lots |
 | `SPREAD_CALIBRATION` / `SPREAD_CALIBRATION_MIN_CLOSED` / `SPREAD_CALIBRATION_MIN_SALES` / `SPREAD_CALIBRATION_MIN_BIAS` / `SPREAD_CALIBRATION_MAX_BIAS` / `SPREAD_SETTLE_PER_RUN` | The feedback loop (default on): sample floors before an adjustment applies (8 closed lots, 5 sales), the clamp on it (0.5 to 1.5), and how many closed lots each run settles (40) |
+| `SPREAD_PLAYBOOK` / `SPREAD_TARGET_MONTHLY_ROI` / `SPREAD_MIN_BUY_MULTIPLE` / `SPREAD_HUNT_PER_RUN` / `SPREAD_HUNT_PAGES` | The playbook (default on): the return on capital a buy must clear (1.0 = 100%/month), the multiple of net you will never pay within (3), and how many niches each scan hunts (4, two pages each) |
+| `SPREAD_DISCOVER_COUNT` / `SPREAD_RESEARCH_TTL_DAYS` / `SPREAD_THESIS_MIN_SALES` / `SPREAD_THESIS_MIN_ROI` / `SPREAD_THESIS_MAX_FROM_SALES` | How many niches a research pass looks for (8), how stale research may get before a refresh (30 days), and the bar your own sales must clear to propose a niche (3 sales at 150% ROI, 8 proposals max) |
+| `SPREAD_LOCAL` / `SPREAD_CRAIGSLIST_SITE` / `SPREAD_LOCAL_TRIP_COST` / `SPREAD_LOCAL_COST_PER_MILE` | Local buying: your craigslist subdomain (e.g. `detroit`), and what a collection trip costs ($4 flat plus $0.20/mile). OfferUp and Facebook are paste-only — see above |
 | `SPREAD_LIQUIDITY_WEIGHT` / `SPREAD_HANDLING_DAYS` / `SPREAD_MAX_DAYS_TO_SELL` / `SPREAD_LIQUIDITY_MIN_SALES` / `SPREAD_TREND_WINDOW_DAYS` | How much liquidity discounts the score (0.7; 0 disables it), days of handling before capital comes back (3), the horizon past which "slower" stops meaning anything (365), your own sales needed before measured speed overrides the model (4), and the market-trend window (21 days) |
 | `SPREAD_GRADING` / `SPREAD_GRADING_FEE` / `SPREAD_GRADING_SHIP` / `SPREAD_GRADING_DAYS` | Trading-card grading analysis (default on), $75 per-card fee + $15 shipping (about $90 all-in), 60-day turnaround |
 | `SPREAD_EBAY_FVF` / `SPREAD_EBAY_FVF_MEDIA` / `SPREAD_EBAY_PER_ORDER` / `SPREAD_EBAY_PER_ORDER_SMALL` / `SPREAD_EBAY_PROMOTED` / `SPREAD_PACKAGING` | eBay fee model for the listing net-out: 13.6% (15.3% books/music/movies), $0.30 per order ($0.40 under $10), optional promoted rate, $1 packaging |
@@ -55,7 +58,7 @@ Note: HiBid sits behind Cloudflare and eBay blocks many datacenter IPs. If scans
 ### Go-live checklist
 
 1. Merge to `main` (scheduled GitHub Actions workflows only run from the default branch).
-2. Supabase → SQL editor → run `supabase/spread.sql` (re-run it after pulling: it adds `spread_outcomes` for the feedback loop plus the listing-lifecycle columns and `spread_valuations.category` for the liquidity layer; every statement is `if not exists`, so re-running is safe).
+2. Supabase → SQL editor → run `supabase/spread.sql` (re-run it after pulling: it adds `spread_outcomes` for the feedback loop, the listing-lifecycle columns on it, `spread_valuations.category` for the liquidity layer, and `spread_theses` for the playbook; every statement is `if not exists`, so re-running is safe).
 3. Vercel → Environment Variables: `SPREAD_PASSWORD`, `CRON_SECRET`, `SPREAD_ZIP`, `SPREAD_MILES`,
    `SPREAD_ALERT_WEBHOOK`, and optionally `SPREAD_MODEL=claude-sonnet-5` with `SPREAD_DAILY_VALUATION_CAP=60`
    to keep spend around $2–3/day. Redeploy.
@@ -105,6 +108,63 @@ is exactly what it was before this layer existed. **Missing data is never treate
 returned no demand signals and no demand read, the basis is `none` and the factor is a no-op — ignorance is not
 evidence of illiquidity. You can also refuse to hold slow stock outright with **Min. grade** and **Sells within N
 days**, which filter server-side so alerts honour them too.
+
+### The Playbook: hunting instead of waiting
+
+Everything above starts from a lot and asks "what is this worth". That finds value, but it is passive — you
+only ever evaluate what the scanner happened to pull. A $1 advertising letter opener that sells for $30 in
+three hours is not a lucky accident, it is a repeatable **niche**, and the way to work a niche is to know its
+numbers first and then go looking for it.
+
+A **thesis** is that knowledge, written down and testable: what to search for (queries, plus the negative
+words that mean "wrong thing"), what it sells for (p25 / median / p75 from real eBay sold data), how fast
+(sold in 90 days vs. listed now), and the one number you act on at 2am —
+
+```
+net        = median × (1 − fees) − shipping − packaging
+k          = SPREAD_TARGET_MONTHLY_ROI × capital_days / 30
+max_landed = net / (1 + k)          … and never more than net / SPREAD_MIN_BUY_MULTIPLE
+max_bid    = (max_landed − pickup) / ((1 + premium) × (1 + tax))
+```
+
+`max_landed` is the source of truth and works for any channel; `max_bid` is it converted back to an auction
+bid with the buyer's premium stripped out. Buying locally there is no premium — the asking price plus the
+trip *is* the landed cost — so local listings are judged against `max_landed` directly.
+
+Theses arrive three ways:
+
+- **Seeded.** A starter pack weighted heavily toward small printed-and-stamped advertising (letter openers,
+  blotters, pocket mirrors, thermometers, rulers, paperweights, pinbacks) and bank, insurance and financial
+  memorabilia (still banks, obsolete notes and scrip, stock certificates, bank giveaways). That profile is
+  what makes this tool work: worthless to the auctioneer, specific enough that a collector searches for it by
+  name, cheap to post, and identifiable from a photo once you can read the imprint. **The seeds ship with no
+  prices.** A fabricated median would produce a confident bid ceiling with nothing behind it, so the numbers
+  stay empty and the niche shows no ceiling until it is actually researched.
+- **Discovered.** `POST /api/spread/playbook/research` (or `arb research`) runs a Claude call with web search
+  that mines recent eBay sold listings for niches meeting all five criteria: sells for $20–$150, sells fast,
+  is cheap at auction, ships cheaply, and is recognisable in a mediocre auction thumbnail. It reports the sold
+  and active counts it actually read, and `-1` for anything it could not determine.
+- **From your own wins.** `arb playbook --review` mines your recorded round trips for recurring, profitable
+  phrases and proposes them. Sales already covered by a thesis are skipped, which is what stops four
+  letter-opener flips from proposing "letter", "opener" and "advertising" as three separate niches.
+
+**Hunting.** Every scan spends part of its budget running the playbook's own search terms against HiBid,
+rotating least-recently-hunted first so the whole playbook gets covered over a few runs. A lot that matches a
+researched niche also jumps the valuation queue, and carries its price and ceiling in the table *before* any
+valuation call is spent on it — which is the entire point for a $1 lot.
+
+### Local and non-auction buying
+
+Same playbook, no clock. `GET /api/spread/local` (or `arb local`) searches Craigslist for the playbook's
+queries and scores what comes back, adding `SPREAD_LOCAL_TRIP_COST` plus mileage because going to collect
+something is real money: a $3 win thirty miles away is not a win. Each hit gets a verdict — **buy**,
+**negotiate** (with the number to offer), **pass** or **unknown**.
+
+Being straight about the sources: **Craigslist** publishes RSS for any search and is fetched directly.
+**OfferUp and Facebook Marketplace have no public API and their terms forbid scraping**, so this does not
+scrape them. Instead, paste a link or the listing text into the Playbook panel (or `POST /api/spread/local`,
+or `arb local --url …`) and it runs through the same matching, the same ceiling and the same verdict.
+Automating those two properly needs OfferUp's partner API or a licensed data provider.
 
 ### Market intel
 

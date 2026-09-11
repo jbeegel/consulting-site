@@ -1,7 +1,7 @@
 // Persistence for Spread Hunter. Supabase when configured (durable across serverless instances);
 // an in-process Map store otherwise so local dev and keyless deployments still work.
 import { db } from "@/lib/db";
-import type { CategorySummary, Lot, Outcome, ScanParams, ScanRecord, Valuation } from "./types";
+import type { CategorySummary, Lot, Outcome, ScanParams, ScanRecord, Thesis, Valuation } from "./types";
 
 export interface LotQuery {
   includeClosed?: boolean;
@@ -36,6 +36,10 @@ export interface Store {
   outcomes(limit?: number): Promise<Outcome[]>;
   /** Lots we valued whose auction has ended but whose result we have not recorded yet. */
   awaitingSettlement(limit: number, now?: number): Promise<Lot[]>;
+  // --- the playbook
+  theses(): Promise<Thesis[]>;
+  saveTheses(rows: Thesis[]): Promise<void>;
+  deleteThesis(id: string): Promise<void>;
   readonly kind: "supabase" | "memory";
 }
 
@@ -46,6 +50,7 @@ class MemoryStore implements Store {
   private vals = new Map<number, Valuation>();
   private cache = new Map<string, Valuation>();
   private outs = new Map<number, Outcome>();
+  private thes = new Map<string, Thesis>();
   private scans: ScanRecord[] = [];
 
   async upsertLots(lots: Lot[]) {
@@ -115,6 +120,9 @@ class MemoryStore implements Store {
       .sort((a, b) => (b.ends_at ?? 0) - (a.ends_at ?? 0))
       .slice(0, limit);
   }
+  async theses() { return [...this.thes.values()]; }
+  async saveTheses(rows: Thesis[]) { for (const t of rows) this.thes.set(t.id, t); }
+  async deleteThesis(id: string) { this.thes.delete(id); }
 }
 
 // ----------------------------------------------------------------------------- supabase
@@ -264,6 +272,23 @@ class SupabaseStore implements Store {
     const settled = new Set((done ?? []).map((r) => r.lot_id as number));
     return lots.filter((l) => !settled.has(l.id)).slice(0, limit);
   }
+  async theses() {
+    const { data, error } = await this.sb.from("spread_theses").select("data").limit(500);
+    if (error) throw new Error("spread_theses select: " + error.message);
+    return (data ?? []).map((r) => r.data as Thesis);
+  }
+  async saveTheses(rows: Thesis[]) {
+    if (!rows.length) return;
+    const payload = rows.map((t) => ({
+      id: t.id, name: t.name, family: t.family, enabled: t.enabled, origin: t.origin,
+      price_median: t.price_median, max_bid: t.max_bid, sold_90d: t.sold_90d, active_now: t.active_now,
+      researched_at: iso(t.researched_at), last_hunted_at: iso(t.last_hunted_at),
+      updated_at: iso(t.updated_at), data: t,
+    }));
+    const { error } = await this.sb.from("spread_theses").upsert(payload, { onConflict: "id" });
+    if (error) throw new Error("spread_theses upsert: " + error.message);
+  }
+  async deleteThesis(id: string) { await this.sb.from("spread_theses").delete().eq("id", id); }
 }
 
 let memory: MemoryStore | null = null;

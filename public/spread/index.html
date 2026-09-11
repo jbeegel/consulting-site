@@ -151,6 +151,20 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
 .conf{display:inline-block;width:46px;height:6px;background:var(--bg-3);border-radius:3px;vertical-align:middle;overflow:hidden}
 .conf i{display:block;height:100%;background:var(--accent)}
 .flag{font-size:10px;border:1px solid var(--warn);color:var(--warn);border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle}
+.thesis{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.02em;border-radius:3px;padding:1px 5px;background:var(--accent-soft,#eef2ff);color:var(--accent,#3b4ea0);border:1px solid var(--line-2);margin-left:4px;white-space:nowrap}
+.bidcap{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--good,#1a7f4b)}
+.pb h4{margin:14px 0 6px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2)}
+.pb h4:first-child{margin-top:0}
+.pb table{width:100%;border-collapse:collapse;font-size:12px}
+.pb th{text-align:left;font-weight:600;color:var(--ink-3);font-size:11px;padding:3px 6px;border-bottom:1px solid var(--line);white-space:nowrap}
+.pb td{padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+.pb td.r,.pb th.r{text-align:right;font-family:var(--mono)}
+.pb tr.off{opacity:.45}
+.pb .fam{color:var(--ink-3);font-size:11px;display:block;text-transform:none;letter-spacing:0;font-weight:400}
+.pb .unres{color:var(--ink-3);font-style:italic}
+.verdict{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-radius:3px;padding:1px 6px;font-family:var(--mono)}
+.verdict.buy{background:#1a7f4b;color:#fff}.verdict.negotiate{background:#c08a1e;color:#fff}
+.verdict.pass{background:var(--line-2);color:var(--ink-3)}.verdict.unknown{background:transparent;border:1px dashed var(--line-2);color:var(--ink-3)}
 .liq{font-family:var(--mono);font-size:11px;font-weight:700;border-radius:3px;padding:1px 5px;display:inline-block;min-width:16px;text-align:center}
 .liq.A{background:#1a7f4b;color:#fff}.liq.B{background:#4a9a55;color:#fff}.liq.C{background:#c08a1e;color:#fff}
 .liq.D{background:#c2601f;color:#fff}.liq.F{background:var(--bad);color:#fff}
@@ -329,6 +343,11 @@ table.cal tr.total td{border-top:2px solid var(--line-2);font-weight:600}
       </div>
     </div>
 
+    <div class="card" id="pbCard" hidden>
+      <div class="head" id="pbHead"><h2>Playbook</h2><span class="sum" id="pbSum"></span><span class="muted" style="font-size:11px" id="pbToggle">hide</span></div>
+      <div class="body pb" id="pbBody"></div>
+    </div>
+
     <div class="card" id="intelCard" hidden>
       <div class="head" id="intelHead"><h2>Market intel</h2><span class="sum" id="intelSum"></span><span class="muted" style="font-size:11px" id="intelToggle">hide</span></div>
       <div class="body intel" id="intelBody"></div>
@@ -354,7 +373,7 @@ table.cal tr.total td{border-top:2px solid var(--line-2);font-weight:600}
 (function(){
 const $=s=>document.querySelector(s);
 const API=window.__ARB_API__||'/api';
-const state={opps:[],cats:[],config:{},status:{},cal:null,intel:null,filters:{cats:new Set(),buckets:new Set(),radar:new Set(),minScore:0,q:'',noBids:false,sweetOnly:false,hideUnvalued:true},params:loadParams(),sort:{key:'score',dir:-1},embedded:false,pollTimer:null};
+const state={opps:[],cats:[],config:{},status:{},cal:null,intel:null,playbook:null,local:null,filters:{cats:new Set(),buckets:new Set(),radar:new Set(),minScore:0,q:'',noBids:false,sweetOnly:false,hideUnvalued:true},params:loadParams(),sort:{key:'score',dir:-1},embedded:false,pollTimer:null};
 // The user's own risk appetite. Liquidity weight changes the score itself so it is applied server-side;
 // grade / days / ranking are pure views of data already in hand, so they apply instantly on the client.
 function loadParams(){const d={liqW:0.7,rankBy:'score',minGrade:'',maxDays:null};try{return Object.assign(d,JSON.parse(localStorage.getItem('spread_params')||'{}'))}catch(e){return d}}
@@ -390,8 +409,9 @@ async function load(){
     state.config=cfg;state.opps=opps.opportunities;state.cats=cats;state.status=st;state.embedded=false;
     try{state.cal=await api('/calibration')}catch(e){state.cal=null}
     try{state.intel=await api('/intel'+w)}catch(e){state.intel=null}
+    try{state.playbook=await api('/playbook')}catch(e){state.playbook=null}
   }catch(e){
-    if(window.__ARB_DATA__){const d=window.__ARB_DATA__;state.config=d.config;state.opps=d.opportunities;state.cats=d.categories;state.status=d.status||{};state.cal=d.calibration||null;state.intel=d.intel||null;state.embedded=true;
+    if(window.__ARB_DATA__){const d=window.__ARB_DATA__;state.config=d.config;state.opps=d.opportunities;state.cats=d.categories;state.status=d.status||{};state.cal=d.calibration||null;state.intel=d.intel||null;state.playbook=d.playbook||null;state.embedded=true;
       $('#banner').hidden=false;$('#banner').innerHTML='<b>Demo snapshot.</b> This page is a static export with example lots (synthetic data). Run <code>python -m arb serve</code> locally to scan hibid.com live, refresh bids, and re-value lots.';
       ['#btnScan','#btnRefresh'].forEach(s=>$(s).disabled=true);
     }else{$('#banner').hidden=false;$('#banner').textContent='Could not reach the API: '+e.message;}
@@ -405,7 +425,7 @@ async function health(){
     el.hidden=false;el.innerHTML=`<b>Setup</b> `+h.checks.map(c=>`<span class="chk ${c.ok?'':c.level==='required'?'bad':'warn'}" title="${esc(c.detail)}"><i></i>${esc(c.name)}${c.ok?'':c.fix?` <span class="fix">→ ${esc(c.fix)}</span>`:''}</span>`).join('')+`<button class="close" title="hide" onclick="this.parentNode.hidden=true">×</button>`;
   }catch(e){}
 }
-function renderAll(){renderStatus();renderKpis();renderChips();renderHeatmap();renderScatter();renderTable();renderIntel();renderCalibration()}
+function renderAll(){renderStatus();renderKpis();renderChips();renderHeatmap();renderScatter();renderTable();renderPlaybook();renderIntel();renderCalibration()}
 
 // ---------------------------------------------------------------- filters
 function visible(){
@@ -516,10 +536,10 @@ function renderTable(){
     return `<tr class="row" data-id="${l.id}">
       <td>${s.valued?`<span class="pill ${s.heat}" title="value ${Math.round(s.value_score||0)} × time ${Math.round((s.price_reliability||0)*100)}%${s.liquidity_factor!=null&&s.liquidity_factor<1?` × liquidity ${Math.round(s.liquidity_factor*100)}% (was ${Math.round(s.score_before_liquidity||0)})`:''}">${Math.round(s.score)}</span>`:'<span class="pill unvalued">n/a</span>'}</td>
       <td>${s.valued?`<span class="radar ${radarOf(o)}">${radarOf(o)}</span>`:''}</td>
-      <td class="title"><div class="t">${esc(l.title)}${v.authenticity_risk?'<span class="flag" title="Authenticity risk flagged">auth</span>':''}${s.sweet_spot?'<span class="sweet" title="Penny lot: tiny landed cost, real resale">$→$$</span>':''}${o.grading&&o.grading.upside>0&&o.grading.recommendation!=='sell raw'?`<span class="grade" title="Grading: ${esc(o.grading.recommendation)}">grade +${fmt(o.grading.upside)}</span>`:''}</div><div class="s">${esc(v.identified_item&&v.identified_item!==l.title?v.identified_item:'')}${l.bid_count===0?' · no bids':''}${l.estimate?' · est. '+esc(l.estimate):''}</div></td>
+      <td class="title"><div class="t">${esc(l.title)}${v.authenticity_risk?'<span class="flag" title="Authenticity risk flagged">auth</span>':''}${s.sweet_spot?'<span class="sweet" title="Penny lot: tiny landed cost, real resale">$→$$</span>':''}${o.grading&&o.grading.upside>0&&o.grading.recommendation!=='sell raw'?`<span class="grade" title="Grading: ${esc(o.grading.recommendation)}">grade +${fmt(o.grading.upside)}</span>`:''}${thesisChips(o)}</div><div class="s">${esc(v.identified_item&&v.identified_item!==l.title?v.identified_item:'')}${l.bid_count===0?' · no bids':''}${l.estimate?' · est. '+esc(l.estimate):''}</div></td>
       <td>${esc(l.category)}</td>
       <td class="r num">${l.bid_count}</td>
-      <td class="r num">${fmt(s.next_bid)}</td>
+      <td class="r num" title="${o.max_bid?`Playbook ceiling: bid no more than $${o.max_bid.toFixed(2)}`:''}">${fmt(s.next_bid)}${o.max_bid?`<span class="eta">max $${Math.round(o.max_bid)}</span>`:''}</td>
       <td class="r num">${fmt(s.landed_cost)}</td>
       <td class="r num">${s.valued?`${fmt(v.low)}–${fmt(v.high)}`:'—'}</td>
       <td class="r num">${fmt(s.net_resale)}</td>
@@ -576,6 +596,14 @@ function renderDossier(o,loading){
     if(v.calibration)h+=`<div class="calstamp">Adjusted <b>x${v.calibration.bias.toFixed(2)}</b> by the report card, from ${v.calibration.n} closed lots (${esc(v.calibration.basis==='sales'?'your recorded sales':'auction results')}).</div>`;
     if(v.value_drivers?.length)h+=`<h3>Value drivers</h3><ul>${v.value_drivers.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
     if(v.risks?.length||v.authenticity_risk)h+=`<h3>Risks</h3><ul>${v.authenticity_risk?'<li><b>Authenticity risk</b>: get it authenticated before relying on this value.</li>':''}${(v.risks||[]).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+    if(o.theses&&o.theses.length){
+      const top=o.theses[0];
+      h+=`<h3>Playbook match <span class="method">· ${esc(top.family)}</span></h3>`;
+      h+=`<div class="fees">${o.max_bid
+        ? `<b>Bid no more than ${fmt2(o.max_bid)}.</b> ${esc(top.name)} sells for about ${fmt(top.price_median)}${top.eta?` and takes around ${esc(top.eta)} to move`:''}, so that is the most you can pay and still clear your target return.`
+        : `Matches <b>${esc(top.name)}</b>, but that niche has not been researched yet, so there is no ceiling to bid against. Run a research pass from the Playbook panel.`}</div>`;
+      h+=`<div class="specs" style="margin-top:6px">${o.theses.map(m=>`<span><b>${esc(m.name)}</b> · matched "${esc(m.matched.join('", "'))}" in the ${m.where}${m.max_bid?` · pay ≤ ${fmt2(m.max_bid)}`:''}</span>`).join('')}</div>`;
+    }
     const lq=s.liquidity;
     if(lq){
       const ds=v.demand_signals||{};
@@ -662,6 +690,63 @@ function liquidityLine(o){
   if(roi!=null&&roi>=100&&(l.grade==='A'||l.grade==='B'))return `Fast money: sells in ${l.eta}, roughly ${roi}%/month on what you tie up.`;
   return `Sells in about ${l.eta}${roi==null?'':` — ${roi}%/month on the capital`}.`;
 }
+
+// ---------------------------------------------------------------- playbook
+function thesisChips(o,limit=2){
+  const t=o.theses||[];if(!t.length)return '';
+  return t.slice(0,limit).map(m=>`<span class="thesis" title="${esc(m.name)} — matched on ${esc(m.matched.join(', '))}${m.max_bid?`; pay up to $${Math.round(m.max_bid)}`:''}">${esc(m.name.length>22?m.name.slice(0,21)+'…':m.name)}</span>`).join('');
+}
+function renderPlaybook(){
+  const pb=state.playbook,el=$('#pbCard');
+  if(!pb||!pb.theses||!pb.theses.length){el.hidden=true;return}
+  el.hidden=false;
+  const rows=pb.theses,researched=rows.filter(t=>t.researched_at),earning=rows.filter(t=>(t.stats||{}).sold>0);
+  $('#pbSum').textContent=`${rows.length} niches · ${researched.length} researched`
+    +(earning.length?` · ${earning.length} earning`:'');
+
+  const target=Math.round((pb.settings?.target_monthly_roi??1)*100);
+  let h=`<p class="muted" style="font-size:12px;margin:0 0 10px;line-height:1.5">Niches worth hunting, each with the most you can pay for one. The ceiling is arithmetic, not nerve: given what the thing sells for, how long it takes and a target of <b>${target}%/month</b> on the capital, there is exactly one bid above which the trade stops being worth doing. A niche with no researched price shows no ceiling — nothing here invents a number to bid on.</p>`;
+
+  if(!state.embedded)h+=`<div class="actions" style="margin-bottom:10px"><button class="btn primary" id="pbHunt">Hunt these on HiBid</button><button class="btn" id="pbResearch">Research new niches</button><button class="btn" id="pbReview">Grade against my sales</button><span class="muted" id="pbMsg" style="font-size:12px"></span></div>`;
+
+  h+=`<table><thead><tr><th>Niche</th><th class="r">Pay up to</th><th class="r">Sells for</th><th>Liquidity</th><th class="r">Sold/listed</th><th class="r">Matched</th><th class="r">Your ROI</th></tr></thead><tbody>`;
+  h+=rows.map(t=>{
+    const st=t.stats||{};
+    const bid=t.max_bid?`<span class="bidcap">$${t.max_bid.toFixed(2)}</span>`:'<span class="unres">—</span>';
+    const px=t.price_median?`$${Math.round(t.price_median)}`:'<span class="unres">not researched</span>';
+    const liq=t.liquidity_grade?`<span class="liq ${t.liquidity_grade}">${t.liquidity_grade}</span>${t.days_p50?` <span class="eta" style="display:inline">${Math.round(t.days_p50)}d</span>`:''}`:'—';
+    const vol=(t.sold_90d!=null&&t.active_now!=null)?`${t.sold_90d}/${t.active_now}`:'—';
+    const roi=st.realized_monthly_roi!=null?roiText(st.realized_monthly_roi):'—';
+    return `<tr class="${t.enabled?'':'off'}" title="${esc(t.rationale||'')}"><td>${esc(t.name)}<span class="fam">${esc(t.family)}${t.origin==='your_sales'?' · from your sales':t.origin==='discovered'?' · discovered':''}</span></td><td class="r">${bid}</td><td class="r">${px}</td><td>${liq}</td><td class="r">${vol}</td><td class="r">${st.lots_matched||'—'}</td><td class="r">${roi}</td></tr>`;
+  }).join('')+`</tbody></table>`;
+
+  const tells=rows.find(t=>t.tells&&t.tells.length);
+  if(tells)h+=`<h4>What to look for — ${esc(tells.name)}</h4><div class="specs">${tells.tells.map(x=>`<span>${esc(x)}</span>`).join('')}</div>`;
+
+  if(!state.embedded)h+=`<h4>Score a listing from anywhere</h4><p class="muted" style="font-size:12px;margin:0 0 6px;line-height:1.5">OfferUp and Facebook Marketplace have no public API and their terms forbid scraping, so paste a link or the listing text and it runs through the same playbook. Craigslist is searched automatically when <code>SPREAD_CRAIGSLIST_SITE</code> is set.</p>
+    <div class="saleform"><input id="pbUrl" placeholder="paste a listing URL" style="width:240px"><input id="pbText" placeholder="or paste the title/price" style="width:200px"><label>Miles <input id="pbMiles" type="number" step="1" style="width:60px"></label><button class="btn" id="pbScore">Score it</button></div><div id="pbVerdict" style="margin-top:8px"></div>`;
+
+  $('#pbBody').innerHTML=h;
+  const msg=$('#pbMsg');
+  const run=async(btn,label,fn)=>{if(!btn)return;btn.onclick=async()=>{btn.disabled=true;const t0=btn.textContent;btn.textContent=label;msg.textContent='';
+    try{msg.textContent=await fn()}catch(e){msg.textContent='failed: '+e.message}
+    btn.disabled=false;btn.textContent=t0;state.playbook=await api('/playbook').catch(()=>state.playbook);renderPlaybook()}};
+  run($('#pbHunt'),'hunting…',async()=>{const r=await api('/hunt',{method:'POST',body:'{}'});
+    const opps=await api('/opportunities?liquidity_weight='+state.params.liqW);state.opps=opps.opportunities;renderTable();renderKpis();
+    return `hunted ${r.hunted.length} niches, ${r.lots_found} lots found`});
+  run($('#pbResearch'),'researching… (1-3 min)',async()=>{const r=await api('/playbook/research',{method:'POST',body:'{}'});
+    return r.error?('research problem: '+r.error):`added ${r.added.length}, refreshed ${r.updated.length}`});
+  run($('#pbReview'),'grading…',async()=>{const r=await api('/playbook/review',{method:'POST',body:'{}'});
+    return r.proposed.length?`${r.proposed.length} new niche(s) proposed from your sales: ${r.proposed.map(t=>t.name).join(', ')}`:'graded; nothing new to propose'});
+  const sc=$('#pbScore');
+  if(sc)sc.onclick=async()=>{sc.disabled=true;const out=$('#pbVerdict');out.textContent='scoring…';
+    try{const miles=parseFloat($('#pbMiles').value);
+      const r=await api('/local',{method:'POST',body:JSON.stringify({url:$('#pbUrl').value||undefined,text:$('#pbText').value||undefined,distance_miles:isFinite(miles)?miles:undefined})});
+      out.innerHTML=`<span class="verdict ${r.verdict}">${r.verdict}</span> <span style="font-size:13px">${esc(r.note)}</span>`;
+    }catch(e){out.textContent='failed: '+e.message}
+    sc.disabled=false};
+}
+$('#pbHead').onclick=()=>{const el=$('#pbCard');el.classList.toggle('collapsed');$('#pbToggle').textContent=el.classList.contains('collapsed')?'show':'hide'};
 
 // ---------------------------------------------------------------- market intel
 function sparkline(points,change,w=80,h=16){

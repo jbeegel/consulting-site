@@ -529,3 +529,195 @@ def test_liquidity_feedback_and_intel(settings):
     assert [o["lot"]["id"] for o in apply_intel_filters(opps, min_liquidity_grade="B")] == [1]
     assert [o["lot"]["id"] for o in apply_intel_filters(opps, max_days_to_sell=30)] == [1]
     assert len(apply_intel_filters(opps)) == 2  # no parameters, nothing dropped
+
+
+def test_playbook_matching_and_bid_ceiling(settings):
+    """Matching is strict about negatives, and the bid ceiling is arithmetic, not nerve."""
+    from arb.playbook import match_theses, max_bid_for, normalize_thesis, refresh_thesis, slugify
+
+    t = normalize_thesis({
+        "name": "Advertising letter openers", "family": "Advertising ephemera",
+        "queries": ["antique advertising letter opener"],
+        "must_any": ["letter opener", "envelope opener"],
+        "negative": ["sterling", "reproduction"],
+        "ship_cost": 5.0,
+    }, settings)
+    assert t["id"] == slugify("Advertising letter openers")
+    # No researched price yet, so no ceiling and no grade: nothing invents a number to bid.
+    assert t["max_bid"] is None and t["liquidity_grade"] is None and t["days_p50"] is None
+
+    real = {"title": "Antique c1918 Citizens Mutual Auto Insurance Howell MI Advertising Letter Opener",
+            "description": "", "category_path": "Collectibles"}
+    m = match_theses(real, [t])
+    assert len(m) == 1 and m[0]["where"] == "title" and m[0]["thesis_id"] == t["id"]
+    # A negative anywhere kills it, even with the phrase present.
+    assert not match_theses(dict(real, title=real["title"] + " sterling"), [t])
+    assert not match_theses(dict(real, title="Vintage cast iron doorstop"), [t])
+    # Body-only hits match, but more weakly than a title hit.
+    body = match_theses({"title": "Box of desk smalls", "description": "includes a letter opener", "category_path": ""}, [t])
+    assert body and body[0]["where"] == "description" and body[0]["strength"] < m[0]["strength"]
+    # must_all requires every phrase.
+    strict = normalize_thesis({"name": "Bank openers", "must_any": ["letter opener"], "must_all": ["bank"]}, settings)
+    assert not match_theses(real, [strict])
+    assert match_theses(dict(real, title="Farmers Bank advertising letter opener"), [strict])
+
+    # Research it: a deep, fast market yields a real ceiling.
+    fast = refresh_thesis(dict(t, price_median=30.0, sold_90d=140, active_now=55, median_days_to_sell=9), settings)
+    assert fast["max_bid"] and 3 < fast["max_bid"] < 9
+    assert fast["liquidity_grade"] in ("A", "B") and fast["days_p50"] is not None
+
+    # Same price, dead market: the ceiling drops because your capital is stuck for months.
+    slow = refresh_thesis(dict(t, price_median=30.0, sold_90d=6, active_now=300), settings)
+    assert slow["max_bid"] < fast["max_bid"]
+
+    # The ceiling really does clear the target return: buying at it must hit target_monthly_roi.
+    from arb.liquidity import monthly_roi
+    from arb.scoring import ebay_fee_rate
+    net = 30.0 * (1 - ebay_fee_rate(fast["ebay_category"] or fast["family"], settings)) - 5.0 - settings.packaging_cost
+    landed = fast["max_bid"] * (1 + settings.default_buyer_premium) * (1 + settings.sales_tax) + settings.pickup_cost
+    roi = monthly_roi(net - landed, landed, fast["days_p50"] + settings.handling_days)
+    assert roi >= settings.target_monthly_roi - 0.01
+
+    # Never pay within min_buy_multiple of net, however fast it moves.
+    instant = refresh_thesis(dict(t, price_median=30.0, sold_90d=5000, active_now=1), settings)
+    landed_instant = instant["max_bid"] * (1 + settings.default_buyer_premium) * (1 + settings.sales_tax)
+    assert landed_instant <= net / settings.min_buy_multiple + 0.01
+
+    # A price too small to survive fees yields no ceiling at all.
+    assert max_bid_for(dict(t, price_median=4.0), settings) is None
+
+
+def test_playbook_learns_from_your_sales(settings):
+    """Your own round trips propose new niches — but never ones you already hunt."""
+    from arb.playbook import apply_outcome_stats, hunt_order, normalize_thesis, theses_from_outcomes
+    now = time.time()
+
+    def sale(title, paid, sold, days=5.0):
+        listed = now - 30 * 86400
+        return {"lot_id": abs(hash(title)) % 100000, "title": title, "category": "Collectibles",
+                "closed_at": listed - 86400, "predicted_mid": sold, "predicted_net": sold * 0.8,
+                "confidence": 0.6, "method": "claude+web", "score": 60.0, "hammer": paid / 1.15,
+                "landed_at_hammer": paid, "bought": True, "bought_price": paid, "sale_price": sold,
+                "sale_at": listed + days * 86400, "sale_channel": "eBay", "notes": "",
+                "listed_at": listed, "still_listed": False, "predicted_days": 10.0, "recorded_at": now}
+
+    sales = [sale("Vintage railroad switch key Pere Marquette", 2.0, 55.0),
+             sale("Antique railroad switch key Grand Trunk", 3.0, 48.0),
+             sale("Railroad switch key Adlake brass", 2.5, 62.0),
+             sale("Cheap plastic tub of junk", 5.0, 6.0)]
+
+    proposed = theses_from_outcomes(sales, settings, [])
+    names = {t["name"].lower() for t in proposed}
+    # The recurring, profitable phrase is proposed; the single unprofitable sale is not.
+    assert any("switch key" in n or "railroad" in n for n in names)
+    assert not any("plastic" in n for n in names)
+    assert all(t["origin"] == "your_sales" for t in proposed)
+    assert all(t["price_median"] and t["price_median"] > 0 for t in proposed)
+
+    # Once a thesis covers those sales, they stop generating proposals: no duplicate niches.
+    covering = normalize_thesis({"name": "Railroadiana smalls", "must_any": ["switch key", "railroad"]}, settings)
+    assert theses_from_outcomes(sales, settings, [covering]) == []
+
+    # Stats roll back onto the thesis that matched.
+    scored = apply_outcome_stats([covering], sales, {})
+    st = scored[0]["stats"]
+    assert st["lots_matched"] == 3 and st["sold"] == 3
+    assert st["revenue"] == 165.0 and st["realized_monthly_roi"] > 5
+
+    # Hunting rotates: never-hunted first, then oldest.
+    a = normalize_thesis({"name": "A", "queries": ["a"]}, settings)
+    b = dict(normalize_thesis({"name": "B", "queries": ["b"]}, settings), last_hunted_at=now - 3600)
+    c = dict(normalize_thesis({"name": "C", "queries": ["c"]}, settings), last_hunted_at=now - 99)
+    assert [t["name"] for t in hunt_order([c, b, a], 3)] == ["A", "B", "C"]
+    # Disabled theses and ones with no queries are never hunted.
+    off = dict(normalize_thesis({"name": "D", "queries": ["d"]}, settings), enabled=False)
+    assert [t["name"] for t in hunt_order([off, a], 5)] == ["A"]
+
+
+def test_local_sources(settings):
+    """Craigslist RSS parses, and a pasted listing gets the same verdict machinery."""
+    from arb.playbook import normalize_thesis, refresh_thesis
+    from arb.sources import parse_craigslist_rss, parse_pasted_listing, parse_price, score_local
+
+    xml = """<?xml version="1.0"?><rdf:RDF xmlns:dc="http://purl.org/dc/elements/1.1/">
+      <item><title>Antique advertising letter opener - $5 (Howell)</title>
+        <link>https://detroit.craigslist.org/wyn/atq/d/x/7712345678.html</link>
+        <description>&lt;p&gt;Old bank letter opener, brass&lt;/p&gt;</description>
+        <dc:date>2026-09-10T12:00:00-04:00</dc:date></item>
+      <item><title>Couch</title><link>https://detroit.craigslist.org/x/7712345679.html</link>
+        <description>free</description></item></rdf:RDF>"""
+    rows = parse_craigslist_rss(xml)
+    assert len(rows) == 2
+    assert rows[0]["price"] == 5.0 and rows[0]["external_id"] == "7712345678"
+    assert "letter opener" in rows[0]["title"].lower() and rows[0]["source"] == "craigslist"
+    assert rows[1]["price"] is None
+    assert parse_price("no money here") is None and parse_price("$1,250.50 firm") == 1250.5
+
+    t = refresh_thesis(normalize_thesis({
+        "name": "Advertising letter openers", "must_any": ["letter opener"], "ship_cost": 5.0,
+        "price_median": 30.0, "sold_90d": 140, "active_now": 55, "median_days_to_sell": 9,
+    }, settings), settings)
+    # A local buy is judged against the ALL-IN ceiling, not the auction bid: there is no buyer's
+    # premium to strip, so `max_bid` would be the wrong yardstick.
+    ceiling = t["max_landed"]
+    assert ceiling and t["max_bid"] and t["max_bid"] < ceiling
+
+    trip = settings.local_trip_cost + 5 * settings.local_cost_per_mile
+    cheap = score_local(dict(rows[0], price=1.0, distance_miles=5), [t], settings)
+    assert cheap["verdict"] == "buy" and cheap["landed_cost"] == 1.0 + trip
+    assert cheap["max_landed"] == ceiling
+    # The trip is real money: the same item further away stops being a buy.
+    far = score_local(dict(rows[0], price=1.0, distance_miles=120), [t], settings)
+    assert far["verdict"] != "buy"
+    # Slightly over the ceiling is a negotiation, not a refusal, and it names the number to offer.
+    # The band is on the LANDED cost, so the trip has to be backed out of the asking price.
+    near_ask = round(ceiling * 1.25 - trip, 2)
+    near = score_local(dict(rows[0], price=near_ask, distance_miles=5), [t], settings)
+    assert near["verdict"] == "negotiate" and "Offer" in near["note"]
+    assert score_local(dict(rows[0], price=ceiling * 5), [t], settings)["verdict"] == "pass"
+    assert score_local(rows[1], [t], settings)["verdict"] == "unknown"  # the couch matches nothing
+
+    # A thesis with no researched price cannot produce a verdict, and says so.
+    raw = normalize_thesis({"name": "Unknown niche", "must_any": ["letter opener"]}, settings)
+    assert score_local(rows[0], [raw], settings)["verdict"] == "unknown"
+
+    # Pasted OfferUp / Marketplace listings run through the same path.
+    p = parse_pasted_listing(url="https://offerup.com/item/detail/123456",
+                             text="Antique advertising letter opener\nAsking $2, great shape")
+    assert p and p["source"] == "offerup" and p["price"] == 2.0
+    assert score_local(p, [t], settings)["verdict"] == "buy"
+    # With no distance given the flat trip cost still applies, which is why $4 is already a haggle.
+    dearer = parse_pasted_listing(url="https://offerup.com/item/detail/9", text="letter opener $4")
+    assert score_local(dearer, [t], settings)["verdict"] == "negotiate"
+    assert parse_pasted_listing() is None
+
+
+def test_hunt_and_thesis_priority(settings):
+    """Hunting runs the playbook's queries against HiBid, and matches jump the valuation queue."""
+    from arb.playbook import match_theses, normalize_thesis
+    from arb.valuation.pipeline import triage_score
+    store = Store(settings.db_path)
+    sc = Scanner(settings, store)
+
+    seeded = sc.theses()
+    assert seeded and all(t["origin"] == "seed" for t in seeded)
+    assert all(t["max_bid"] is None for t in seeded), "seeds must not ship invented prices"
+
+    # The mock catalogue contains a plain-language lot; hunt for whatever word it holds.
+    t = normalize_thesis({"name": "Test hunt", "queries": ["chair"], "must_any": ["chair"]}, settings)
+    sc.save_theses([t])
+    out = sc.hunt(theses=[t])
+    assert out["hunted"] == [t["id"]]
+    # last_hunted_at is persisted, so the next run rotates past it.
+    assert (sc.theses(force=True)[0] or {}) is not None
+    hunted = {x["id"]: x for x in sc.theses(force=True)}[t["id"]]
+    assert hunted["last_hunted_at"] is not None
+
+    # A thesis match outranks a mere hot word when the valuation budget is spent.
+    plain = {"id": 1, "title": "Herman Miller Aeron Chair Size B", "description": "", "category_path": "",
+             "bid_count": 3, "estimate": "", "time_left_seconds": None, "min_bid": 50, "high_bid": 50,
+             "picture_count": 1}
+    boost = lambda l: 2 + 2 * match_theses(l, [t])[0]["strength"] if match_theses(l, [t]) else 0.0  # noqa: E731
+    assert boost(plain) > 0
+    assert triage_score(plain) + boost(plain) > triage_score(plain)
+    store.close()

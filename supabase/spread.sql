@@ -84,3 +84,21 @@ create index if not exists spread_outcomes_listed on spread_outcomes (listed_at 
 -- Valuations carry their lot's category so market trends can be grouped without a join.
 alter table spread_valuations add column if not exists category text;
 create index if not exists spread_valuations_created on spread_valuations (created_at desc);
+
+-- The playbook: niches we hunt, with the market numbers that set each one's bid ceiling.
+create table if not exists spread_theses (
+  id text primary key,
+  name text,
+  family text,
+  enabled boolean default true,
+  origin text,
+  price_median double precision,
+  max_bid double precision,
+  sold_90d integer,
+  active_now integer,
+  researched_at timestamptz,
+  last_hunted_at timestamptz,
+  updated_at timestamptz default now(),
+  data jsonb not null
+);
+create index if not exists spread_theses_enabled on spread_theses (enabled, last_hunted_at);
