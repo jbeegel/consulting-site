@@ -110,15 +110,15 @@ DEMO_GRADING = {
 
 DEMO_ITEMS = {
     "G) vintage antique knic knacs": [
-        {"name": "Hand-painted majolica miniature vase, 'Deruta Italy' on base", "maker_or_mark": "DERUTA ITALY (painted mark, read from the base)", "era": "1950s-70s", "est_low": 40, "est_high": 50, "confidence": 0.75, "note": "Deruta majolica miniatures with a clear mark sell steadily; check the foot rim for chips."},
-        {"name": "Blue-and-white Delft miniature vase, windmill scene", "maker_or_mark": "Delft-style, likely Holland stamp", "era": "mid-century", "est_low": 8, "est_high": 15, "confidence": 0.6, "note": "Common souvenir size; sells best paired."},
-        {"name": "Brown/blue drip-glaze miniature vase", "maker_or_mark": "unmarked, Japan-style glaze", "era": "1960s", "est_low": 8, "est_high": 15, "confidence": 0.5, "note": "Attractive glaze; unmarked keeps it modest."},
-        {"name": "Souvenir stein with mountain transfer and chain", "maker_or_mark": "unread transfer", "era": "1950s", "est_low": 8, "est_high": 15, "confidence": 0.5, "note": "Souvenir ware; chain intact helps."},
-        {"name": "Bird in glass dome paperweight/box", "maker_or_mark": "unmarked", "era": "1960s", "est_low": 6, "est_high": 12, "confidence": 0.4, "note": "Novelty; condition of the dome matters."},
-        {"name": "Black glass footed miniature vase", "maker_or_mark": "unmarked", "era": "1930s-50s", "est_low": 5, "est_high": 10, "confidence": 0.5, "note": "Possible chip on one foot."},
-        {"name": "White porcelain figurine (dog/bear)", "maker_or_mark": "unmarked", "era": "mid-century", "est_low": 4, "est_high": 8, "confidence": 0.4, "note": ""},
-        {"name": "Pale blue miniature pitcher", "maker_or_mark": "unmarked", "era": "mid-century", "est_low": 3, "est_high": 6, "confidence": 0.4, "note": ""},
-        {"name": "Shell-encrusted Florida souvenir vase", "maker_or_mark": "Florida souvenir label", "era": "1950s", "est_low": 2, "est_high": 5, "confidence": 0.5, "note": "Near worthless; include as a bonus in a group listing."},
+        {"name": "Hand-painted majolica miniature vase, 'Deruta Italy' on base", "maker_or_mark": "DERUTA ITALY (painted mark, read from the base)", "era": "1950s-70s", "est_low": 40, "est_high": 50, "confidence": 0.75, "condition": "no chips visible; foot rim not photographed", "resell": "list individually", "note": "Deruta majolica miniatures with a clear mark sell steadily; check the foot rim for chips."},
+        {"name": "Blue-and-white Delft miniature vase, windmill scene", "maker_or_mark": "Delft-style, likely Holland stamp", "era": "mid-century", "est_low": 8, "est_high": 15, "confidence": 0.6, "condition": "good; transfer crisp", "resell": "bundle", "note": "Common souvenir size; sells best paired."},
+        {"name": "Brown/blue drip-glaze miniature vase", "maker_or_mark": "unmarked, Japan-style glaze", "era": "1960s", "est_low": 8, "est_high": 15, "confidence": 0.5, "condition": "good", "resell": "bundle", "note": "Attractive glaze; unmarked keeps it modest."},
+        {"name": "Souvenir stein with mountain transfer and chain", "maker_or_mark": "unread transfer", "era": "1950s", "est_low": 8, "est_high": 15, "confidence": 0.5, "condition": "chain intact, lid hinge not visible", "resell": "bundle", "note": "Souvenir ware; chain intact helps."},
+        {"name": "Bird in glass dome paperweight/box", "maker_or_mark": "unmarked", "era": "1960s", "est_low": 6, "est_high": 12, "confidence": 0.4, "condition": "dome clouded on one side", "resell": "bundle", "note": "Novelty; condition of the dome matters."},
+        {"name": "Black glass footed miniature vase", "maker_or_mark": "unmarked", "era": "1930s-50s", "est_low": 5, "est_high": 10, "confidence": 0.5, "condition": "possible chip to one foot, photo is soft there", "resell": "bundle", "note": "Possible chip on one foot."},
+        {"name": "White porcelain figurine (dog/bear)", "maker_or_mark": "unmarked", "era": "mid-century", "est_low": 4, "est_high": 8, "confidence": 0.4, "condition": "good", "resell": "bundle", "note": ""},
+        {"name": "Pale blue miniature pitcher", "maker_or_mark": "unmarked", "era": "mid-century", "est_low": 3, "est_high": 6, "confidence": 0.4, "condition": "good", "resell": "bundle", "note": ""},
+        {"name": "Shell-encrusted Florida souvenir vase", "maker_or_mark": "Florida souvenir label", "era": "1950s", "est_low": 2, "est_high": 5, "confidence": 0.5, "condition": "shells lifting at the rim", "resell": "discard", "note": "Near worthless; include as a bonus in a group listing."},
     ]
 }
 
@@ -268,7 +268,9 @@ def make_demo(seed: int = 7, now: float | None = None) -> tuple[list[dict[str, A
                 "items": DEMO_ITEMS.get(title, []),
                 "grading": DEMO_GRADING.get(title),
                 "standout_item": DEMO_ITEMS[title][0]["name"] if title in DEMO_ITEMS else "",
-                "images_used": 3 if title in DEMO_ITEMS else 0,
+                # An uncatalogued lot is read from every photo it has, not a fixed number.
+                "images_used": (lots[-1]["picture_count"] if title in DEMO_ITEMS else 0),
+                "mystery_read": title in DEMO_ITEMS,
                 "listing": {
                     "title": (title.replace("G) ", "") + " " + " ".join(cat_path.split(" > ")[-1:]))[:80],
                     "category": cat_path, "condition": "Used",

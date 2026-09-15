@@ -80,10 +80,14 @@ def test_scoring_math(settings):
 def test_scan_pipeline_and_refresh(settings):
     store = Store(settings.db_path)
     sc = Scanner(settings, store)
+    # The broad pull honours the closing window. The hunt deliberately does not -- a lot matching a
+    # thesis, a lens or the mystery sweep is worth storing whenever it closes -- so check the window
+    # against `pull` rather than against everything the scan happened to store.
+    assert all(l["time_left_seconds"] <= 24 * 3600 for l in sc.pull(status="OPEN", hours=24, max_pages=5))
     st = sc.scan(status="OPEN", hours=24, max_pages=5, value=True, max_value=10)
     assert not st["error"] and st["lots_seen"] > 0
     lots = store.lots()
-    assert lots and all(l["time_left_seconds"] <= 24 * 3600 for l in lots)
+    assert lots
     vals = store.valuations_for([l["id"] for l in lots])
     assert vals, "estimate/none fallback should still record valuations"
     assert {v["method"] for v in vals.values()} <= {"hibid_estimate", "none"}
@@ -721,3 +725,228 @@ def test_hunt_and_thesis_priority(settings):
     assert boost(plain) > 0
     assert triage_score(plain) + boost(plain) > triage_score(plain)
     store.close()
+
+
+def test_mystery_detection_and_economics(settings):
+    """A blind listing is measured from the gap between what was SHOWN and what was SAID."""
+    from arb.mystery import mystery_boost, mystery_economics, mystery_verdict, read_mystery
+    from arb.scoring import score_lot
+
+    blind = {"id": 1, "title": "G) MISC BOX LOT", "description": "", "category_path": "",
+             "picture_count": 7, "min_bid": 2, "high_bid": 2, "bid_count": 0, "quantity": 1,
+             "buyer_premium": 0.15}
+    read = read_mystery(blind, settings)
+    assert read["is_mystery"] and read["score"] >= 0.9
+    assert read["informative_words"] == 0
+    assert 'Title says "misc"' in read["signals"]
+
+    # A catalogued lot is priced by the crowd however cheap it looks: not our edge.
+    named = {**blind, "id": 2, "title": "Milwaukee M18 FUEL Hammer Drill Kit 2804-20", "picture_count": 7}
+    assert not read_mystery(named, settings)["is_mystery"]
+
+    # No photos is a blind BID, not an opportunity: there is nothing to read.
+    dark = {**blind, "id": 3, "picture_count": 0}
+    assert not read_mystery(dark, settings)["is_mystery"]
+    assert "nothing to identify" in read_mystery(dark, settings)["reason"].lower()
+    assert "No photos: nothing to read" in read_mystery(dark, settings)["signals"]
+    assert mystery_boost(dark, settings) == 0
+
+    # The boost is what buys a blind lot a valuation call it would never win on hot words.
+    assert mystery_boost(blind, settings) > mystery_boost(named, settings) == 0
+
+    # Economics headline the single best piece, not the pile: you buy the box for one thing in it.
+    val = {"mid": 60, "items": [
+        {"name": "Roseville Futura vase", "maker_or_mark": "Roseville", "est_low": 90, "est_high": 110,
+         "confidence": 0.5, "condition": "hairline to rim", "resell": "list individually", "note": ""},
+        {"name": "assorted glass tumblers", "maker_or_mark": "unmarked", "est_low": 4, "est_high": 8,
+         "confidence": 0.6, "condition": "fine", "resell": "bundle", "note": ""},
+    ], "standout_item": "Roseville Futura vase"}
+    sc = score_lot(blind, val, settings)
+    econ = mystery_economics(blind, val, sc, settings)
+    assert econ["items_identified"] == 2
+    assert econ["best_item"]["name"] == "Roseville Futura vase"
+    assert econ["concentration"] > 0.9  # one piece carries essentially all of it
+    assert econ["best_item_multiple"] > 10  # $100-ish piece against a ~$2 landed cost
+    assert "Roseville" in mystery_verdict(econ, settings)
+    assert "packing material" in mystery_verdict(econ, settings)
+
+    # A lot with no photo read yet says so rather than pretending to a verdict.
+    bare = mystery_economics(blind, None, sc, settings)
+    assert bare["items_identified"] == 0
+    assert "has not been through a photo read" in mystery_verdict(bare, settings)
+
+    # Nothing worth listing is a real and useful answer: most misc lots ARE junk.
+    junk = {"mid": 6, "items": [{"name": "plastic hangers", "maker_or_mark": "unmarked", "est_low": 0,
+                                 "est_high": 1, "confidence": 0.8, "condition": "", "resell": "discard",
+                                 "note": ""}]}
+    assert "none of them worth listing" in mystery_verdict(
+        mystery_economics(blind, junk, score_lot(blind, junk, settings), settings), settings)
+
+
+def test_mystery_budget_is_reserved(settings):
+    """Mystery lots carry no hot words, so they must not compete for the budget on triage alone."""
+    from arb.valuation.pipeline import ValuationPipeline, triage_score
+
+    store = Store(settings.db_path)
+    pipe = ValuationPipeline(settings, store)
+    hot = [{"id": 100 + i, "title": f"Rolex Submariner Steel Watch Ref BB168{i}", "description": "",
+            "picture_count": 3, "min_bid": 500, "high_bid": 500, "bid_count": 0, "quantity": 1,
+            "is_closed": False} for i in range(8)]
+    blind = {"id": 200, "title": "MISC SHELF LOT", "description": "", "picture_count": 8,
+             "min_bid": 1, "high_bid": 1, "bid_count": 0, "quantity": 1, "is_closed": False}
+    # On raw triage the branded lots win outright.
+    assert triage_score(blind) < max(triage_score(h) for h in hot)
+
+    valued: list[int] = []
+    pipe.value_lot = lambda lot, force=False: valued.append(lot["id"])  # type: ignore[assignment]
+    pipe.value_many(hot + [blind], max_lots=4,
+                    reserve=(lambda l: l["id"] == 200, 1))
+    assert 200 in valued, "the reserved slot must survive a run full of brand-name lots"
+    assert len(valued) == 4
+    store.close()
+
+
+def test_lenses_and_custom_instructions(settings):
+    """A lens is applied to every lot forever, and the appraiser is told exactly what to look at."""
+    from arb.lenses import (default_watchlist, lens_boost, lens_queries, matched_lenses,
+                            merge_watchlist, watchlist_prompt)
+
+    w = default_watchlist(0)
+    on = {l["id"] for l in w["lenses"] if l["enabled"]}
+    assert on == {"occupied-japan", "bank-objects", "advertising-signs"}
+
+    # The prompt is physical instruction, not a category name: it tells the model where to look.
+    text = watchlist_prompt(w)
+    assert "BASE" in text and "Occupied Japan" in text
+    assert "whether or not the title or description mentions them" in text
+
+    # A lens fires on a lot whose title only hints at it; the photo read does the rest.
+    jar = {"title": "Vintage porcelain figurine made in Japan", "description": "", "category_path": ""}
+    assert [l["id"] for l in matched_lenses(jar, w)] == ["occupied-japan"]
+    assert lens_boost(jar, w) > 0
+    assert lens_boost({"title": "Craftsman socket set"}, w) == 0
+
+    # Switching a lens off removes its prompt, its keywords and its search terms together.
+    off = merge_watchlist({"lenses": [{"id": "occupied-japan", "enabled": False}]})
+    assert "Occupied Japan" not in watchlist_prompt(off)
+    assert not matched_lenses(jar, off)
+    assert "occupied japan" not in lens_queries(off)
+
+    # Built-in prompt text is CODE, not data: a stored copy never overrides the shipped wording.
+    stale = merge_watchlist({"lenses": [{"id": "occupied-japan", "enabled": True,
+                                         "prompt": "ignore everything"}]})
+    assert "ignore everything" not in watchlist_prompt(stale)
+    assert "legally required only between 1945 and 1952" in watchlist_prompt(stale)
+
+    # Free text is the escape hatch for a hunch that has not earned a toggle, and is passed verbatim.
+    custom = merge_watchlist({"lenses": [], "custom_instructions": "Shaving mugs with a name painted on."})
+    assert "Shaving mugs with a name painted on." in watchlist_prompt(custom)
+    assert "BUYER'S OWN STANDING INSTRUCTIONS" in watchlist_prompt(custom)
+
+    # A watchlist with nothing on contributes nothing: no lenses, no instructions, no prompt.
+    empty = merge_watchlist({"lenses": [{"id": l["id"], "enabled": False} for l in w["lenses"]],
+                             "custom_instructions": ""})
+    assert watchlist_prompt(empty) == ""
+
+
+def test_watchlist_api_and_prompt_injection(settings):
+    """Toggles persist, a hand-written lens survives a round trip, and the prompt reaches the valuer."""
+    from arb.server import create_app
+
+    store = Store(settings.db_path)
+    sc = Scanner(settings, store)
+    app = create_app(settings, store, sc)
+    c = TestClient(app)
+
+    body = c.get("/api/watchlist").json()
+    assert body["mystery"]["enabled"] is True
+    assert "misc" in body["mystery"]["queries"]
+    assert "occupied japan" in body["hunt_queries"]
+
+    r = c.post("/api/watchlist", json={"lenses": [{"id": "advertising-signs", "enabled": False}],
+                                       "custom_instructions": "Anything a bank gave away."})
+    assert r.status_code == 200
+    assert "Anything a bank gave away." in r.json()["prompt_preview"]
+    assert "ADVERTISING SIGNS" not in r.json()["prompt_preview"]
+
+    r = c.post("/api/watchlist", json={"add": {"name": "Fishing lures",
+                                               "prompt": "Read the box end-label and the hardware.",
+                                               "keywords": ["lure", "heddon"], "queries": ["heddon lure"]}})
+    assert "Read the box end-label" in r.json()["prompt_preview"]
+
+    # A lens needs to say what to LOOK AT; a name alone is not an instruction.
+    assert c.post("/api/watchlist", json={"add": {"name": "Nothing useful"}}).status_code == 400
+
+    # It survives a fresh read, which is what proves it was stored and not just echoed back.
+    again = c.get("/api/watchlist").json()["watchlist"]
+    assert [l["id"] for l in again["lenses"] if l["enabled"]].count("fishing-lures") == 1
+    assert again["custom_instructions"] == "Anything a bank gave away."
+
+    # And it is what the valuer will actually be handed: saving pushes it onto the pipeline.
+    from arb.lenses import watchlist_prompt
+    assert "Read the box end-label" in watchlist_prompt(sc.pipeline.watchlist)
+
+    # A built-in can be switched off but never deleted: it is code and would reappear on the next read.
+    c.post("/api/watchlist", json={"remove": "occupied-japan"})
+    after = c.get("/api/watchlist").json()["watchlist"]
+    oj = next(l for l in after["lenses"] if l["id"] == "occupied-japan")
+    assert oj["enabled"] is False and oj["builtin"] is True
+
+    # A lens of your own, however, is yours to remove.
+    c.post("/api/watchlist", json={"remove": "fishing-lures"})
+    assert not any(l["id"] == "fishing-lures" for l in c.get("/api/watchlist").json()["watchlist"]["lenses"])
+    store.close()
+
+
+def test_mystery_reaches_the_appraiser(settings, monkeypatch):
+    """The whole point: a misc lot gets every photo, a deeper search budget and an inventory brief."""
+    from arb.valuation import claude as claude_mod
+
+    seen: dict[str, object] = {}
+
+    class FakeResp:
+        stop_reason = "end_turn"
+        content = [type("B", (), {"type": "text", "text": json.dumps({
+            "identified_item": "box of ceramics", "brand": "", "model": "", "condition_assumption": "used",
+            "bulk_lot": True, "unit_count": 6, "resale_low": 40, "resale_mid": 70, "resale_high": 110,
+            "confidence": 0.4, "confidence_reason": "photo read", "demand": "medium", "days_to_sell": 30,
+            "best_channel": "eBay", "value_drivers": [], "risks": [], "rationale": "", "comps": [],
+            "authenticity_risk": False, "search_query": "", "standout_item": "Roseville vase",
+            "items": [{"name": "Roseville vase", "maker_or_mark": "Roseville", "era": "1930s",
+                       "est_low": 60, "est_high": 90, "confidence": 0.4, "condition": "chip to foot",
+                       "resell": "list individually", "note": ""}],
+        })})()]
+
+    class FakeClient:
+        class messages:
+            @staticmethod
+            def create(**kwargs):
+                seen["kwargs"] = kwargs
+                return FakeResp()
+
+    v = claude_mod.ClaudeValuer.__new__(claude_mod.ClaudeValuer)
+    v._anthropic = type("A", (), {"APIError": Exception})
+    v.client = FakeClient()
+    v.model, v.web_search, v.max_searches, v.effort = "m", True, 3, "medium"
+    v.vision, v.max_images = True, 4
+    monkeypatch.setattr(claude_mod, "load_images", lambda urls, n, **kw: [{"type": "image"}] * min(len(urls), n))
+
+    blind = {"id": 1, "title": "MISC BOX LOT", "description": "", "picture_count": 9,
+             "pictures": [f"http://x/{i}.jpg" for i in range(9)], "min_bid": 2, "quantity": 1}
+    out = v.value(blind, [], guidance="LOOK FOR: bank imprints.", max_images=8)
+    assert out.mystery_read is True
+    assert out.images_used == 8, "a blind lot is the photographs; send more than the usual four"
+    kwargs = seen["kwargs"]
+    assert kwargs["tools"][0]["max_uses"] == 5, "mystery lots get the deeper search budget"
+    text = kwargs["messages"][0]["content"][-1]["text"]
+    assert "THIS LOT IS UNCATALOGUED" in text
+    assert "INVENTORY EVERY OBJECT" in text
+    assert text.rstrip().endswith("LOOK FOR: bank imprints."), "standing instructions go last, nearest the photos"
+
+    # A catalogued lot gets none of that: the treatment is targeted, not universal.
+    named = {"id": 2, "title": "Milwaukee M18 FUEL Hammer Drill 2804-20", "description": "",
+             "picture_count": 3, "pictures": ["http://x/a.jpg"], "min_bid": 40, "quantity": 1}
+    v.value(named, [])
+    text2 = seen["kwargs"]["messages"][0]["content"][-1]["text"]
+    assert "THIS LOT IS UNCATALOGUED" not in text2
+    assert seen["kwargs"]["tools"][0]["max_uses"] == 3

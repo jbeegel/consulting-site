@@ -35,6 +35,37 @@ THIS LOT IS A TRADING CARD. Do the full grading analysis (schema field \`grading
    put a graded price in the main range; grading upside lives only in the \`grading\` field.
 You may use up to 5 web searches for a card.`;
 import { emptyValuation } from "./base";
+import { readMystery } from "../mystery";
+
+const MYSTERY_PROMPT = `
+THIS LOT IS UNCATALOGUED — the auctioneer photographed it and moved on. THE PHOTOS ARE THE ONLY SOURCE OF
+TRUTH; the title tells you nothing on purpose. This is the highest-value work you do, so slow down:
+
+1. INVENTORY EVERY OBJECT. Go photo by photo, left to right, front to back, including what is behind and
+   underneath the front row. List each distinct item separately in \`items\` — not "box of glassware" but
+   each piece you can actually see. Say "partially obscured" rather than omitting something you can half see.
+2. READ, DO NOT GUESS. Zoom mentally into every surface that carries writing: backstamps, base marks,
+   country-of-origin stamps, hallmarks, patent numbers, model plates, paper labels, embossed lettering,
+   makers' signatures, date codes. Quote what you can read verbatim in \`maker_or_mark\`. If a base is not
+   photographed, say so — an unphotographed base is the commonest reason a good piece sells as junk.
+3. CONDITION FROM THE PHOTO, per item: chips, cracks, hairlines, crazing, repairs, missing lids or parts,
+   dents, rust, fading, tears, mold, dry rot, corroded battery compartments. Put this in each item's
+   \`condition\` field, and be specific about what the photo CANNOT show (interiors, undersides, function).
+4. FIND THE ONE THING THAT MATTERS. These lots are almost never uniformly valuable: the economics are
+   normally one $40 piece in a $3 box of $1 objects. Name it in \`standout_item\` and make sure it appears
+   in \`items\` with its own estimate. If truly nothing stands out, say that plainly — most misc lots ARE junk,
+   and calling junk junk is what makes the occasional real call worth trusting.
+5. PER-ITEM RESALE VERDICT in each item's \`resell\` field: "list individually" for anything worth $15+ on
+   its own, "bundle" for things only worth selling as a group, "keep for parts", or "discard". Twenty
+   $2 objects are worth less than one $40 object at the same total, because each one costs you a listing,
+   a photograph and a box.
+6. The lot range (\`resale_low\`/\`mid\`/\`high\`) is what a reseller NETS: the good pieces sold individually
+   plus the remainder bundled, minus the pieces that go in the bin. Do not sum retail prices.
+7. Identification beats precision here. An uncertain "possibly Roseville, base not shown" with low
+   confidence is far more useful than a confident "assorted pottery" — the first is checkable, the second
+   is the listing we already had.
+You may use up to 5 web searches, and spend them on identifying the standout piece rather than on the box.`;
+
 
 const SYSTEM = `You are a veteran secondary-market appraiser and reseller (eBay power seller, estate liquidator,
 pawn-shop valuation experience). You estimate what an item from an online auction lot would realistically
@@ -165,9 +196,11 @@ const ITEM_SCHEMA = {
     est_low: { type: "number" },
     est_high: { type: "number" },
     confidence: { type: "number" },
+    condition: { type: "string", description: "condition of THIS item as read from the photo: chips, cracks, crazing, repairs, missing parts, rust, fading; and what the photo cannot show" },
+    resell: { type: "string", enum: ["list individually", "bundle", "keep for parts", "discard"], description: "how you would move this piece" },
     note: { type: "string", description: "why it is worth that; condition observations" },
   },
-  required: ["name", "maker_or_mark", "era", "est_low", "est_high", "confidence", "note"],
+  required: ["name", "maker_or_mark", "era", "est_low", "est_high", "confidence", "condition", "resell", "note"],
   additionalProperties: false,
 } as const;
 
@@ -277,7 +310,7 @@ export function parseDemand(raw: unknown): DemandSignals | null {
   return empty ? null : out;
 }
 
-function lotPrompt(lot: Lot, comps: Comp[]): string {
+function lotPrompt(lot: Lot, comps: Comp[], guidance = "", mystery = false): string {
   let desc = (lot.description || "").trim();
   if (desc.length > 2500) desc = desc.slice(0, 2500) + " …";
   const parts = [
@@ -296,6 +329,10 @@ function lotPrompt(lot: Lot, comps: Comp[]): string {
   }
   parts.push("Search the web for sold comps if the evidence above is thin or ambiguous, then return the appraisal.");
   if (isCard(lot)) parts.push(CARD_PROMPT);
+  if (mystery) parts.push(MYSTERY_PROMPT);
+  // The buyer's standing instructions go LAST, so they are the freshest thing in context when the model
+  // starts looking at the photographs.
+  if (guidance.trim()) parts.push(guidance.trim());
   return parts.join("\n");
 }
 
@@ -315,19 +352,29 @@ export class ClaudeValuer {
     return this.client.messages.create(params);
   }
 
-  async value(lot: Lot, comps: Comp[] = []): Promise<Valuation> {
+  /**
+   * `opts.guidance` is the buyer's watchlist block; `opts.mystery` forces the uncatalogued-lot treatment
+   * (more photos, a deeper search budget, item-by-item inventory) regardless of what the title says.
+   */
+  async value(lot: Lot, comps: Comp[] = [], opts: { guidance?: string; mystery?: boolean; maxImages?: number } = {}): Promise<Valuation> {
     const v = emptyValuation(lot);
     v.model_used = this.model;
-    const images = this.vision ? await loadImages(lotImageUrls(lot), this.maxImages) : [];
+    // A blind lot IS the photographs, so it gets every photo we are allowed to send, not the usual four.
+    const isMystery = opts.mystery ?? readMystery(lot).is_mystery;
+    const imageBudget = opts.maxImages ?? (isMystery ? Math.max(this.maxImages, 8) : this.maxImages);
+    const images = this.vision ? await loadImages(lotImageUrls(lot), imageBudget) : [];
     v.images_used = images.length;
-    const text = lotPrompt(lot, comps);
+    v.mystery_read = isMystery;
+    const text = lotPrompt(lot, comps, opts.guidance ?? "", isMystery && images.length > 0);
     const content: Anthropic.MessageParam["content"] = images.length
       ? [{ type: "text", text: `Photos of the lot (${images.length} attached). Read every mark and label you can.` }, ...images, { type: "text", text }]
       : text;
     const messages: Anthropic.MessageParam[] = [{ role: "user", content }];
     let data: Record<string, unknown>;
     let searched = false;
-    const searches = isCard(lot) ? 5 : this.maxSearches; // cards get a deeper pass: APR, pop report, price-by-grade
+    // Cards get a deeper pass (APR, pop report, price-by-grade); so do mystery lots, where the searches
+    // go on identifying the one piece that matters rather than on pricing a box.
+    const searches = isCard(lot) || (isMystery && images.length > 0) ? 5 : this.maxSearches;
     try {
       let resp = await this.request(messages, searches);
       for (let i = 0; i < 3 && resp.stop_reason === "pause_turn"; i++) {

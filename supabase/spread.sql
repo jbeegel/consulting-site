@@ -102,3 +102,10 @@ create table if not exists spread_theses (
   data jsonb not null
 );
 create index if not exists spread_theses_enabled on spread_theses (enabled, last_hunted_at);
+
+-- Small key/value settings: the watchlist (lenses + custom instructions), and whatever comes next.
+create table if not exists spread_settings (
+  key text primary key,
+  value jsonb,
+  updated_at timestamptz default now()
+);

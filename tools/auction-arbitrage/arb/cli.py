@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import logging
 import sys
+import re
 import time
 import webbrowser
 
@@ -251,6 +252,104 @@ def cmd_hunt(args, s, store):
         print(f"  [{m[0]['name'][:24]:<24} pay<={bid:>7}] ${lot.get('high_bid') or 0:>6.0f}  {lot.get('title', '')[:56]}")
 
 
+def cmd_watch(args, s, store):
+    """The watchlist: which lenses are on, and your own standing instructions.
+
+    With no arguments it prints the current state and the exact block the appraiser will be given, so
+    there is never a hidden prompt.
+    """
+    from .lenses import lens_queries, watchlist_prompt
+
+    sc = Scanner(s, store)
+    w = sc.watchlist(force=True)
+    changed = False
+
+    if args.on or args.off or args.instructions is not None or args.add:
+        by_id = {l["id"]: l for l in w["lenses"]}
+        for lens_id in args.on or []:
+            if lens_id not in by_id:
+                print(f"no such lens: {lens_id}")
+                return 1
+            by_id[lens_id]["enabled"] = True
+        for lens_id in args.off or []:
+            if lens_id not in by_id:
+                print(f"no such lens: {lens_id}")
+                return 1
+            by_id[lens_id]["enabled"] = False
+        if args.instructions is not None:
+            w["custom_instructions"] = args.instructions[:4000]
+        if args.add:
+            name, _, prompt = args.add.partition("=")
+            if not prompt.strip():
+                print("usage: --add 'Name=what to look for in the photographs'")
+                return 1
+            slug = re.sub(r"^-|-$", "", re.sub(r"[^a-z0-9]+", "-", name.strip().lower()))[:60]
+            w["lenses"].append({"id": slug or f"lens-{int(time.time())}", "name": name.strip()[:80],
+                                "hint": "", "builtin": False,
+                                "keywords": [k.strip() for k in (args.keywords or "").split(",") if k.strip()],
+                                "queries": [q.strip() for q in (args.queries or "").split(",") if q.strip()],
+                                "prompt": prompt.strip()[:2000], "enabled": True})
+        w = sc.save_watchlist(w)
+        changed = True
+
+    print(f"{'saved. ' if changed else ''}lenses:")
+    for l in w["lenses"]:
+        mark = "on " if l["enabled"] else "off"
+        tag = "" if l.get("builtin") else " (yours)"
+        print(f"  [{mark}] {l['id']:<22} {l['name']}{tag}")
+        if l.get("hint"):
+            print(f"        {l['hint']}")
+    if w["custom_instructions"]:
+        print(f"\nyour standing instructions:\n  {w['custom_instructions']}")
+    queries = lens_queries(w)
+    if queries:
+        print(f"\nhunt terms from enabled lenses: {', '.join(queries)}")
+    if args.prompt:
+        print("\n--- what the appraiser is told, verbatim ---")
+        print(watchlist_prompt(w) or "(nothing: no lenses on and no instructions)")
+    return 0
+
+
+def cmd_mystery(args, s, store):
+    """Uncatalogued lots, ranked by how blind the listing is.
+
+    A high score is not a prediction of value; it is a prediction that the price does not yet reflect
+    the contents, because nobody -- the auctioneer included -- has looked.
+    """
+    from .mystery import mystery_economics, read_mystery
+    from .scoring import score_lot
+
+    sc = Scanner(s, store)
+    if args.hunt:
+        out = sc.hunt(max_theses=0)
+        print(f"pulled {len(out['lots'])} lots from the mystery sweep")
+    lots = store.lots(limit=5000)
+    vals = store.valuations_for([l["id"] for l in lots])
+    rows = []
+    for lot in lots:
+        m = read_mystery(lot, s)
+        if not m["is_mystery"]:
+            continue
+        val = vals.get(lot["id"])
+        rows.append((m, lot, val, score_lot(lot, val, s, **sc.score_options(lot.get("category") or ""))))
+    # Valued lots first (we know what is in them), then by how blind the rest are.
+    rows.sort(key=lambda r: (-(r[3].get("score") or 0) if r[2] else 0, -r[0]["score"]))
+    if not rows:
+        print("no mystery lots stored. run a scan, or `arb mystery --hunt` to sweep for them.")
+        return 0
+    print(f"{len(rows)} uncatalogued lots\n")
+    for m, lot, val, scl in rows[:args.limit]:
+        bid = lot.get("high_bid") or lot.get("min_bid") or 0
+        print(f"[{m['score']:.2f}] ${bid:>6.0f}  {lot.get('title', '')[:64]}")
+        print(f"        {m['reason']}")
+        econ = mystery_economics(lot, val, scl, s)
+        if econ and econ["items_identified"]:
+            from .mystery import mystery_verdict
+            print(f"        {mystery_verdict(econ, s)}")
+        print(f"        {lot.get('url', '')}")
+    return 0
+
+
 def cmd_local(args, s, store):
     """Local, non-auction buys scored against the playbook."""
     from .sources import hunt_local, parse_pasted_listing, score_local
@@ -362,6 +461,21 @@ def main(argv=None):
     a = sub.add_parser("hunt", help="run the playbook's searches against HiBid")
     a.add_argument("--limit", type=int, help="how many niches to hunt this run")
     a.set_defaults(fn=cmd_hunt)
+
+    a = sub.add_parser("watch", help="lenses and your own standing instructions for every appraisal")
+    a.add_argument("--on", action="append", help="switch a lens on by id (repeatable)")
+    a.add_argument("--off", action="append", help="switch a lens off by id (repeatable)")
+    a.add_argument("--instructions", help="replace your standing instructions (free text)")
+    a.add_argument("--add", help="add a lens: 'Name=what to look for in the photographs'")
+    a.add_argument("--keywords", help="comma-separated title keywords for --add")
+    a.add_argument("--queries", help="comma-separated hunt search terms for --add")
+    a.add_argument("--prompt", action="store_true", help="print the exact block the appraiser is given")
+    a.set_defaults(fn=cmd_watch)
+
+    a = sub.add_parser("mystery", help="uncatalogued 'misc' lots, ranked by how blind the listing is")
+    a.add_argument("--hunt", action="store_true", help="sweep HiBid for misc lots first")
+    a.add_argument("--limit", type=int, default=25)
+    a.set_defaults(fn=cmd_mystery)
 
     a = sub.add_parser("local", help="local non-auction buys scored against the playbook")
     a.add_argument("--url", help="score one pasted listing URL (OfferUp, Marketplace, anywhere)")

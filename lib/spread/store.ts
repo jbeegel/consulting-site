@@ -40,6 +40,9 @@ export interface Store {
   theses(): Promise<Thesis[]>;
   saveTheses(rows: Thesis[]): Promise<void>;
   deleteThesis(id: string): Promise<void>;
+  // --- small key/value settings (the watchlist, and whatever comes next)
+  getSetting<T>(key: string): Promise<T | null>;
+  putSetting(key: string, value: unknown): Promise<void>;
   readonly kind: "supabase" | "memory";
 }
 
@@ -51,6 +54,7 @@ class MemoryStore implements Store {
   private cache = new Map<string, Valuation>();
   private outs = new Map<number, Outcome>();
   private thes = new Map<string, Thesis>();
+  private settings = new Map<string, unknown>();
   private scans: ScanRecord[] = [];
 
   async upsertLots(lots: Lot[]) {
@@ -123,6 +127,8 @@ class MemoryStore implements Store {
   async theses() { return [...this.thes.values()]; }
   async saveTheses(rows: Thesis[]) { for (const t of rows) this.thes.set(t.id, t); }
   async deleteThesis(id: string) { this.thes.delete(id); }
+  async getSetting<T>(key: string) { return (this.settings.get(key) as T) ?? null; }
+  async putSetting(key: string, value: unknown) { this.settings.set(key, value); }
 }
 
 // ----------------------------------------------------------------------------- supabase
@@ -289,6 +295,15 @@ class SupabaseStore implements Store {
     if (error) throw new Error("spread_theses upsert: " + error.message);
   }
   async deleteThesis(id: string) { await this.sb.from("spread_theses").delete().eq("id", id); }
+  async getSetting<T>(key: string) {
+    const { data } = await this.sb.from("spread_settings").select("value").eq("key", key).maybeSingle();
+    return (data?.value as T) ?? null;
+  }
+  async putSetting(key: string, value: unknown) {
+    const { error } = await this.sb.from("spread_settings")
+      .upsert({ key, value, updated_at: iso(Date.now() / 1000) }, { onConflict: "key" });
+    if (error) throw new Error("spread_settings upsert: " + error.message);
+  }
 }
 
 let memory: MemoryStore | null = null;

@@ -57,6 +57,22 @@ export const config = {
   liquidityMinSales: Math.floor(num("SPREAD_LIQUIDITY_MIN_SALES", 4)),
   trendWindowDays: Math.floor(num("SPREAD_TREND_WINDOW_DAYS", 21)),
 
+  // mystery lots: uncatalogued "misc" lots, where the auctioneer did not look
+  mystery: bool("SPREAD_MYSTERY", true),
+  /** How blind a listing must read before it counts as a mystery lot. 0-1. */
+  mysteryThreshold: num("SPREAD_MYSTERY_THRESHOLD", 0.45),
+  /** Extra triage weight a mystery lot gets, so misc lots compete for valuation calls on purpose. */
+  mysteryWeight: num("SPREAD_MYSTERY_WEIGHT", 3),
+  /** Photos sent for a mystery lot. The whole method is reading them, so send more than usual. */
+  mysteryMaxImages: Math.max(1, Math.floor(num("SPREAD_MYSTERY_MAX_IMAGES", 8))),
+  /** Valuations reserved for mystery lots each run, so a strong playbook cannot crowd them out. */
+  mysteryPerRun: Math.floor(num("SPREAD_MYSTERY_PER_RUN", 4)),
+  mysteryHuntQueries: Math.floor(num("SPREAD_MYSTERY_HUNT_QUERIES", 3)),
+
+  // lenses: the buyer's own standing pattern knowledge, applied to every lot
+  lenses: bool("SPREAD_LENSES", true),
+  lensWeight: num("SPREAD_LENS_WEIGHT", 1),
+
   // the playbook: hunt known niches instead of waiting for them to float past
   playbook: bool("SPREAD_PLAYBOOK", true),
   /** Return on capital a buy must clear to be worth doing. 1.0 = 100%/month. Drives every max bid. */

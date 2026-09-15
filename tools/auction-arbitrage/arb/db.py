@@ -39,6 +39,9 @@ CREATE TABLE IF NOT EXISTS theses (
   researched_at REAL, last_hunted_at REAL, updated_at REAL, data TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS theses_hunt ON theses(enabled, last_hunted_at);
+CREATE TABLE IF NOT EXISTS settings (
+  key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at REAL
+);
 CREATE TABLE IF NOT EXISTS scans (
   id INTEGER PRIMARY KEY AUTOINCREMENT, started_at REAL, finished_at REAL, status TEXT,
   params TEXT, lots_seen INTEGER DEFAULT 0, lots_valued INTEGER DEFAULT 0, message TEXT
@@ -274,6 +277,27 @@ class Store:
     def delete_thesis(self, thesis_id: str) -> None:
         with self._lock:
             self._conn.execute("DELETE FROM theses WHERE id=?", (thesis_id,))
+
+    # -------------------------------------------------------------- settings
+    def get_setting(self, key: str) -> Any:
+        """A small JSON blob keyed by name. Used for the watchlist; corrupt values read as absent
+        rather than taking a scan down."""
+        with self._lock:
+            row = self._conn.execute("SELECT value FROM settings WHERE key=?", (key,)).fetchone()
+        if not row:
+            return None
+        try:
+            return json.loads(row["value"])
+        except (ValueError, TypeError):
+            return None
+
+    def put_setting(self, key: str, value: Any) -> None:
+        with self._lock:
+            self._conn.execute(
+                """INSERT INTO settings (key,value,updated_at) VALUES (?,?,?)
+                   ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at""",
+                (key, json.dumps(value), time.time()),
+            )
 
     def close(self) -> None:
         with self._lock:

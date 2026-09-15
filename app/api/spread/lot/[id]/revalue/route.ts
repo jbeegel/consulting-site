@@ -11,6 +11,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const id = Number((await params).id);
   const lot = await getStore().getLot(id);
   if (!lot) return NextResponse.json({ detail: "unknown lot" }, { status: 404 });
-  const v = await new Scanner().pipeline.valueLot(lot, true);
-  return NextResponse.json(buildOpportunity(lot, v));
+  const scanner = new Scanner();
+  // Load the watchlist first: it is what injects the buyer's lenses and standing instructions into the
+  // appraisal prompt, and a manual revalue is exactly when those matter most.
+  const watchlist = await scanner.watchlist().catch(() => null);
+  const v = await scanner.pipeline.valueLot(lot, true);
+  const theses = await scanner.theses().catch(() => []);
+  return NextResponse.json(buildOpportunity(lot, v, undefined, Date.now() / 1000, {}, theses, watchlist));
 }

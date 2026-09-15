@@ -92,6 +92,10 @@ export interface LotItem {
   est_high: number;
   confidence: number;
   note: string;
+  /** Condition read from the photo: chips, cracks, wear, missing parts. */
+  condition?: string;
+  /** How you would move this piece. */
+  resell?: "list individually" | "bundle" | "keep for parts" | "discard";
 }
 
 export interface GradedComp { grader: string; grade: string; price: number; source: string; url: string; date: string }
@@ -244,6 +248,8 @@ export interface Valuation {
   standout_item?: string;
   grading?: GradingAnalysis | null;
   images_used?: number;
+  /** True when this lot got the uncatalogued-lot treatment: every photo, item-by-item inventory. */
+  mystery_read?: boolean;
   calibration?: { bias: number; confidence_factor: number; basis: string; n: number } | null;
   model_used: string;
   created_at: number;
@@ -292,6 +298,10 @@ export interface Opportunity {
   theses?: ThesisMatch[];
   /** The lowest max_bid across matched theses: the number to stop bidding at. */
   max_bid?: number | null;
+  /** Uncatalogued lot: how blind the listing is, and what the photo read found in it. */
+  mystery?: MysteryEconomics | null;
+  /** Lenses whose keywords this lot's words hit. */
+  lenses?: { id: string; name: string }[];
 }
 
 /** User-set risk parameters. Sent by the dashboard, applied server-side so alerts honour them too. */
@@ -451,6 +461,65 @@ export interface LiquidityReport {
   categories: CategoryLiquidity[];
   /** Median realized monthly ROI across everything you have actually bought and sold. */
   realized_monthly_roi: number | null;
+}
+
+// ----------------------------------------------------------------------------- mystery lots
+/** How blind a listing is: the gap between what the auctioneer showed and what they said. */
+export interface MysteryRead {
+  is_mystery: boolean;
+  /** 0-1. Not a prediction of value — a prediction that the price does not reflect the contents. */
+  score: number;
+  signals: string[];
+  photos: number;
+  informative_words: number;
+  reason: string;
+}
+
+export interface MysteryItem {
+  name: string;
+  maker_or_mark: string;
+  est_low: number;
+  est_high: number;
+  confidence: number;
+  note: string;
+}
+
+export interface MysteryEconomics {
+  read: MysteryRead;
+  items_identified: number;
+  identified_value: number;
+  /** The single best piece: what actually justifies buying a box of junk. */
+  best_item: MysteryItem | null;
+  best_item_net: number;
+  /** Net on the best item alone, over the whole lot's landed cost. */
+  best_item_multiple: number | null;
+  /** Share of identified value carried by the best piece. High means one thing matters. */
+  concentration: number | null;
+  standout: string;
+}
+
+// ----------------------------------------------------------------------------- lenses
+/** One private pattern observation, applied to every lot forever. */
+export interface Lens {
+  id: string;
+  name: string;
+  /** One line for the toggle in the UI. */
+  hint: string;
+  /** What the appraiser is told to look for. The payload — physical and specific, not a category name. */
+  prompt: string;
+  /** Title/description hints that raise triage priority. Photos can fire a lens these never suggested. */
+  keywords: string[];
+  /** Search terms contributed to hunt mode. */
+  queries: string[];
+  enabled: boolean;
+  builtin: boolean;
+}
+
+export interface Watchlist {
+  lenses: Lens[];
+  /** Free text appended verbatim to every appraisal: the escape hatch for an un-toggled hunch. */
+  custom_instructions: string;
+  updated_at: number;
 }
 
 // ----------------------------------------------------------------------------- the playbook

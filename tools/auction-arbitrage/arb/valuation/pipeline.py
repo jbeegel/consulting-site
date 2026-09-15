@@ -10,6 +10,8 @@ from typing import Any, Callable, Iterable
 from ..calibration import adjustment_for
 from ..config import Settings
 from ..db import Store
+from ..lenses import lens_boost, watchlist_prompt
+from ..mystery import read_mystery
 from .base import Comp, Valuation, title_key
 from .ebay import clean_query, fetch_sold_comps
 from .estimate import value_from_estimate
@@ -98,6 +100,17 @@ class ValuationPipeline:
         self.calibration_fetcher = calibration_fetcher  # e.g. Scanner.calibration: the valuer's report card
         self._claude = claude_valuer
         self._claude_tried = claude_valuer is not None
+        #: The buyer's lenses and standing instructions, injected into every appraisal prompt.
+        self.watchlist: dict[str, Any] | None = None
+
+    def set_watchlist(self, w: dict[str, Any] | None) -> None:
+        self.watchlist = w
+
+    def lens_priority(self, lot: dict[str, Any]) -> float:
+        """Triage weight from the buyer's own lenses, so a lens hit competes for a valuation call."""
+        if not self.settings.lenses:
+            return 0.0
+        return lens_boost(lot, self.watchlist, self.settings.lens_weight)
 
     # ---------------------------------------------------------- provider setup
     def _get_claude(self):
@@ -143,7 +156,17 @@ class ValuationPipeline:
                         lot = dict(lot, pictures=pics)
                 except Exception as e:  # photos are a bonus, never a blocker
                     log.info("picture fetch failed for %s: %s", lot.get("id"), e)
-            val = claude.value(lot, comps)
+            # A mystery lot is judged on the photographs we can actually send, so decide AFTER the
+            # picture fetch above: a lot with one thumbnail and one fetched later are different
+            # propositions.
+            mystery = bool(self.settings.mystery and self.settings.vision
+                           and read_mystery(lot, self.settings)["is_mystery"])
+            val = claude.value(
+                lot, comps,
+                guidance=watchlist_prompt(self.watchlist) if self.settings.lenses else "",
+                mystery=mystery,
+                max_images=max(self.settings.max_images, self.settings.mystery_max_images) if mystery else None,
+            )
             if not val.usable:
                 log.info("claude gave no usable value for %s (%s)", lot["id"], val.error or val.rationale[:80])
                 val = None
@@ -207,15 +230,29 @@ class ValuationPipeline:
     # ------------------------------------------------------------ many lots
     def value_many(self, lots: Iterable[dict[str, Any]], *, max_lots: int | None = None,
                    progress: Callable[[int, int, dict[str, Any]], None] | None = None,
-                   boost: Callable[[dict[str, Any]], float] | None = None) -> int:
+                   boost: Callable[[dict[str, Any]], float] | None = None,
+                   reserve: tuple[Callable[[dict[str, Any]], bool], int] | None = None) -> int:
         """`boost` lets the playbook push its own matches to the front: a lot matching a researched
-        niche is a far better use of a valuation call than one that merely contains a hot word."""
+        niche is a far better use of a valuation call than one that merely contains a hot word.
+
+        `reserve` is a (predicate, count) pair holding part of the budget for a class of lot. Mystery
+        lots need it: they have no hot words, so on pure triage they lose every time to a lot with a
+        brand name in the title -- and they are exactly where the edge is.
+        """
         rank = (lambda l: triage_score(l) + boost(l)) if boost else triage_score
         todo = [l for l in lots if not l.get("is_closed")]
         todo.sort(key=rank, reverse=True)
         todo = [l for l in todo if rank(l) >= 0]
         if max_lots:
-            todo = todo[:max_lots]
+            held: list[dict[str, Any]] = []
+            if reserve and reserve[1] > 0:
+                pick, count = reserve
+                held = [l for l in todo if pick(l)][:min(count, max_lots)]
+            if held:
+                held_ids = {l["id"] for l in held}
+                todo = (held + [l for l in todo if l["id"] not in held_ids])[:max_lots]
+            else:
+                todo = todo[:max_lots]
         done = 0
         workers = max(1, self.settings.valuation_workers)
         with ThreadPoolExecutor(max_workers=workers) as ex:

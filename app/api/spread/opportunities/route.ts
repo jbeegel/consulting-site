@@ -38,6 +38,7 @@ export async function GET(req: Request) {
   const scanner = new Scanner();
   const report = await scanner.calibration().catch(() => null);
   const theses = await scanner.theses().catch(() => []);
+  const watchlist = await scanner.watchlist().catch(() => null);
   const lots = await store.lots({ endsBefore: hours ? now + hours * 3600 : null, endsAfter: now - 60, category });
   const vals = await store.valuationsFor(lots.map((l) => l.id));
   const out = [];
@@ -45,7 +46,7 @@ export async function GET(req: Request) {
     if (q && !`${lot.title} ${lot.auction_name ?? ""}`.toLowerCase().includes(q)) continue;
     const v = vals.get(lot.id) ?? null;
     if (!v && !includeUnvalued) continue;
-    const opp = buildOpportunity(lot, v, undefined, now, scoreOptionsFor(lot, report, intelParams), theses);
+    const opp = buildOpportunity(lot, v, undefined, now, scoreOptionsFor(lot, report, intelParams), theses, watchlist);
     if (v && opp.score.score < minScore) continue;
     out.push(opp);
   }

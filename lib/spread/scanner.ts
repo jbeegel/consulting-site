@@ -10,7 +10,9 @@ import { applyOutcomeStats, huntOrder, matchTheses, normalizeThesis, refreshAll,
 import { SEED_THESES } from "./seeds";
 import { gradingEconomics, landedCost, listingEconomics, scoreLot, whyUpside, type ScoreOptions } from "./scoring";
 import { getStore, type Store } from "./store";
-import type { CalibrationReport, IntelParams, Lot, MarketIntel, Opportunity, Outcome, ScanParams, Thesis, Valuation } from "./types";
+import type { CalibrationReport, IntelParams, Lot, MarketIntel, Opportunity, Outcome, ScanParams, Thesis, Valuation, Watchlist } from "./types";
+import { MYSTERY_QUERIES, mysteryBoost, mysteryEconomics, readMystery } from "./mystery";
+import { lensQueries, matchedLenses, mergeWatchlist } from "./lenses";
 import { ValuationPipeline } from "./valuation";
 
 /** Score options for one lot: the user's liquidity weight plus whatever the feedback loop knows about
@@ -23,7 +25,7 @@ export function scoreOptionsFor(lot: Lot, report: CalibrationReport | null, p: I
   };
 }
 
-export function buildOpportunity(lot: Lot, val: Valuation | null, c: Config = config, now = Date.now() / 1000, opts: ScoreOptions = {}, theses: Thesis[] = []): Opportunity {
+export function buildOpportunity(lot: Lot, val: Valuation | null, c: Config = config, now = Date.now() / 1000, opts: ScoreOptions = {}, theses: Thesis[] = [], watchlist: Watchlist | null = null): Opportunity {
   const score = scoreLot(lot, val, c, now, opts);
   // Playbook matches attach whether or not a valuation exists: a matched, unvalued penny lot already
   // has a researched price and a bid ceiling behind it, which is the whole point of hunting.
@@ -36,6 +38,10 @@ export function buildOpportunity(lot: Lot, val: Valuation | null, c: Config = co
     grading: gradingEconomics(val, score, c),
     theses: hits,
     max_bid: ceilings.length ? Math.min(...ceilings) : null,
+    // A mystery read attaches before any valuation: "this lot is unpriced" is knowable from the listing
+    // alone, and is the reason to spend a call on it.
+    mystery: mysteryEconomics(lot, val, score, c),
+    lenses: c.lenses ? matchedLenses(lot, watchlist).map((l) => ({ id: l.id, name: l.name })) : [],
   };
 }
 
@@ -49,6 +55,42 @@ export class Scanner {
 
   private _calibration: { at: number; report: CalibrationReport } | null = null;
   private _theses: { at: number; rows: Thesis[] } | null = null;
+  private _watchlist: { at: number; row: Watchlist } | null = null;
+
+  /**
+   * The buyer's lenses and standing instructions. Merged over the built-ins on every read, so shipping
+   * a new built-in lens (or fixing the wording of an existing prompt) reaches everyone without anyone
+   * re-saving anything; only the on/off switches and custom text are ever read back from storage.
+   */
+  async watchlist(force = false): Promise<Watchlist> {
+    const now = Date.now();
+    if (!force && this._watchlist && now - this._watchlist.at < 60_000) return this._watchlist.row;
+    let stored: Partial<Watchlist> | null = null;
+    try {
+      stored = await this.store.getSetting<Partial<Watchlist>>("watchlist");
+    } catch (e) {
+      console.warn("watchlist read failed", e);
+    }
+    const row = mergeWatchlist(stored);
+    this._watchlist = { at: now, row };
+    this.pipeline.setWatchlist(row);
+    return row;
+  }
+
+  async saveWatchlist(w: Watchlist): Promise<Watchlist> {
+    const row = mergeWatchlist({ ...w, updated_at: Date.now() / 1000 });
+    // Only the user's decisions are persisted; built-in prompt text is code and is re-merged on read.
+    await this.store.putSetting("watchlist", {
+      lenses: row.lenses.map((l) => (l.builtin
+        ? { id: l.id, enabled: l.enabled }
+        : { id: l.id, name: l.name, hint: l.hint, keywords: l.keywords, queries: l.queries, prompt: l.prompt, enabled: l.enabled })),
+      custom_instructions: row.custom_instructions,
+      updated_at: row.updated_at,
+    });
+    this._watchlist = { at: Date.now(), row };
+    this.pipeline.setWatchlist(row);
+    return row;
+  }
 
   /**
    * The playbook, seeded on first use. Cached for a minute per instance like the report card.
@@ -136,26 +178,50 @@ export class Scanner {
    * drift past in a broad scan. Rotates through theses least-recently-hunted first so the search budget
    * spreads across the whole playbook over a few runs.
    */
-  async hunt(opts: { theses?: Thesis[]; maxTheses?: number; deadline?: number } = {}): Promise<{ hunted: string[]; lots: Lot[] }> {
+  async hunt(opts: { theses?: Thesis[]; maxTheses?: number; deadline?: number; watchlist?: Watchlist | null } = {}): Promise<{ hunted: string[]; lots: Lot[] }> {
     const all = opts.theses ?? (await this.theses());
     const picks = huntOrder(all, opts.maxTheses ?? this.c.huntPerRun);
     const kept = new Map<number, Lot>();
     const hunted: string[] = [];
+    const run = async (label: string, q: string) => {
+      try {
+        const lots = await this.pull({ status: "OPEN", hours: null, search_text: q, max_pages: this.c.huntPages, value: false });
+        for (const l of lots) kept.set(l.id, l);
+      } catch (e) {
+        console.warn("hunt failed for", label, q, e);
+      }
+    };
     for (const t of picks) {
       if (opts.deadline && Date.now() > opts.deadline) break;
       for (const q of t.queries.slice(0, 2)) {
         if (opts.deadline && Date.now() > opts.deadline) break;
-        try {
-          const lots = await this.pull({ status: "OPEN", hours: null, search_text: q, max_pages: this.c.huntPages, value: false });
-          for (const l of lots) kept.set(l.id, l);
-        } catch (e) {
-          console.warn("hunt failed for", t.id, q, e);
-        }
+        await run(t.id, q);
       }
       hunted.push(t.id);
       t.last_hunted_at = Date.now() / 1000;
     }
     if (hunted.length) await this.saveTheses(picks);
+
+    // Lens searches: the user's own patterns, hunted by name. A lens also fires on photographs later,
+    // which is where most of its value is, but a keyword search is free and catches the easy half.
+    if (this.c.lenses) {
+      const w = opts.watchlist ?? (await this.watchlist());
+      for (const q of lensQueries(w).slice(0, 4)) {
+        if (opts.deadline && Date.now() > opts.deadline) break;
+        await run("lens", q);
+      }
+    }
+
+    // Mystery sweep: rotate through the uncatalogued-lot search terms so every run pulls a different
+    // slice. These searches find lots no thesis would ever match — that is the point of them.
+    if (this.c.mystery && this.c.mysteryHuntQueries > 0) {
+      const n = Math.min(this.c.mysteryHuntQueries, MYSTERY_QUERIES.length);
+      const start = Math.floor(Date.now() / 3_600_000) % MYSTERY_QUERIES.length;
+      for (let i = 0; i < n; i++) {
+        if (opts.deadline && Date.now() > opts.deadline) break;
+        await run("mystery", MYSTERY_QUERIES[(start + i) % MYSTERY_QUERIES.length]);
+      }
+    }
     return { hunted, lots: [...kept.values()] };
   }
 
@@ -255,8 +321,9 @@ export class Scanner {
       // Hunt: the broad pull sees whatever is closing; these searches go looking for the niches we
       // already know pay. Cheap (no valuation), and the results join the same pool.
       const theses = p.hunt === false ? [] : await this.theses();
-      if (theses.length && Date.now() < deadline - 30_000) {
-        const h = await this.hunt({ theses, deadline: deadline - 20_000 });
+      const watchlist = await this.watchlist();
+      if (p.hunt !== false && Date.now() < deadline - 30_000) {
+        const h = await this.hunt({ theses, watchlist, deadline: deadline - 20_000 });
         out.hunted = h.hunted.length;
         const seen = new Set(lots.map((l) => l.id));
         lots = lots.concat(h.lots.filter((l) => !seen.has(l.id)));
@@ -274,10 +341,21 @@ export class Scanner {
         if (maxLots > 0) {
           const unvalued = new Set((await this.store.lots({ onlyUnvalued: true })).map((l) => l.id));
           const todo = lots.filter((l) => unvalued.has(l.id));
-          // A lot that matches a researched niche outranks one that merely contains a hot word.
-          const boost = theses.length ? (l: Lot) => { const m = matchTheses(l, theses); return m.length ? 2 + 2 * m[0].strength : 0; } : undefined;
+          // A lot that matches a researched niche outranks one that merely contains a hot word; a lot
+          // that matches one of the buyer's own lenses, or that nobody has catalogued, outranks both.
+          const boost = (l: Lot) => {
+            const m = theses.length ? matchTheses(l, theses) : [];
+            return (m.length ? 2 + 2 * m[0].strength : 0)
+              + mysteryBoost(l, this.c)
+              + (this.c.lenses ? this.pipeline.lensPriority(l) : 0);
+          };
+          // Reserve part of the budget outright. Mystery lots carry no hot words by definition, so on a
+          // shared ranking a busy run of brand-name lots would crowd them out of every scan.
+          const reserve = this.c.mystery && this.c.vision && this.c.mysteryPerRun > 0
+            ? { pick: (l: Lot) => readMystery(l, this.c).is_mystery, count: Math.min(this.c.mysteryPerRun, maxLots) }
+            : undefined;
           out.lots_valued = await this.pipeline.valueMany(todo, {
-            maxLots, deadline, boost,
+            maxLots, deadline, boost, reserve,
             onDone: (n, total, lot) => this.store.updateScan(id, { lots_valued: n, message: `valued ${n}/${total}: ${lot.title.slice(0, 60)}` }).catch(() => undefined),
           });
         } else {
@@ -304,7 +382,7 @@ export class Scanner {
         out.refreshed = refreshed.length;
         const report = await this.calibration();
         const opps = (refreshed.length ? refreshed : closing).filter((l) => !l.is_closed)
-          .map((l) => buildOpportunity(l, vals.get(l.id) ?? null, this.c, Date.now() / 1000, scoreOptionsFor(l, report, {}, this.c), theses));
+          .map((l) => buildOpportunity(l, vals.get(l.id) ?? null, this.c, Date.now() / 1000, scoreOptionsFor(l, report, {}, this.c), theses, watchlist));
         out.alerted = await sendAlerts(this.store, opps);
       }
       out.settled = await this.settleClosedLots(this.c.settlePerRun, deadline);
@@ -335,7 +413,8 @@ export class Scanner {
     const lots = await this.store.lots({ limit: 5000 });
     const vals = await this.store.valuationsFor(lots.map((l) => l.id));
     const theses = await this.theses();
-    const opps = lots.map((l) => buildOpportunity(l, vals.get(l.id) ?? null, this.c, now, scoreOptionsFor(l, report, p, this.c), theses));
+    const watchlist = await this.watchlist();
+    const opps = lots.map((l) => buildOpportunity(l, vals.get(l.id) ?? null, this.c, now, scoreOptionsFor(l, report, p, this.c), theses, watchlist));
     const history = await this.store.valuationHistory(now - this.c.trendWindowDays * 86400);
     const liquidity = report?.liquidity ?? buildReport([], this.c, now).liquidity;
     return buildIntel(opps, history, liquidity, this.c, now);

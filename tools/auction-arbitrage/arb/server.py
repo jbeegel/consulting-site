@@ -1,6 +1,7 @@
 """FastAPI app: JSON API + the single-page dashboard."""
 from __future__ import annotations
 
+import re
 import logging
 import time
 from pathlib import Path
@@ -15,6 +16,8 @@ from .calibration import build_report
 from .db import Store
 from .scanner import Scanner
 from .intel import apply_intel_filters
+from .lenses import lens_queries, matched_lenses, watchlist_prompt
+from .mystery import MYSTERY_QUERIES, mystery_economics
 from .playbook import match_theses, normalize_thesis, refresh_thesis
 from .sources import hunt_local, parse_pasted_listing, score_local
 from .scoring import TIME_BUCKETS, grading_economics, listing_economics, score_lot, why_upside
@@ -35,9 +38,14 @@ class ScanRequest(BaseModel):
     value: bool = True
 
 
+def _slug(name: str) -> str:
+    return re.sub(r"^-|-$", "", re.sub(r"[^a-z0-9]+", "-", name.lower()))[:60]
+
+
 def build_opportunity(lot: dict[str, Any], val: dict[str, Any] | None, s: Settings, now: float,
                       score_opts: dict[str, Any] | None = None,
-                      theses: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+                      theses: list[dict[str, Any]] | None = None,
+                      watchlist: dict[str, Any] | None = None) -> dict[str, Any]:
     sc = score_lot(lot, val, s, now=now, **(score_opts or {}))
     # Playbook matches attach whether or not a valuation exists: a matched, unvalued penny lot already
     # has a researched price and a bid ceiling behind it, which is the whole point of hunting.
@@ -52,6 +60,11 @@ def build_opportunity(lot: dict[str, Any], val: dict[str, Any] | None, s: Settin
         "grading": grading_economics(val, sc, s),
         "theses": hits,
         "max_bid": min(ceilings) if ceilings else None,
+        # A mystery read attaches before any valuation: "this lot is unpriced" is knowable from the
+        # listing alone, and is the reason to spend a call on it.
+        "mystery": mystery_economics(lot, val, sc, s),
+        "lenses": ([{"id": l["id"], "name": l["name"]} for l in matched_lenses(lot, watchlist)]
+                   if s.lenses else []),
     }
 
 
@@ -89,6 +102,7 @@ def create_app(settings: Settings | None = None, store: Store | None = None, sca
         now = time.time()
         sc.calibration()  # warm the report card so every lot gets its category's measured speed
         theses = sc.theses()
+        watchlist = sc.watchlist()
         lots = db.lots(ends_before=(now + hours * 3600) if hours else None, ends_after=now - 60,
                        category=category or None)
         vals = db.valuations_for([l["id"] for l in lots])
@@ -101,7 +115,7 @@ def create_app(settings: Settings | None = None, store: Store | None = None, sca
             if not v and not include_unvalued:
                 continue
             opts = sc.score_options(lot.get("category") or "", liquidity_weight, handling_days)
-            opp = build_opportunity(lot, v, s, now, opts, theses)
+            opp = build_opportunity(lot, v, s, now, opts, theses, watchlist)
             if opp["score"]["score"] < min_score and v:
                 continue
             out.append(opp)
@@ -129,7 +143,8 @@ def create_app(settings: Settings | None = None, store: Store | None = None, sca
                 l = sc.enrich_lot(lot_id) or l
             except Exception as e:  # HiBid hiccup shouldn't break the dossier
                 log.warning("enrich failed: %s", e)
-        return build_opportunity(l, db.get_valuation(lot_id), s, time.time())
+        return build_opportunity(l, db.get_valuation(lot_id), s, time.time(),
+                                 theses=sc.theses(), watchlist=sc.watchlist())
 
     @app.post("/api/lot/{lot_id}/refresh")
     def refresh(lot_id: int):
@@ -139,15 +154,19 @@ def create_app(settings: Settings | None = None, store: Store | None = None, sca
             raise HTTPException(502, f"HiBid refresh failed: {e}")
         if not l:
             raise HTTPException(404, "unknown lot")
-        return build_opportunity(l, db.get_valuation(lot_id), s, time.time())
+        return build_opportunity(l, db.get_valuation(lot_id), s, time.time(),
+                                 theses=sc.theses(), watchlist=sc.watchlist())
 
     @app.post("/api/lot/{lot_id}/revalue")
     def revalue(lot_id: int):
         l = db.get_lot(lot_id)
         if not l:
             raise HTTPException(404, "unknown lot")
+        # Load the watchlist first: it is what injects the buyer's lenses and standing instructions
+        # into the appraisal prompt, and a manual revalue is exactly when those matter most.
+        w = sc.watchlist()
         v = sc.pipeline.value_lot(l, force=True)
-        return build_opportunity(l, v.to_dict(), s, time.time())
+        return build_opportunity(l, v.to_dict(), s, time.time(), theses=sc.theses(), watchlist=w)
 
     @app.post("/api/refresh")
     def refresh_many(body: dict[str, list[int]]):
@@ -261,6 +280,67 @@ def create_app(settings: Settings | None = None, store: Store | None = None, sca
     def delete_thesis(thesis_id: str):
         db.delete_thesis(thesis_id)
         return {"deleted": thesis_id}
+
+    # ----------------------------------------------------------------- watchlist
+    @app.get("/api/watchlist")
+    def watchlist():
+        """Which lenses are switched on, and the buyer's own standing instructions."""
+        w = sc.watchlist(force=True)
+        return {
+            "watchlist": w,
+            # What the appraiser will actually be told, verbatim -- no hidden prompt.
+            "prompt_preview": watchlist_prompt(w),
+            "hunt_queries": lens_queries(w),
+            "mystery": {
+                "enabled": s.mystery and s.vision, "threshold": s.mystery_threshold,
+                "per_run": s.mystery_per_run, "max_images": s.mystery_max_images,
+                "queries": MYSTERY_QUERIES[:s.mystery_hunt_queries],
+            },
+        }
+
+    @app.post("/api/watchlist")
+    def save_watchlist(body: dict[str, Any]):
+        """Save toggles, custom instructions, or a hand-written lens. A partial body is fine: anything
+        absent keeps its current value, so the UI can send just the one switch that changed."""
+        cur = sc.watchlist(force=True)
+        nxt = {**cur, "lenses": [dict(l) for l in cur["lenses"]]}
+
+        if isinstance(body.get("lenses"), list):
+            want = {l["id"]: l.get("enabled") is not False for l in body["lenses"] if l.get("id")}
+            for l in nxt["lenses"]:
+                if l["id"] in want:
+                    l["enabled"] = want[l["id"]]
+        if isinstance(body.get("custom_instructions"), str):
+            nxt["custom_instructions"] = body["custom_instructions"][:4000]
+
+        add = body.get("add") or {}
+        if add.get("name") or add.get("prompt"):
+            name = (add.get("name") or "Custom lens")[:80]
+            lens_id = add.get("id") or (_slug(name) or f"lens-{int(time.time())}")
+            lens = {"id": lens_id, "name": name, "hint": (add.get("hint") or "")[:140], "builtin": False,
+                    "keywords": [str(k) for k in (add.get("keywords") or [])][:30],
+                    "queries": [str(q) for q in (add.get("queries") or [])][:8],
+                    "prompt": (add.get("prompt") or "")[:2000],
+                    "enabled": add.get("enabled") is not False}
+            if not lens["prompt"].strip():
+                raise HTTPException(400, "a lens needs a prompt: say what to look for")
+            at = next((i for i, l in enumerate(nxt["lenses"]) if l["id"] == lens_id), None)
+            if at is None:
+                nxt["lenses"].append(lens)
+            else:
+                nxt["lenses"][at] = {**nxt["lenses"][at], **lens}
+
+        if body.get("remove"):
+            target = next((l for l in nxt["lenses"] if l["id"] == body["remove"]), None)
+            # A built-in can be switched off but never deleted: it is code, and it would reappear on
+            # the next read.
+            if target and target.get("builtin"):
+                target["enabled"] = False
+            else:
+                nxt["lenses"] = [l for l in nxt["lenses"] if l["id"] != body["remove"]]
+
+        saved = sc.save_watchlist(nxt)
+        return {"watchlist": saved, "prompt_preview": watchlist_prompt(saved)}
 
     @app.post("/api/playbook/research")
     def research(body: dict[str, Any] | None = None):

@@ -7,6 +7,8 @@ import time
 from typing import Any, Callable
 
 from .calibration import build_report, liquidity_adjustment_for
+from .lenses import lens_queries, merge_watchlist
+from .mystery import MYSTERY_QUERIES, mystery_boost, read_mystery
 from .playbook import (apply_outcome_stats, hunt_order, match_theses, normalize_thesis, refresh_all,
                        theses_from_outcomes)
 from .seeds import SEED_THESES
@@ -48,6 +50,7 @@ class Scanner:
                                                       calibration_fetcher=self.calibration)
         self._calibration: tuple[float, dict[str, Any]] | None = None
         self._theses: tuple[float, list[dict[str, Any]]] | None = None
+        self._watchlist: tuple[float, dict[str, Any]] | None = None
         self.status = ScanStatus()
 
     # ------------------------------------------------------------------ pull
@@ -100,10 +103,11 @@ class Scanner:
             # Hunt: the broad pull sees whatever is closing; these searches go looking for the niches
             # we already know pay. Cheap (no valuation), and the results join the same pool.
             theses = self.theses() if hunt else []
-            if theses:
+            watchlist = self.watchlist()
+            if hunt:
                 with st.lock:
                     st.message = "hunting the playbook"
-                found = self.hunt(theses=theses)
+                found = self.hunt(theses=theses, watchlist=watchlist)
                 seen = {l["id"] for l in lots}
                 lots = lots + [l for l in found["lots"] if l["id"] not in seen]
                 log.info("hunted %d theses, %d extra lots", len(found["hunted"]), len(lots) - len(seen))
@@ -123,14 +127,25 @@ class Scanner:
                         st.lots_valued = done
                         st.message = f"valued {done}/{total}: {lot.get('title', '')[:60]}"
 
-                # A lot matching a researched niche outranks one that merely contains a hot word.
-                boost = None
-                if theses:
-                    def boost(lot: dict[str, Any]) -> float:
-                        m = match_theses(lot, theses)
-                        return 2 + 2 * m[0]["strength"] if m else 0.0
+                # A lot matching a researched niche outranks one that merely contains a hot word; a
+                # lot matching one of the buyer's own lenses, or that nobody has catalogued, outranks
+                # both.
+                def boost(lot: dict[str, Any]) -> float:
+                    m = match_theses(lot, theses) if theses else []
+                    return ((2 + 2 * m[0]["strength"] if m else 0.0)
+                            + mystery_boost(lot, self.settings)
+                            + self.pipeline.lens_priority(lot))
 
-                self.pipeline.value_many(todo, max_lots=max_value, progress=progress, boost=boost)
+                # Reserve part of the budget outright. Mystery lots carry no hot words by definition,
+                # so on a shared ranking a busy run of brand-name lots would crowd them out of every
+                # scan.
+                reserve = None
+                if self.settings.mystery and self.settings.vision and self.settings.mystery_per_run > 0:
+                    reserve = (lambda l: read_mystery(l, self.settings)["is_mystery"],
+                               min(self.settings.mystery_per_run, max_value or self.settings.mystery_per_run))
+
+                self.pipeline.value_many(todo, max_lots=max_value, progress=progress, boost=boost,
+                                         reserve=reserve)
             settled = self.settle_closed_lots()
             if settled:
                 log.info("settled %d closed lots into the report card", settled)
@@ -224,6 +239,40 @@ class Scanner:
         self.store.save_theses(rows)
         self._theses = None
 
+    # ---------------------------------------------------------------- watchlist
+    def watchlist(self, force: bool = False) -> dict[str, Any]:
+        """The buyer's lenses and standing instructions.
+
+        Merged over the built-ins on every read, so shipping a new built-in lens (or fixing the wording
+        of an existing prompt) reaches everyone without anyone re-saving anything; only the on/off
+        switches and custom text are ever read back from storage.
+        """
+        now = time.time()
+        if not force and self._watchlist and now - self._watchlist[0] < 60:
+            return self._watchlist[1]
+        try:
+            stored = self.store.get_setting("watchlist")
+        except Exception as e:
+            log.warning("watchlist read failed: %s", e)
+            stored = None
+        row = merge_watchlist(stored)
+        self._watchlist = (now, row)
+        self.pipeline.set_watchlist(row)
+        return row
+
+    def save_watchlist(self, w: dict[str, Any]) -> dict[str, Any]:
+        row = merge_watchlist({**w, "updated_at": time.time()})
+        # Only the user's decisions are persisted; built-in prompt text is code, re-merged on read.
+        self.store.put_setting("watchlist", {
+            "lenses": [({"id": l["id"], "enabled": l["enabled"]} if l.get("builtin") else l)
+                       for l in row["lenses"]],
+            "custom_instructions": row["custom_instructions"],
+            "updated_at": row["updated_at"],
+        })
+        self._watchlist = (time.time(), row)
+        self.pipeline.set_watchlist(row)
+        return row
+
     def playbook_review(self) -> dict[str, Any]:
         """Roll recorded outcomes onto each thesis, and propose new ones from what you have flipped."""
         rows = self.theses()
@@ -277,29 +326,53 @@ class Scanner:
         return {"added": added, "updated": updated, "error": error}
 
     def hunt(self, *, theses: list[dict[str, Any]] | None = None, max_theses: int | None = None,
-             deadline: float | None = None) -> dict[str, Any]:
+             deadline: float | None = None, watchlist: dict[str, Any] | None = None) -> dict[str, Any]:
         """Run the playbook's own search terms against HiBid rather than waiting for a match to drift
         past in a broad scan. Rotates least-recently-hunted first."""
         rows = theses if theses is not None else self.theses()
         picks = hunt_order(rows, self.settings.hunt_per_run if max_theses is None else max_theses)
         kept: dict[int, dict[str, Any]] = {}
         hunted: list[str] = []
+
+        def run(label: str, q: str) -> None:
+            try:
+                for lot in self.pull(status="OPEN", hours=None, search_text=q,
+                                     max_pages=self.settings.hunt_pages):
+                    kept[lot["id"]] = lot
+            except Exception as e:
+                log.warning("hunt failed for %s %r: %s", label, q, e)
+
         for t in picks:
             if deadline and time.time() > deadline:
                 break
             for q in (t.get("queries") or [])[:2]:
                 if deadline and time.time() > deadline:
                     break
-                try:
-                    for lot in self.pull(status="OPEN", hours=None, search_text=q,
-                                         max_pages=self.settings.hunt_pages):
-                        kept[lot["id"]] = lot
-                except Exception as e:
-                    log.warning("hunt failed for %s %r: %s", t["id"], q, e)
+                run(t["id"], q)
             hunted.append(t["id"])
             t["last_hunted_at"] = time.time()
         if hunted:
             self.save_theses(picks)
+
+        # Lens searches: the user's own patterns, hunted by name. A lens also fires on photographs
+        # later, which is where most of its value is, but a keyword search is free and catches the
+        # easy half.
+        if self.settings.lenses:
+            w = watchlist if watchlist is not None else self.watchlist()
+            for q in lens_queries(w)[:4]:
+                if deadline and time.time() > deadline:
+                    break
+                run("lens", q)
+
+        # Mystery sweep: rotate through the uncatalogued-lot search terms so every run pulls a
+        # different slice. These searches find lots no thesis would ever match -- that is the point.
+        if self.settings.mystery and self.settings.mystery_hunt_queries > 0:
+            n = min(self.settings.mystery_hunt_queries, len(MYSTERY_QUERIES))
+            start = int(time.time() // 3600) % len(MYSTERY_QUERIES)
+            for i in range(n):
+                if deadline and time.time() > deadline:
+                    break
+                run("mystery", MYSTERY_QUERIES[(start + i) % len(MYSTERY_QUERIES)])
         return {"hunted": hunted, "lots": list(kept.values())}
 
     def score_options(self, category: str, liquidity_weight: float | None = None,

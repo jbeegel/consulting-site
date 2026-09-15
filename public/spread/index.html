@@ -151,6 +151,17 @@ table.opps td.title .s{font-size:11px;color:var(--ink-3)}
 .conf{display:inline-block;width:46px;height:6px;background:var(--bg-3);border-radius:3px;vertical-align:middle;overflow:hidden}
 .conf i{display:block;height:100%;background:var(--accent)}
 .flag{font-size:10px;border:1px solid var(--warn);color:var(--warn);border-radius:3px;padding:0 4px;margin-left:4px;vertical-align:middle}
+.myst{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;border-radius:3px;padding:1px 5px;margin-left:4px;background:#2d2a4a;color:#e7e3ff;border:1px solid #453f6d;white-space:nowrap;font-family:var(--mono)}
+.lens{display:inline-block;font-size:10px;border-radius:3px;padding:0 5px;margin-left:4px;border:1px dashed var(--line-2);color:var(--ink-3);white-space:nowrap}
+.wl{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px}
+.wl label{display:flex;align-items:center;gap:5px;font-size:12px;border:1px solid var(--line);border-radius:14px;padding:3px 10px 3px 7px;cursor:pointer;background:var(--bg-2)}
+.wl label.on{border-color:var(--accent);background:var(--accent-soft,#eef2ff)}
+.wl label input{margin:0}
+.wl label .h{color:var(--ink-3);font-size:11px}
+.wlnote{width:100%;min-height:70px;font:13px/1.5 inherit;padding:8px 10px;border:1px solid var(--line);border-radius:6px;background:var(--bg-2);color:var(--ink);resize:vertical}
+.mystrow{font-size:12px;line-height:1.6;margin:4px 0}
+.mystrow b{font-family:var(--mono)}
+.rs{display:inline-block;font-size:10px;border-radius:3px;padding:0 5px;margin-left:6px;border:1px solid var(--line-2);color:var(--ink-3);text-transform:uppercase;letter-spacing:.03em;white-space:nowrap;vertical-align:middle}
 .thesis{display:inline-block;font-size:10px;font-weight:600;letter-spacing:.02em;border-radius:3px;padding:1px 5px;background:var(--accent-soft,#eef2ff);color:var(--accent,#3b4ea0);border:1px solid var(--line-2);margin-left:4px;white-space:nowrap}
 .bidcap{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--good,#1a7f4b)}
 .pb h4{margin:14px 0 6px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2)}
@@ -343,6 +354,11 @@ table.cal tr.total td{border-top:2px solid var(--line-2);font-weight:600}
       </div>
     </div>
 
+    <div class="card" id="wlCard" hidden>
+      <div class="head" id="wlHead"><h2>What to look for</h2><span class="sum" id="wlSum"></span><span class="muted" style="font-size:11px" id="wlToggle">hide</span></div>
+      <div class="body" id="wlBody"></div>
+    </div>
+
     <div class="card" id="pbCard" hidden>
       <div class="head" id="pbHead"><h2>Playbook</h2><span class="sum" id="pbSum"></span><span class="muted" style="font-size:11px" id="pbToggle">hide</span></div>
       <div class="body pb" id="pbBody"></div>
@@ -373,7 +389,7 @@ table.cal tr.total td{border-top:2px solid var(--line-2);font-weight:600}
 (function(){
 const $=s=>document.querySelector(s);
 const API=window.__ARB_API__||'/api';
-const state={opps:[],cats:[],config:{},status:{},cal:null,intel:null,playbook:null,local:null,filters:{cats:new Set(),buckets:new Set(),radar:new Set(),minScore:0,q:'',noBids:false,sweetOnly:false,hideUnvalued:true},params:loadParams(),sort:{key:'score',dir:-1},embedded:false,pollTimer:null};
+const state={opps:[],cats:[],config:{},status:{},cal:null,intel:null,playbook:null,watchlist:null,local:null,filters:{cats:new Set(),buckets:new Set(),radar:new Set(),minScore:0,q:'',noBids:false,sweetOnly:false,hideUnvalued:true},params:loadParams(),sort:{key:'score',dir:-1},embedded:false,pollTimer:null};
 // The user's own risk appetite. Liquidity weight changes the score itself so it is applied server-side;
 // grade / days / ranking are pure views of data already in hand, so they apply instantly on the client.
 function loadParams(){const d={liqW:0.7,rankBy:'score',minGrade:'',maxDays:null};try{return Object.assign(d,JSON.parse(localStorage.getItem('spread_params')||'{}'))}catch(e){return d}}
@@ -410,8 +426,9 @@ async function load(){
     try{state.cal=await api('/calibration')}catch(e){state.cal=null}
     try{state.intel=await api('/intel'+w)}catch(e){state.intel=null}
     try{state.playbook=await api('/playbook')}catch(e){state.playbook=null}
+    try{state.watchlist=await api('/watchlist')}catch(e){state.watchlist=null}
   }catch(e){
-    if(window.__ARB_DATA__){const d=window.__ARB_DATA__;state.config=d.config;state.opps=d.opportunities;state.cats=d.categories;state.status=d.status||{};state.cal=d.calibration||null;state.intel=d.intel||null;state.playbook=d.playbook||null;state.embedded=true;
+    if(window.__ARB_DATA__){const d=window.__ARB_DATA__;state.config=d.config;state.opps=d.opportunities;state.cats=d.categories;state.status=d.status||{};state.cal=d.calibration||null;state.intel=d.intel||null;state.playbook=d.playbook||null;state.watchlist=d.watchlist||null;state.embedded=true;
       $('#banner').hidden=false;$('#banner').innerHTML='<b>Demo snapshot.</b> This page is a static export with example lots (synthetic data). Run <code>python -m arb serve</code> locally to scan hibid.com live, refresh bids, and re-value lots.';
       ['#btnScan','#btnRefresh'].forEach(s=>$(s).disabled=true);
     }else{$('#banner').hidden=false;$('#banner').textContent='Could not reach the API: '+e.message;}
@@ -425,7 +442,7 @@ async function health(){
     el.hidden=false;el.innerHTML=`<b>Setup</b> `+h.checks.map(c=>`<span class="chk ${c.ok?'':c.level==='required'?'bad':'warn'}" title="${esc(c.detail)}"><i></i>${esc(c.name)}${c.ok?'':c.fix?` <span class="fix">→ ${esc(c.fix)}</span>`:''}</span>`).join('')+`<button class="close" title="hide" onclick="this.parentNode.hidden=true">×</button>`;
   }catch(e){}
 }
-function renderAll(){renderStatus();renderKpis();renderChips();renderHeatmap();renderScatter();renderTable();renderPlaybook();renderIntel();renderCalibration()}
+function renderAll(){renderStatus();renderKpis();renderChips();renderHeatmap();renderScatter();renderTable();renderWatchlist();renderPlaybook();renderIntel();renderCalibration()}
 
 // ---------------------------------------------------------------- filters
 function visible(){
@@ -536,7 +553,7 @@ function renderTable(){
     return `<tr class="row" data-id="${l.id}">
       <td>${s.valued?`<span class="pill ${s.heat}" title="value ${Math.round(s.value_score||0)} × time ${Math.round((s.price_reliability||0)*100)}%${s.liquidity_factor!=null&&s.liquidity_factor<1?` × liquidity ${Math.round(s.liquidity_factor*100)}% (was ${Math.round(s.score_before_liquidity||0)})`:''}">${Math.round(s.score)}</span>`:'<span class="pill unvalued">n/a</span>'}</td>
       <td>${s.valued?`<span class="radar ${radarOf(o)}">${radarOf(o)}</span>`:''}</td>
-      <td class="title"><div class="t">${esc(l.title)}${v.authenticity_risk?'<span class="flag" title="Authenticity risk flagged">auth</span>':''}${s.sweet_spot?'<span class="sweet" title="Penny lot: tiny landed cost, real resale">$→$$</span>':''}${o.grading&&o.grading.upside>0&&o.grading.recommendation!=='sell raw'?`<span class="grade" title="Grading: ${esc(o.grading.recommendation)}">grade +${fmt(o.grading.upside)}</span>`:''}${thesisChips(o)}</div><div class="s">${esc(v.identified_item&&v.identified_item!==l.title?v.identified_item:'')}${l.bid_count===0?' · no bids':''}${l.estimate?' · est. '+esc(l.estimate):''}</div></td>
+      <td class="title"><div class="t">${esc(l.title)}${v.authenticity_risk?'<span class="flag" title="Authenticity risk flagged">auth</span>':''}${s.sweet_spot?'<span class="sweet" title="Penny lot: tiny landed cost, real resale">$→$$</span>':''}${o.grading&&o.grading.upside>0&&o.grading.recommendation!=='sell raw'?`<span class="grade" title="Grading: ${esc(o.grading.recommendation)}">grade +${fmt(o.grading.upside)}</span>`:''}${thesisChips(o)}${mysteryChip(o)}${lensChips(o)}</div><div class="s">${esc(v.identified_item&&v.identified_item!==l.title?v.identified_item:'')}${l.bid_count===0?' · no bids':''}${l.estimate?' · est. '+esc(l.estimate):''}</div></td>
       <td>${esc(l.category)}</td>
       <td class="r num">${l.bid_count}</td>
       <td class="r num" title="${o.max_bid?`Playbook ceiling: bid no more than $${o.max_bid.toFixed(2)}`:''}">${fmt(s.next_bid)}${o.max_bid?`<span class="eta">max $${Math.round(o.max_bid)}</span>`:''}</td>
@@ -585,12 +602,24 @@ function renderDossier(o,loading){
     </div></div>`;
   if(o.why)h+=`<div class="why"><b>Why the upside.</b> ${esc(o.why)}</div>`;
   h+=`<div class="actions"><a class="btn primary" href="${esc(l.url)}" target="_blank" rel="noopener">Open on HiBid ↗</a>${l.auction_url?`<a class="btn" href="${esc(l.auction_url)}" target="_blank" rel="noopener">Auction catalog</a>`:''}<a class="btn" href="https://www.ebay.com/sch/i.html?_nkw=${encodeURIComponent(v?.search_query||l.title)}&LH_Sold=1&LH_Complete=1&_sop=13" target="_blank" rel="noopener">eBay sold ↗</a>${state.embedded?'':`<button class="btn" id="dRefresh">Refresh live</button><button class="btn" id="dRevalue">Re-value</button>`}</div>`;
+  const my=o.mystery;
+  if(my&&my.read){
+    const r=my.read,b=my.best_item;
+    h+=`<h3>Uncatalogued lot <span class="method">· blindness ${r.score.toFixed(2)} · ${r.photos} photo${r.photos===1?'':'s'} against ${r.informative_words} descriptive word${r.informative_words===1?'':'s'}</span></h3>`;
+    h+=`<div class="why"><b>${b?'What the photos show.':'Why this is worth a look.'}</b> ${esc(mysteryVerdict(o))}</div>`;
+    h+=`<div class="specs" style="margin-top:6px">${r.signals.map(x=>`<span>${esc(x)}</span>`).join('')}</div>`;
+    if(b){
+      const mult=my.best_item_multiple;
+      h+=`<div class="mystrow">The lot is the box; <b>${esc(b.name)}</b>${b.maker_or_mark&&b.maker_or_mark!=='unmarked'?` (${esc(b.maker_or_mark)})`:''} is the trade — worth about <b>${fmt(Math.round((b.est_low+b.est_high)/2))}</b> — <b>${fmt(my.best_item_net)}</b> after fees${mult?`, which is <b>${mult.toFixed(1)}×</b> the whole lot's landed cost on its own`:''}.</div>`;
+      if(my.concentration!=null)h+=`<div class="mystrow muted">That single piece is ${Math.round(my.concentration*100)}% of everything identified (${fmt(my.identified_value)} across ${my.items_identified} items). ${my.concentration>=0.6?'The rest is packing material.':'The value is spread across several pieces, so budget a listing for each.'}</div>`;
+    }
+  }
   if(v){
     h+=`<h3>Valuation <span class="method">· ${esc(v.method)}${v.model_used?' · '+esc(v.model_used):''} · confidence ${Math.round((v.confidence||0)*100)}%${v.images_used?' · '+v.images_used+' photos read':''}${v.cache_hit?' · cached':''}</span></h3>`;
     h+=`<div class="grid2"><div class="kv"><span>Identified as</span><span style="font-family:var(--sans);text-align:right">${esc(v.identified_item||'—')}</span></div><div class="kv"><span>Demand</span><span>${esc(v.demand||'—')}${v.days_to_sell?` · ~${v.days_to_sell}d to sell`:''}</span></div><div class="kv"><span>Best channel</span><span style="font-family:var(--sans)">${esc(v.best_channel||'—')}</span></div><div class="kv"><span>Condition assumed</span><span style="font-family:var(--sans);text-align:right">${esc(v.condition_assumption||'—')}</span></div></div>`;
     if(v.rationale)h+=`<p style="margin:10px 0 0;line-height:1.5">${esc(v.rationale)}</p>`;
     if(v.items&&v.items.length){const so=(v.standout_item||'').toLowerCase().slice(0,30);
-      h+=`<h3>What's in the lot <span class="method">· ${v.items.length} item${v.items.length>1?'s':''} identified${v.images_used?' from '+v.images_used+' photo'+(v.images_used>1?'s':''):''}</span></h3><table class="items">${v.items.map(it=>{const star=so&&it.name.toLowerCase().slice(0,30)===so||(v.standout_item&&v.standout_item.toLowerCase().includes(it.name.toLowerCase().slice(0,24)));return `<tr class="${star?'star':''}"><td>${star?'★ ':''}${esc(it.name)}<span class="mk">${esc(it.maker_or_mark||'')}${it.era?' · '+esc(it.era):''}${it.note?' · '+esc(it.note):''}</span></td><td class="r">${fmt(it.est_low)}–${fmt(it.est_high)}</td><td class="r muted">${Math.round((it.confidence||0)*100)}%</td></tr>`}).join('')}</table>`;
+      h+=`<h3>What's in the lot <span class="method">· ${v.items.length} item${v.items.length>1?'s':''} identified${v.images_used?' from '+v.images_used+' photo'+(v.images_used>1?'s':''):''}</span></h3><table class="items">${v.items.map(it=>{const star=so&&it.name.toLowerCase().slice(0,30)===so||(v.standout_item&&v.standout_item.toLowerCase().includes(it.name.toLowerCase().slice(0,24)));return `<tr class="${star?'star':''}"><td>${star?'★ ':''}${esc(it.name)}${it.resell?`<span class="rs" title="How to move this piece">${esc(it.resell)}</span>`:''}<span class="mk">${esc(it.maker_or_mark||'')}${it.era?' · '+esc(it.era):''}${it.condition?' · '+esc(it.condition):''}${it.note?' · '+esc(it.note):''}</span></td><td class="r">${fmt(it.est_low)}–${fmt(it.est_high)}</td><td class="r muted">${Math.round((it.confidence||0)*100)}%</td></tr>`}).join('')}</table>`;
       if(v.standout_item)h+=`<p class="muted" style="font-size:12px;margin:6px 0 0">Standout: ${esc(v.standout_item)}</p>`;}
     if(v.confidence_reason)h+=`<p class="muted" style="margin:6px 0 0;font-size:12px">${esc(v.confidence_reason)}</p>`;
     if(v.calibration)h+=`<div class="calstamp">Adjusted <b>x${v.calibration.bias.toFixed(2)}</b> by the report card, from ${v.calibration.n} closed lots (${esc(v.calibration.basis==='sales'?'your recorded sales':'auction results')}).</div>`;
@@ -696,6 +725,65 @@ function thesisChips(o,limit=2){
   const t=o.theses||[];if(!t.length)return '';
   return t.slice(0,limit).map(m=>`<span class="thesis" title="${esc(m.name)} — matched on ${esc(m.matched.join(', '))}${m.max_bid?`; pay up to $${Math.round(m.max_bid)}`:''}">${esc(m.name.length>22?m.name.slice(0,21)+'…':m.name)}</span>`).join('');
 }
+function mysteryVerdict(o){
+  const m=o.mystery,b=m.best_item;
+  if(!m.items_identified)return `${m.read.reason} Nothing identified yet — this lot has not been through a photo read.`;
+  if(!b||m.best_item_net<=0)return `Photos show ${m.items_identified} distinct item(s), none of them worth listing individually.`;
+  const mid=Math.round((b.est_low+b.est_high)/2),mult=m.best_item_multiple;
+  const lead=b.name+(b.maker_or_mark&&b.maker_or_mark!=='unmarked'?` (${b.maker_or_mark})`:'');
+  const tail=(m.concentration!=null&&m.concentration>=0.6)
+    ? ' Most of this lot\'s value is that single piece; the rest is packing material.'
+    : ` The other pieces add roughly $${Math.round(m.identified_value-mid)}.`;
+  return `${m.items_identified} items identified; the one that matters is ${lead}, worth about $${mid}`
+    +(mult?` — ${mult.toFixed(1)}x the whole lot's landed cost on its own`:'')+'.'+tail;
+}
+function mysteryChip(o){
+  const m=o.mystery;if(!m||!m.read)return '';
+  // The chip leads with the multiple when we have actually read the photos, because that is the number
+  // that justifies buying a box of junk. Before the read, it just says the price is not informed yet.
+  const mult=m.best_item_multiple;
+  const label=mult?`misc · best ${mult.toFixed(1)}×`:'misc · unread';
+  const why=mult?`${m.items_identified} items identified; best single piece nets $${Math.round(m.best_item_net)} against a $${(o.score.landed_cost||0).toFixed(2)} landed cost`
+    :`${m.read.reason} (blindness ${m.read.score.toFixed(2)})`;
+  return `<span class="myst" title="${esc(why)}">${esc(label)}</span>`;
+}
+function lensChips(o,limit=2){
+  const l=o.lenses||[];if(!l.length)return '';
+  return l.slice(0,limit).map(x=>`<span class="lens" title="Matches your lens: ${esc(x.name)}">${esc(x.name.length>20?x.name.slice(0,19)+'…':x.name)}</span>`).join('');
+}
+function renderWatchlist(){
+  const w=state.watchlist,el=$('#wlCard');
+  if(!w||!w.watchlist){el.hidden=true;return}
+  el.hidden=false;
+  const ls=w.watchlist.lenses||[],on=ls.filter(l=>l.enabled);
+  $('#wlSum').textContent=`${on.length} of ${ls.length} on`+(w.watchlist.custom_instructions?' · plus your own notes':'');
+
+  let h=`<p class="muted" style="font-size:12px;margin:0 0 10px;line-height:1.5">These are applied to <b>every</b> lot, whether or not the listing mentions them. That is the point: "Made in Occupied Japan" is stamped on the bottom of the figurine, no auctioneer types it, and no keyword search finds it — the only way to catch it is to tell the appraiser to turn the thing over and read the base.</p>`;
+  h+=`<div class="wl">`+ls.map(l=>`<label class="${l.enabled?'on':''}" title="${esc(l.prompt.slice(0,220))}…"><input type="checkbox" data-lens="${esc(l.id)}" ${l.enabled?'checked':''}>${esc(l.name)}<span class="h">${esc(l.hint||'')}</span></label>`).join('')+`</div>`;
+
+  h+=`<h4>Your own instructions</h4><p class="muted" style="font-size:12px;margin:0 0 6px;line-height:1.5">Anything you have noticed and the toggles above do not cover. Written in your words and passed to the appraiser verbatim, on every lot — so say what to <i>look at</i>, not just what to like.</p>`;
+  h+=`<textarea class="wlnote" id="wlText" placeholder="e.g. Items stamped only &quot;Japan&quot; are ordinary, but check every base for &quot;Occupied Japan&quot; — those sell. Bank giveaways (letter openers, thermometers, still banks) do well, especially with a small town named on them.">${esc(w.watchlist.custom_instructions||'')}</textarea>`;
+  h+=`<div class="actions" style="margin-top:8px"><button class="btn primary" id="wlSave">Save</button><button class="btn" id="wlShow">Show the exact brief</button><span class="muted" id="wlMsg" style="font-size:12px"></span></div>`;
+  h+=`<pre id="wlPrompt" hidden style="white-space:pre-wrap;font-size:11px;line-height:1.5;background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:10px;margin-top:8px;max-height:280px;overflow:auto"></pre>`;
+
+  const my=w.mystery||{};
+  if(my.enabled)h+=`<h4>Misc lots</h4><p class="muted" style="font-size:12px;margin:0;line-height:1.5">Every scan reserves <b>${my.per_run}</b> appraisals for lots nobody catalogued, sweeps HiBid for <code>${(my.queries||[]).map(esc).join('</code>, <code>')}</code>, and sends up to <b>${my.max_images}</b> photos instead of the usual four. A lot is treated as uncatalogued at a blindness score of ${my.threshold} or more — many photos, few words, no brand named. Those lots carry a <span class="myst">misc</span> chip in the table.</p>`;
+
+  $('#wlBody').innerHTML=h;
+  if(state.embedded){$('#wlBody').querySelectorAll('input,textarea,button').forEach(x=>x.disabled=true);return}
+
+  const msg=$('#wlMsg');
+  const save=async(body,note)=>{msg.textContent='saving…';
+    try{const r=await api('/watchlist',{method:'POST',body:JSON.stringify(body)});state.watchlist={...state.watchlist,...r};msg.textContent=note}
+    catch(e){msg.textContent='failed: '+e.message}};
+  $('#wlBody').querySelectorAll('input[data-lens]').forEach(cb=>cb.onchange=async()=>{
+    await save({lenses:[{id:cb.dataset.lens,enabled:cb.checked}]},cb.checked?'on':'off');
+    cb.closest('label').classList.toggle('on',cb.checked);
+  });
+  $('#wlSave').onclick=()=>save({custom_instructions:$('#wlText').value},'saved — applies from the next valuation');
+  $('#wlShow').onclick=()=>{const pre=$('#wlPrompt');pre.hidden=!pre.hidden;
+    pre.textContent=(state.watchlist.prompt_preview||'').trim()||'Nothing: no lenses on and no instructions.'};
+}
 function renderPlaybook(){
   const pb=state.playbook,el=$('#pbCard');
   if(!pb||!pb.theses||!pb.theses.length){el.hidden=true;return}
@@ -746,6 +834,7 @@ function renderPlaybook(){
     }catch(e){out.textContent='failed: '+e.message}
     sc.disabled=false};
 }
+$('#wlHead').onclick=()=>{const el=$('#wlCard');el.classList.toggle('collapsed');$('#wlToggle').textContent=el.classList.contains('collapsed')?'show':'hide'};
 $('#pbHead').onclick=()=>{const el=$('#pbCard');el.classList.toggle('collapsed');$('#pbToggle').textContent=el.classList.contains('collapsed')?'show':'hide'};
 
 // ---------------------------------------------------------------- market intel

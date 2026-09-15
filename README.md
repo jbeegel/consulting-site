@@ -44,6 +44,8 @@ Keyless deployments degrade gracefully to deterministic demo mode.
 | `SPREAD_CALIBRATION` / `SPREAD_CALIBRATION_MIN_CLOSED` / `SPREAD_CALIBRATION_MIN_SALES` / `SPREAD_CALIBRATION_MIN_BIAS` / `SPREAD_CALIBRATION_MAX_BIAS` / `SPREAD_SETTLE_PER_RUN` | The feedback loop (default on): sample floors before an adjustment applies (8 closed lots, 5 sales), the clamp on it (0.5 to 1.5), and how many closed lots each run settles (40) |
 | `SPREAD_PLAYBOOK` / `SPREAD_TARGET_MONTHLY_ROI` / `SPREAD_MIN_BUY_MULTIPLE` / `SPREAD_HUNT_PER_RUN` / `SPREAD_HUNT_PAGES` | The playbook (default on): the return on capital a buy must clear (1.0 = 100%/month), the multiple of net you will never pay within (3), and how many niches each scan hunts (4, two pages each) |
 | `SPREAD_DISCOVER_COUNT` / `SPREAD_RESEARCH_TTL_DAYS` / `SPREAD_THESIS_MIN_SALES` / `SPREAD_THESIS_MIN_ROI` / `SPREAD_THESIS_MAX_FROM_SALES` | How many niches a research pass looks for (8), how stale research may get before a refresh (30 days), and the bar your own sales must clear to propose a niche (3 sales at 150% ROI, 8 proposals max) |
+| `SPREAD_MYSTERY` / `SPREAD_MYSTERY_THRESHOLD` / `SPREAD_MYSTERY_WEIGHT` / `SPREAD_MYSTERY_PER_RUN` / `SPREAD_MYSTERY_MAX_IMAGES` / `SPREAD_MYSTERY_HUNT_QUERIES` | Misc lots (default on): how blind a listing must read to count (0.45), the triage weight it earns (3), appraisals reserved for them each run (4), photos sent (8 instead of 4), and mystery search terms swept per scan (3) |
+| `SPREAD_LENSES` / `SPREAD_LENS_WEIGHT` | Lenses and your standing instructions (default on) and the triage weight a keyword hit earns (1) |
 | `SPREAD_LOCAL` / `SPREAD_CRAIGSLIST_SITE` / `SPREAD_LOCAL_TRIP_COST` / `SPREAD_LOCAL_COST_PER_MILE` | Local buying: your craigslist subdomain (e.g. `detroit`), and what a collection trip costs ($4 flat plus $0.20/mile). OfferUp and Facebook are paste-only — see above |
 | `SPREAD_LIQUIDITY_WEIGHT` / `SPREAD_HANDLING_DAYS` / `SPREAD_MAX_DAYS_TO_SELL` / `SPREAD_LIQUIDITY_MIN_SALES` / `SPREAD_TREND_WINDOW_DAYS` | How much liquidity discounts the score (0.7; 0 disables it), days of handling before capital comes back (3), the horizon past which "slower" stops meaning anything (365), your own sales needed before measured speed overrides the model (4), and the market-trend window (21 days) |
 | `SPREAD_GRADING` / `SPREAD_GRADING_FEE` / `SPREAD_GRADING_SHIP` / `SPREAD_GRADING_DAYS` | Trading-card grading analysis (default on), $75 per-card fee + $15 shipping (about $90 all-in), 60-day turnaround |
@@ -185,6 +187,86 @@ Titles like "vintage knic knacs" hide the value in a backstamp. With `SPREAD_VIS
 photos and sends them with the appraisal. The model reads maker's marks and labels, identifies every distinct item
 in a multi-item lot with its own range, names the standout piece, and values the lot as what a reseller would net
 splitting the good pieces out. Vague titles with photos are prioritised for valuation rather than skipped.
+
+### Misc lots: where nobody looked
+
+A lot titled "Milwaukee M18 hammer drill" is priced by a room full of people who can all read. A lot titled
+**"MISC"** with six photographs is priced by whoever can be bothered to squint at the thumbnails — and almost
+nobody can, because it is tedious, it is one of four hundred lots, and the reward for getting it right is a $3
+box. That tedium is the moat, and a model that reads every photograph carefully, every time, at four hundred
+lots an hour is on the right side of it.
+
+So every lot gets a **blindness score** (0–1), measured from the gap between what the auctioneer *showed* and
+what they *said* — photos are what they always provide, words are what they provide only when they know or care
+what the thing is:
+
+| Signal | Weight |
+|---|---|
+| A mystery word in the title (`misc`, `assorted`, `box lot`, `contents of`, `knick knacks`, `storage unit`, …) | +0.45 |
+| Two or fewer descriptive words once filler is removed | +0.20 |
+| No brand or model number named — nobody looked it up, so it is not in the price | +0.12 |
+| Many photos against few words: *photographed but not catalogued* | up to +0.25 |
+| **No photos at all** — that is a blind bid, not an opportunity | −0.30 |
+| A thin description, or an opening bid under $10 | +0.08 each |
+
+At `SPREAD_MYSTERY_THRESHOLD` (0.45) or above the lot is treated as uncatalogued, and three things change:
+
+1. **It is hunted on purpose.** Every scan sweeps HiBid for `misc`, `box lot`, `shelf lot`, `junk drawer` and the
+   rest, rotating through the list so successive runs cover different ground. These lots match no thesis and
+   contain no hot words, so nothing else would ever surface them.
+2. **The budget is reserved, not shared.** `SPREAD_MYSTERY_PER_RUN` (4) appraisals are held for blind lots before
+   ranking begins. Without that, a busy run of brand-name lots crowds them out of every single scan — they lose
+   on triage by construction, which is exactly why they are cheap.
+3. **The appraisal is different.** It gets `SPREAD_MYSTERY_MAX_IMAGES` (8) photos instead of four, five web
+   searches instead of three, and a brief that says: inventory every object photo by photo including what is
+   behind the front row; quote every mark you can actually read and say so when a base was never photographed;
+   give each item its own condition and a resale verdict (*list individually / bundle / keep for parts /
+   discard*); and find the one thing that matters.
+
+That last point is the economics. These lots are almost never uniformly valuable — the normal shape is one $40
+piece in a $3 box of $1 objects — so the dossier headlines the **single best item** and the multiple *it alone*
+makes on the whole lot's landed cost, plus how concentrated the value is. Twenty $2 objects are a worse trade
+than one $40 object at the same total, because each one costs you a listing, a photograph and a box. And when
+there is nothing there, it says so: most misc lots really are junk, and calling junk junk is what makes the
+occasional real call worth trusting.
+
+A high blindness score is **not** a prediction of value. It is a prediction that the price does not yet reflect
+the contents, which is a different and more useful thing.
+
+### Lenses: the things you have noticed
+
+Every reseller accumulates private pattern knowledge no general appraiser has — *"anything marked Occupied Japan
+moves"*, *"bank giveaways always sell"*, *"the sign guys pay silly money"*. It is worth more than any model's
+priors because it came from your own sell-through, and until now it lived in your head and got applied only when
+you happened to remember it.
+
+A **lens** is one such observation, written once and then applied to every lot forever. It does three jobs, and
+the middle one is the one that matters:
+
+1. It raises triage priority for lots whose *words* hint at the pattern.
+2. **It tells the appraiser what to look for in the photographs.** This is where the value is, because a lens
+   fires on things the title never mentions. "Made in Occupied Japan" is stamped on the *bottom* of the figurine;
+   no auctioneer types that, and no keyword search finds it. The only way to catch it is to have told the model
+   to turn the thing over and read the base.
+3. It contributes search terms to hunt mode.
+
+Ten ship built in, and the three you named start switched on: **Occupied Japan** (the mark was legally required
+only 1945–1952, so it is a hard seven-year date stamp and a collector category in its own right), **bank &
+financial objects** (quote the institution *and its town* — the town is most of the value), and **vintage
+advertising signs** (substrate, maker's mark along the bottom edge, and a standing warning that reproductions
+dominate the category). The rest — marks & backstamps, silver & gold marks, Bakelite & celluloid, railroadiana,
+mid-century furniture labels, militaria unit marks, Native American & Southwest — are one click away in the
+**What to look for** panel.
+
+Below the toggles is a free-text box for **your own standing instructions**, passed to the appraiser verbatim on
+every lot. It is the escape hatch for a hunch that has not yet earned a toggle. The panel's *Show the exact
+brief* button prints the whole block the model is handed, word for word — there is no hidden prompt.
+
+Built-in lens text is code, not data: only your on/off switches and your own text are stored, so improving a
+lens's wording reaches you on the next deploy without you re-saving anything. `POST /api/spread/watchlist` takes
+partial bodies (`{lenses:[{id,enabled}]}`, `{custom_instructions}`, `{add:{name,prompt,keywords,queries}}`,
+`{remove}`); a built-in can be switched off but never deleted. In the Python twin: `python -m arb watch
+--on railroadiana --instructions "…" --prompt`, and `python -m arb mystery [--hunt]` to rank uncatalogued lots.
 
 ### Grading upside (trading cards)
 

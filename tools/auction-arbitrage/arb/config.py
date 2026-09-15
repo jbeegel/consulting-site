@@ -76,6 +76,18 @@ class Settings:
     discover_count: int = field(default_factory=lambda: int(_f("ARB_DISCOVER_COUNT", 8)))
     research_ttl_days: float = field(default_factory=lambda: _f("ARB_RESEARCH_TTL_DAYS", 30))
 
+    # mystery lots: where the auctioneer did not look, so nobody else has either
+    mystery: bool = field(default_factory=lambda: _b("ARB_MYSTERY", True))
+    mystery_threshold: float = field(default_factory=lambda: _f("ARB_MYSTERY_THRESHOLD", 0.45))
+    mystery_weight: float = field(default_factory=lambda: _f("ARB_MYSTERY_WEIGHT", 3.0))
+    mystery_max_images: int = field(default_factory=lambda: max(1, int(_f("ARB_MYSTERY_MAX_IMAGES", 8))))
+    mystery_per_run: int = field(default_factory=lambda: int(_f("ARB_MYSTERY_PER_RUN", 4)))
+    mystery_hunt_queries: int = field(default_factory=lambda: int(_f("ARB_MYSTERY_HUNT_QUERIES", 3)))
+
+    # lenses: the buyer's own standing instructions, applied to every lot
+    lenses: bool = field(default_factory=lambda: _b("ARB_LENSES", True))
+    lens_weight: float = field(default_factory=lambda: _f("ARB_LENS_WEIGHT", 1.0))
+
     # local, non-auction sources
     local: bool = field(default_factory=lambda: _b("ARB_LOCAL", True))
     craigslist_site: str = field(default_factory=lambda: os.environ.get("ARB_CRAIGSLIST_SITE", ""))

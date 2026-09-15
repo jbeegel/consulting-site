@@ -16,6 +16,7 @@ from typing import Any
 import httpx
 
 from .base import Comp, Valuation, title_key
+from ..mystery import read_mystery
 
 _CARD_WORDS = re.compile(
     r"\b(topps|bowman|fleer|upper deck|panini|donruss|o-?pee-?chee|leaf|prizm|select|optic|mosaic|chrome|refractor|"
@@ -220,9 +221,11 @@ ITEM_SCHEMA: dict[str, Any] = {
         "est_low": {"type": "number"},
         "est_high": {"type": "number"},
         "confidence": {"type": "number"},
+        "condition": {"type": "string", "description": "condition of THIS item as read from the photo: chips, cracks, crazing, repairs, missing parts, rust, fading; and what the photo cannot show"},
+        "resell": {"type": "string", "enum": ["list individually", "bundle", "keep for parts", "discard"], "description": "how you would move this piece"},
         "note": {"type": "string", "description": "why it is worth that; condition observations"},
     },
-    "required": ["name", "maker_or_mark", "era", "est_low", "est_high", "confidence", "note"],
+    "required": ["name", "maker_or_mark", "era", "est_low", "est_high", "confidence", "condition", "resell", "note"],
     "additionalProperties": False,
 }
 
@@ -332,7 +335,37 @@ THIS LOT IS A TRADING CARD. Do the full grading analysis (schema field `grading`
 You may use up to 5 web searches for a card."""
 
 
-def _lot_prompt(lot: dict[str, Any], comps: list[Comp]) -> str:
+MYSTERY_PROMPT = """
+THIS LOT IS UNCATALOGUED — the auctioneer photographed it and moved on. THE PHOTOS ARE THE ONLY SOURCE OF
+TRUTH; the title tells you nothing on purpose. This is the highest-value work you do, so slow down:
+
+1. INVENTORY EVERY OBJECT. Go photo by photo, left to right, front to back, including what is behind and
+   underneath the front row. List each distinct item separately in `items` — not "box of glassware" but
+   each piece you can actually see. Say "partially obscured" rather than omitting something you can half see.
+2. READ, DO NOT GUESS. Zoom mentally into every surface that carries writing: backstamps, base marks,
+   country-of-origin stamps, hallmarks, patent numbers, model plates, paper labels, embossed lettering,
+   makers' signatures, date codes. Quote what you can read verbatim in `maker_or_mark`. If a base is not
+   photographed, say so — an unphotographed base is the commonest reason a good piece sells as junk.
+3. CONDITION FROM THE PHOTO, per item: chips, cracks, hairlines, crazing, repairs, missing lids or parts,
+   dents, rust, fading, tears, mold, dry rot, corroded battery compartments. Put this in each item's
+   `condition` field, and be specific about what the photo CANNOT show (interiors, undersides, function).
+4. FIND THE ONE THING THAT MATTERS. These lots are almost never uniformly valuable: the economics are
+   normally one $40 piece in a $3 box of $1 objects. Name it in `standout_item` and make sure it appears
+   in `items` with its own estimate. If truly nothing stands out, say that plainly — most misc lots ARE junk,
+   and calling junk junk is what makes the occasional real call worth trusting.
+5. PER-ITEM RESALE VERDICT in each item's `resell` field: "list individually" for anything worth $15+ on
+   its own, "bundle" for things only worth selling as a group, "keep for parts", or "discard". Twenty
+   $2 objects are worth less than one $40 object at the same total, because each one costs you a listing,
+   a photograph and a box.
+6. The lot range (`resale_low`/`mid`/`high`) is what a reseller NETS: the good pieces sold individually
+   plus the remainder bundled, minus the pieces that go in the bin. Do not sum retail prices.
+7. Identification beats precision here. An uncertain "possibly Roseville, base not shown" with low
+   confidence is far more useful than a confident "assorted pottery" — the first is checkable, the second
+   is the listing we already had.
+You may use up to 5 web searches, and spend them on identifying the standout piece rather than on the box."""
+
+
+def _lot_prompt(lot: dict[str, Any], comps: list[Comp], guidance: str = "", mystery: bool = False) -> str:
     desc = (lot.get("description") or "").strip()
     if len(desc) > 2500:
         desc = desc[:2500] + " …"
@@ -353,11 +386,18 @@ def _lot_prompt(lot: dict[str, Any], comps: list[Comp]) -> str:
     parts.append("Search the web for sold comps if the evidence above is thin or ambiguous, then return the appraisal.")
     if is_card(lot):
         parts.append(CARD_PROMPT)
+    if mystery:
+        parts.append(MYSTERY_PROMPT)
+    # The buyer's standing instructions go LAST, so they are the freshest thing in context when the
+    # model starts looking at the photographs.
+    if guidance.strip():
+        parts.append(guidance.strip())
     return "\n".join(parts)
 
 
-def _lot_content(lot: dict[str, Any], comps: list[Comp], images: list[dict[str, Any]]) -> Any:
-    text = _lot_prompt(lot, comps)
+def _lot_content(lot: dict[str, Any], comps: list[Comp], images: list[dict[str, Any]],
+                 guidance: str = "", mystery: bool = False) -> Any:
+    text = _lot_prompt(lot, comps, guidance, mystery)
     if not images:
         return text
     return [{"type": "text", "text": f"Photos of the lot ({len(images)} attached). Read every mark and label you can."},
@@ -390,14 +430,24 @@ class ClaudeValuer:
             kwargs["tools"] = [{"type": "web_search_20260209", "name": "web_search", "max_uses": max_searches or self.max_searches}]
         return self.client.messages.create(**kwargs)
 
-    def value(self, lot: dict[str, Any], comps: list[Comp] | None = None) -> Valuation:
+    def value(self, lot: dict[str, Any], comps: list[Comp] | None = None, *, guidance: str = "",
+              mystery: bool | None = None, max_images: int | None = None) -> Valuation:
+        """``guidance`` is the buyer's watchlist block; ``mystery`` forces the uncatalogued-lot treatment
+        (more photos, a deeper search budget, item-by-item inventory) whatever the title says."""
         comps = comps or []
         v = Valuation(lot_id=lot["id"], title_key=title_key(lot.get("title", ""), lot.get("quantity")),
                       model_used=self.model)
-        images = load_images(lot_image_urls(lot), self.max_images) if self.vision else []
+        # A blind lot IS the photographs, so it gets every photo we are allowed to send, not the usual four.
+        is_mystery = read_mystery(lot)["is_mystery"] if mystery is None else mystery
+        budget = max_images if max_images is not None else (max(self.max_images, 8) if is_mystery else self.max_images)
+        images = load_images(lot_image_urls(lot), budget) if self.vision else []
         v.images_used = len(images)
-        messages: list[dict[str, Any]] = [{"role": "user", "content": _lot_content(lot, comps, images)}]
-        searches = 5 if is_card(lot) else None  # cards get a deeper pass: APR, pop report, price-by-grade
+        v.mystery_read = bool(is_mystery and images)
+        messages: list[dict[str, Any]] = [
+            {"role": "user", "content": _lot_content(lot, comps, images, guidance, v.mystery_read)}]
+        # Cards get a deeper pass (APR, pop report, price-by-grade); so do mystery lots, where the
+        # searches go on identifying the one piece that matters rather than on pricing a box.
+        searches = 5 if (is_card(lot) or v.mystery_read) else None
         try:
             resp = self._request(messages, searches)
             for _ in range(3):  # server tools can pause a long turn; resume it
