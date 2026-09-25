@@ -7,7 +7,10 @@ from pathlib import Path
 
 from .config import Settings
 from .db import Store
+from .lenses import default_watchlist, lens_queries, watchlist_prompt
+from .mystery import MYSTERY_QUERIES
 from .server import STATIC, build_opportunity
+from .calibration import build_report
 from .scoring import TIME_BUCKETS, score_lot
 
 
@@ -15,7 +18,10 @@ def export_html(settings: Settings, store: Store, out: Path, *, demo: bool = Fal
     now = time.time()
     lots = store.lots(ends_after=now - 60)
     vals = store.valuations_for([l["id"] for l in lots])
-    opps = [build_opportunity(l, vals.get(l["id"]), settings, now) for l in lots]
+    # The snapshot ships the default watchlist so the panel is visible in a static export; a real
+    # install reads the user's saved one instead.
+    watch = default_watchlist(now)
+    opps = [build_opportunity(l, vals.get(l["id"]), settings, now, watchlist=watch) for l in lots]
     opps.sort(key=lambda o: o["score"]["score"], reverse=True)
     agg: dict[str, dict] = {}
     for o in opps:
@@ -34,8 +40,16 @@ def export_html(settings: Settings, store: Store, out: Path, *, demo: bool = Fal
                    "claude_enabled": False, "ebay_sold": False, "hibid": settings.hibid_site,
                    "time_buckets": [b[0] for b in TIME_BUCKETS]},
         "opportunities": opps, "categories": cats,
+        "calibration": {**build_report(store.outcomes(), settings), "enabled": settings.calibration,
+                        "min_closed": settings.calibration_min_closed, "min_sales": settings.calibration_min_sales},
         "status": {"status": {"phase": "done", "lots_seen": len(opps), "lots_valued": len(vals)},
                    "last_scan": {"finished_at": now}, "stats": {"open_lots": len(opps), "valued_lots": len(vals)}},
+        "watchlist": {"watchlist": watch, "prompt_preview": watchlist_prompt(watch),
+                      "hunt_queries": lens_queries(watch),
+                      "mystery": {"enabled": settings.mystery and settings.vision,
+                                  "threshold": settings.mystery_threshold, "per_run": settings.mystery_per_run,
+                                  "max_images": settings.mystery_max_images,
+                                  "queries": MYSTERY_QUERIES[:settings.mystery_hunt_queries]}},
         "exported_at": now,
     }
     html = (STATIC / "index.html").read_text()

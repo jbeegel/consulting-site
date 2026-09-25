@@ -46,6 +46,14 @@ hibid.com/graphql ──LotSearch──▶ normalize ──▶ SQLite (lots)
                        GetLotStateQuery ──▶ "Refresh live" (bid, bids, seconds left)
 ```
 
+Two passes are deliberately different from the rest. A lot whose title says **misc** (or whose photo count
+badly outruns its word count) is treated as *uncatalogued*: it gets a reserved share of the valuation budget, 8
+photos instead of 4, five searches instead of three, and a brief to inventory every object, quote every mark it
+can read, and name the one piece that actually matters — because the shape of these lots is one $40 piece in a
+$3 box. And every appraisal carries your **lenses**: standing instructions about what to physically look at
+(bases, hallmarks, country marks, labels), which fire on things the title never mentions. See `arb watch` and
+`arb mystery`.
+
 **Landed cost** = next required bid × (1 + buyer's premium) × (1 + sales tax) + pickup cost.
 **Net resale** = mid estimate × (1 − selling fees) − your shipping cost.
 **Spread** = net resale − landed cost. **Multiple** = net resale ÷ landed cost.
@@ -75,6 +83,8 @@ The current bid is deliberately withheld from the model so it cannot anchor on i
 | `python -m arb refresh [--hours 6]` | Re-pull live bid / time-left for lots closing soon |
 | `python -m arb export [--out spread-hunter.html]` | Self-contained HTML snapshot you can share |
 | `python -m arb categories` | List HiBid category ids for `--category` |
+| `python -m arb watch [--on ID] [--off ID] [--add "Name=what to look for"] [--instructions "…"] [--prompt]` | Lenses and your own standing instructions, applied to every appraisal. `--prompt` prints the exact block the model is given |
+| `python -m arb mystery [--hunt] [--limit 25]` | Uncatalogued "misc" lots ranked by how blind the listing is; `--hunt` sweeps HiBid for them first |
 | `python -m arb demo` | Load synthetic example data |
 
 A typical day: `scan --hours 24` in the morning (valuations are cached 7 days, so re-scans are cheap), then
@@ -88,7 +98,10 @@ A typical day: `scan --hours 24` in the morning (valuations are cached 7 days, s
 | `ANTHROPIC_API_KEY` | — | Enables Claude appraisals. Without it you get eBay-sold comps / auctioneer estimates only. |
 | `ARB_MODEL` | `claude-opus-5` | Model for appraisals. `claude-sonnet-5` is ~2.5× cheaper and fine for commodity items. |
 | `ARB_WEB_SEARCH` | `1` | Let Claude search the web for sold comps (≤3 searches per lot). |
+| `ARB_CALIBRATION` / `ARB_CALIBRATION_MIN_CLOSED` / `ARB_CALIBRATION_MIN_SALES` | `1` / `8` / `5` | Feedback loop: grade past calls against realized prices and your recorded sales, then adjust. |
 | `ARB_VISION` / `ARB_MAX_IMAGES` | `1` / `4` | Send the lot's photos so the model reads marks and splits multi-item lots into per-item values. |
+| `ARB_MYSTERY` / `ARB_MYSTERY_THRESHOLD` / `ARB_MYSTERY_PER_RUN` / `ARB_MYSTERY_MAX_IMAGES` / `ARB_MYSTERY_HUNT_QUERIES` | `1` / `0.45` / `4` / `8` / `3` | Misc lots: how blind a listing must read to count, appraisals reserved for them each run, photos sent (more than the usual four — the photos *are* the lot), and mystery search terms swept per scan. |
+| `ARB_LENSES` / `ARB_LENS_WEIGHT` | `1` / `1` | Lenses and your standing instructions, applied to every appraisal (`arb watch`), and the triage weight a keyword hit earns. |
 | `ARB_EBAY_SOLD` | `1` | Scrape eBay sold listings as comps (no key; best effort, may be rate-limited). |
 | `ARB_VALUER` | `auto` | `auto` \| `claude` \| `ebay` \| `estimate` \| `none` |
 | `ARB_BUYER_PREMIUM` | `0.15` | Fallback buyer's premium when the auction doesn't publish one |
@@ -115,6 +128,13 @@ titles cost nothing. Start with `--max-value 20` and a tight `--hours 6` window 
 * **Dossier drawer** — photo, live bid & countdown, full cost breakdown, valuation range, *Why the upside* paragraph,
   value drivers, risks, comparable sales with links, listing description & photos, **Open on HiBid**, **eBay sold**
   search, **Refresh live**, **Re-value**.
+* **Valuer report card** — every closed lot the scanner valued is checked against the price it actually
+  realized (`priceRealized`, free from HiBid even on lots you never bid on), and any sale you record in the
+  dossier becomes ground truth. Per-category bias and confidence factors feed back into future valuations,
+  clamped and sample-gated (`ARB_CALIBRATION_*`). `python -m arb settle` runs it on demand.
+* **Grading upside** — for trading cards: photo condition read (centering, corners, edges, surface), PSA grade
+  probabilities, graded comps by grade (PSA APR, SportsCardsPro, 130point, eBay sold), pop report, and the
+  expected net of grading vs. selling raw (`ARB_GRADING_*`), with a recommendation.
 * **List it on eBay** — the appraisal also drafts the listing (80-char title, category, condition, item specifics,
   description) and three price points (quick / market / patient) with net after eBay fees (`ARB_EBAY_*`), shipping
   and packaging, and profit vs. landed cost. Copy buttons for the sell form.

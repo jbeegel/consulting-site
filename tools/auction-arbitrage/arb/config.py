@@ -49,6 +49,56 @@ class Settings:
     min_spread: float = field(default_factory=lambda: _f("ARB_MIN_SPREAD", 10.0))  # below this the score is scaled down
     sweet_spot_max_landed: float = field(default_factory=lambda: _f("ARB_SWEET_MAX_LANDED", 6.0))
     sweet_spot_min_net: float = field(default_factory=lambda: _f("ARB_SWEET_MIN_NET", 15.0))
+    # calibration: the valuer grades its own past calls and adjusts
+    calibration: bool = field(default_factory=lambda: _b("ARB_CALIBRATION", True))
+    calibration_min_closed: int = field(default_factory=lambda: int(_f("ARB_CALIBRATION_MIN_CLOSED", 8)))
+    calibration_min_sales: int = field(default_factory=lambda: int(_f("ARB_CALIBRATION_MIN_SALES", 5)))
+    calibration_min_bias: float = field(default_factory=lambda: _f("ARB_CALIBRATION_MIN_BIAS", 0.5))
+    calibration_max_bias: float = field(default_factory=lambda: _f("ARB_CALIBRATION_MAX_BIAS", 1.5))
+    settle_per_run: int = field(default_factory=lambda: int(_f("ARB_SETTLE_PER_RUN", 40)))
+
+    # liquidity: how fast the money comes back. Weight 0 ranks on raw upside only.
+    liquidity_weight: float = field(default_factory=lambda: max(0.0, min(1.0, _f("ARB_LIQUIDITY_WEIGHT", 0.7))))
+    handling_days: float = field(default_factory=lambda: _f("ARB_HANDLING_DAYS", 3.0))
+    max_days_to_sell: float = field(default_factory=lambda: _f("ARB_MAX_DAYS_TO_SELL", 365.0))
+    liquidity_min_sales: int = field(default_factory=lambda: int(_f("ARB_LIQUIDITY_MIN_SALES", 4)))
+    trend_window_days: int = field(default_factory=lambda: int(_f("ARB_TREND_WINDOW_DAYS", 21)))
+
+    # the playbook: hunt known niches instead of waiting for them to float past
+    playbook: bool = field(default_factory=lambda: _b("ARB_PLAYBOOK", True))
+    target_monthly_roi: float = field(default_factory=lambda: _f("ARB_TARGET_MONTHLY_ROI", 1.0))
+    min_buy_multiple: float = field(default_factory=lambda: _f("ARB_MIN_BUY_MULTIPLE", 3.0))
+    hunt_per_run: int = field(default_factory=lambda: int(_f("ARB_HUNT_PER_RUN", 4)))
+    hunt_pages: int = field(default_factory=lambda: int(_f("ARB_HUNT_PAGES", 2)))
+    thesis_min_sales: int = field(default_factory=lambda: int(_f("ARB_THESIS_MIN_SALES", 3)))
+    thesis_min_roi: float = field(default_factory=lambda: _f("ARB_THESIS_MIN_ROI", 1.5))
+    thesis_max_from_sales: int = field(default_factory=lambda: int(_f("ARB_THESIS_MAX_FROM_SALES", 8)))
+    discover_count: int = field(default_factory=lambda: int(_f("ARB_DISCOVER_COUNT", 8)))
+    research_ttl_days: float = field(default_factory=lambda: _f("ARB_RESEARCH_TTL_DAYS", 30))
+
+    # mystery lots: where the auctioneer did not look, so nobody else has either
+    mystery: bool = field(default_factory=lambda: _b("ARB_MYSTERY", True))
+    mystery_threshold: float = field(default_factory=lambda: _f("ARB_MYSTERY_THRESHOLD", 0.45))
+    mystery_weight: float = field(default_factory=lambda: _f("ARB_MYSTERY_WEIGHT", 3.0))
+    mystery_max_images: int = field(default_factory=lambda: max(1, int(_f("ARB_MYSTERY_MAX_IMAGES", 8))))
+    mystery_per_run: int = field(default_factory=lambda: int(_f("ARB_MYSTERY_PER_RUN", 4)))
+    mystery_hunt_queries: int = field(default_factory=lambda: int(_f("ARB_MYSTERY_HUNT_QUERIES", 3)))
+
+    # lenses: the buyer's own standing instructions, applied to every lot
+    lenses: bool = field(default_factory=lambda: _b("ARB_LENSES", True))
+    lens_weight: float = field(default_factory=lambda: _f("ARB_LENS_WEIGHT", 1.0))
+
+    # local, non-auction sources
+    local: bool = field(default_factory=lambda: _b("ARB_LOCAL", True))
+    craigslist_site: str = field(default_factory=lambda: os.environ.get("ARB_CRAIGSLIST_SITE", ""))
+    local_trip_cost: float = field(default_factory=lambda: _f("ARB_LOCAL_TRIP_COST", 4.0))
+    local_cost_per_mile: float = field(default_factory=lambda: _f("ARB_LOCAL_COST_PER_MILE", 0.2))
+
+    # grading economics (trading cards)
+    grading: bool = field(default_factory=lambda: _b("ARB_GRADING", True))
+    grading_fee: float = field(default_factory=lambda: _f("ARB_GRADING_FEE", 75.0))  # PSA regular-tier per card; economy/bulk is lower but slow
+    grading_ship: float = field(default_factory=lambda: _f("ARB_GRADING_SHIP", 15.0))  # round-trip shipping/insurance share (all-in ~ $90)
+    grading_days: int = field(default_factory=lambda: int(_f("ARB_GRADING_DAYS", 60)))
     # eBay fee model (see scoring.listing_economics)
     ebay_fvf: float = field(default_factory=lambda: _f("ARB_EBAY_FVF", 0.136))
     ebay_fvf_media: float = field(default_factory=lambda: _f("ARB_EBAY_FVF_MEDIA", 0.153))  # books, music, movies
