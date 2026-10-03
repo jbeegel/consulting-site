@@ -58,6 +58,13 @@ export interface Comp {
   url: string;
   date: string;
   note: string;
+  /** How close this sale is to the thing in the lot. The hierarchy the appraiser must climb down:
+   *  exact (same item, size, version) → same_model → variant → category (brand + type only). */
+  match?: "exact" | "same_model" | "variant" | "category" | "unknown";
+  /** Which item in a multi-item lot this sale supports (its `items[].name`), or empty for the whole lot. */
+  for_item?: string;
+  /** The sold listing's photo, when the source exposes one, so the UI can put it beside the lot photo. */
+  image?: string;
 }
 
 export interface ListingPlan {
@@ -302,6 +309,25 @@ export interface Opportunity {
   mystery?: MysteryEconomics | null;
   /** Lenses whose keywords this lot's words hit. */
   lenses?: { id: string; name: string }[];
+  /** The one-line answer: buy or not, how high to go, where to stop. */
+  plan?: BuyPlan | null;
+}
+
+/** The bidding decision, derived from the quick-sale net (the price that moves it in days, after fees). */
+export interface BuyPlan {
+  verdict: "strong_buy" | "buy" | "watch" | "pass";
+  /** The bid to aim for: landed cost no more than quick_net / minBuyMultiple. */
+  target_bid: number;
+  /** Never bid past this: landed cost is half the quick-sale net, so a fast flip still doubles the money. */
+  walk_away_bid: number;
+  /** All-in cost (premium, tax, pickup) at walk_away_bid. */
+  max_all_in: number;
+  /** What a quick sale nets after selling fees and shipping. The anchor for everything above. */
+  quick_net: number;
+  /** quick_net / landed cost at the next bid. 3x is the playbook's buy line. */
+  multiple_now: number | null;
+  /** Plain-English reason for the verdict. */
+  basis: string;
 }
 
 /** User-set risk parameters. Sent by the dashboard, applied server-side so alerts honour them too. */

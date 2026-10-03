@@ -37,7 +37,7 @@ class Settings:
     valuation_ttl_days: float = field(default_factory=lambda: _f("ARB_VALUATION_TTL_DAYS", 7))
     valuation_workers: int = field(default_factory=lambda: int(_f("ARB_VALUATION_WORKERS", 4)))
     vision: bool = field(default_factory=lambda: _b("ARB_VISION", True))  # send lot photos to the model
-    max_images: int = field(default_factory=lambda: int(_f("ARB_MAX_IMAGES", 4)))
+    max_images: int = field(default_factory=lambda: int(_f("ARB_MAX_IMAGES", 8)))
 
     # --- cost model (fractions, not percents)
     default_buyer_premium: float = field(default_factory=lambda: _f("ARB_BUYER_PREMIUM", 0.15))
@@ -80,7 +80,7 @@ class Settings:
     mystery: bool = field(default_factory=lambda: _b("ARB_MYSTERY", True))
     mystery_threshold: float = field(default_factory=lambda: _f("ARB_MYSTERY_THRESHOLD", 0.45))
     mystery_weight: float = field(default_factory=lambda: _f("ARB_MYSTERY_WEIGHT", 3.0))
-    mystery_max_images: int = field(default_factory=lambda: max(1, int(_f("ARB_MYSTERY_MAX_IMAGES", 8))))
+    mystery_max_images: int = field(default_factory=lambda: max(1, int(_f("ARB_MYSTERY_MAX_IMAGES", 12))))
     mystery_per_run: int = field(default_factory=lambda: int(_f("ARB_MYSTERY_PER_RUN", 4)))
     mystery_hunt_queries: int = field(default_factory=lambda: int(_f("ARB_MYSTERY_HUNT_QUERIES", 3)))
 

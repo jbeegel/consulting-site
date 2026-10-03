@@ -1,7 +1,7 @@
 // Turn (lot, valuation) into an opportunity: landed cost, net resale, spread, multiple, score, heat.
 import type { Config } from "./config";
 import { assessLiquidity, daysAtPrice, liquidityFactor, monthlyRoi, riskAdjustedProfit, type LiquidityOptions } from "./liquidity";
-import type { GradingEconomics, ListingEconomics, Lot, PricePoint, Score, Valuation } from "./types";
+import type { BuyPlan, GradingEconomics, ListingEconomics, Lot, PricePoint, Score, Valuation } from "./types";
 
 export const TIME_BUCKETS: [string, number][] = [
   ["<1h", 3600], ["1-3h", 3 * 3600], ["3-6h", 6 * 3600], ["6-12h", 12 * 3600],
@@ -213,6 +213,62 @@ export function listingEconomics(lot: Lot, val: Valuation | null, sc: Score, c: 
     format: lst?.format || "fixed_price", best_offer_floor: lst?.best_offer_floor ?? null, auction_start: lst?.auction_start ?? null,
     points, recommended: "market",
   };
+}
+
+// ---------------------------------------------------------------------------
+// The buy plan: a verdict, a bid to aim for, a bid to stop at
+// ---------------------------------------------------------------------------
+/** The bid whose landed cost equals `landed`: landedCost() run backwards. */
+export function bidForLanded(landed: number, lot: Lot, c: Config): number {
+  const premium = lot.buyer_premium_rate ?? c.buyerPremium;
+  const bid = (landed - c.pickupCost) / ((1 + premium) * (1 + c.salesTax));
+  return Math.max(0, Math.floor(bid));
+}
+
+/**
+ * Everything hangs off the QUICK-sale net: what the piece brings priced to move in days, after selling
+ * fees and shipping. The target bid lands at quick_net / minBuyMultiple (3x by default: the playbook's
+ * "landed under a third of the fast price" rule); the walk-away bid lands at half of it, so even a
+ * hurried flip doubles the money. A playbook ceiling (`cap`) can only lower both.
+ */
+export function buyPlan(lot: Lot, val: Valuation | null, sc: Score, listing: ListingEconomics | null, c: Config, cap: number | null = null): BuyPlan | null {
+  const quick = listing?.points.find((p) => p.label === "quick");
+  if (!val || !sc.valued || !quick || !(quick.net > 0)) return null;
+  const quickNet = quick.net;
+  const mult = Math.max(1.5, c.minBuyMultiple || 3);
+  let target = bidForLanded(quickNet / mult, lot, c);
+  let walk = bidForLanded(quickNet / 2, lot, c);
+  if (cap !== null && cap >= 0) {
+    target = Math.min(target, Math.floor(cap));
+    walk = Math.min(walk, Math.floor(cap));
+  }
+  target = Math.min(target, walk);
+  const landedNow = sc.landed_cost;
+  const now = landedNow > 0 ? quickNet / landedNow : null;
+  const profitNow = quickNet - landedNow;
+  const grade = sc.liquidity?.grade ?? null;
+
+  let verdict: BuyPlan["verdict"];
+  const bits: string[] = [];
+  if (now === null || now < 1.3 || profitNow < 10) {
+    verdict = "pass";
+    bits.push(`At the next bid you would be in for ${money(landedNow)} against a quick sale netting ${money(quickNet)}: not enough room.`);
+  } else if (now < 2 || profitNow < 25 || grade === "D" || grade === "F" || val.confidence < 0.35) {
+    verdict = "watch";
+    if (now < 2 || profitNow < 25) bits.push(`Only ${now.toFixed(1)}x (${money(profitNow)}) between the next bid and a quick sale; it needs to stay cheap.`);
+    if (grade === "D" || grade === "F") bits.push(`Slow market (liquidity ${grade}): the money could sit for months.`);
+    if (val.confidence < 0.35) bits.push("Identification is shaky; verify before paying real money.");
+  } else if (now < mult || profitNow < 40 || grade === "C") {
+    verdict = "buy";
+    bits.push(`${now.toFixed(1)}x on a quick sale (${money(profitNow)} clear) at the next bid${grade === "C" ? ", in a market that moves at a walk, not a run" : ""}.`);
+  } else {
+    verdict = "strong_buy";
+    bits.push(`${now.toFixed(1)}x on a quick sale (${money(profitNow)} clear) at the next bid, in a market that moves${grade ? ` (liquidity ${grade})` : ""}.`);
+  }
+  if (sc.next_bid > walk) bits.push(`The price is already past the walk-away bid of ${money(walk)}.`);
+  else bits.push(`Aim for ${money(target)}; walk away above ${money(walk)} (${money(landedCost(walk, lot, c))} all-in).`);
+  if (cap !== null && cap >= 0 && walk === Math.floor(cap)) bits.push("The playbook's own ceiling for this niche sets the stop.");
+  return { verdict, target_bid: target, walk_away_bid: walk, max_all_in: landedCost(walk, lot, c), quick_net: quickNet, multiple_now: now, basis: bits.join(" ") };
 }
 
 // ---------------------------------------------------------------------------

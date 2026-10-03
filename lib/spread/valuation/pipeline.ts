@@ -75,7 +75,10 @@ export class ValuationPipeline {
       if (this.c.vision && !lot.pictures?.length && this.pictureFetcher) {
         try {
           const pics = await this.pictureFetcher(lot);
-          if (pics.length) lot = { ...lot, pictures: pics };
+          if (pics.length) {
+            lot = { ...lot, pictures: pics };
+            await this.store.upsertLots([lot]).catch(() => undefined); // so the dashboard can show them
+          }
         } catch (e) {
           console.info("picture fetch failed for", lot.id, e);
         }

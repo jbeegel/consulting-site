@@ -64,6 +64,31 @@ Rules:
   * buyer_pool: who actually buys this and how many of them there are.
   Use round honest numbers and report -1 for anything you could not determine rather than inventing counts.
   A thin market with three sales a quarter must be reported as thin even when those three sales were high.
+- PROVE THE PRICE WITH A LADDER OF COMPS, and label every comp's `match`:
+  * exact: the same item, same size, same version/generation, SOLD in the last 30-90 days. This is what
+    a value rests on. Three or more exact sales that cluster within about 30% of each other = high confidence;
+    underwrite at the MEDIAN of the cluster and ignore the outliers.
+  * same_model: same maker and model, different size/colour/condition or older than 90 days.
+  * variant: a related version (another size of the same sign, a sister pattern, the next model year).
+  * category: brand + type only, or a generic equivalent. Evidence that a market exists, not a price.
+  Every step down the ladder costs a tier of confidence; say so in `confidence_reason`. One sale is an
+  anecdote, not a comp. Asking prices are never comps; label them in `note` if you include them at all.
+  For the standout item, find its single best comp, set `for_item` to that item's name, and give the sold
+  listing's photo URL in `image` when the result page shows one, so the buyer can compare side by side.
+- SIZE AND VERSION DECIDE THE PRICE. Advertising thermometers, signs, trays, tins, still banks, decanters
+  and figurines all exist in several sizes and generations that sell for 5-10x apart. Read dimensions
+  off a ruler, a hand, a tile or a doorframe in the photo; state the size you believe it is and how you
+  got it; when you cannot tell, say which sizes exist and price at the COMMON one, not the rare one.
+- IDENTIFICATION CHECKLIST, worked per item: maker's mark or stamp; patent or model number; what the back,
+  bottom or inside shows (or that it was not photographed); parts that must be present (stopper, key,
+  lid, glass, cord, tax stamp, box) and whether they are; repairs, repaints, replaced parts; working
+  status if mechanical or electrical. Reproductions, "style of", fantasy pieces and later re-issues are
+  the commonest way to lose money: name the tells you checked.
+- FOR A MIXED LOT, decompose it: the anchor piece, two to five mid pieces worth listing on their own,
+  and filler. Price filler at $0 unless it sells as a group lot, and say what that residual lot brings.
+  The lot's resale range is the realistic total, not the sum of every item's best case.
+- SHIPPING KILL SWITCH: if shipping would cost more than about 30% of the quick-sale price, or the item
+  needs freight, say so in `risks` and set `best_channel` to local sale.
 - Report prices in USD. Never exceed 3 web searches per item; stop early when you have 3+ solid comps.
 - Also draft the eBay listing you would post, with three price points (quick sale = around the 25th
   percentile of sold comps, market = median, patient = 75th percentile), a best-offer floor, and a shipping
@@ -265,8 +290,12 @@ SCHEMA: dict[str, Any] = {
                     "url": {"type": "string"},
                     "date": {"type": "string"},
                     "note": {"type": "string"},
+                    "match": {"type": "string", "enum": ["exact", "same_model", "variant", "category", "unknown"],
+                              "description": "how close this sale is to the item in the lot"},
+                    "for_item": {"type": "string", "description": "the items[].name this sale supports, or empty for the lot as a whole"},
+                    "image": {"type": "string", "description": "URL of the sold listing's photo if the page showed one, else empty"},
                 },
-                "required": ["title", "price", "source", "url", "date", "note"],
+                "required": ["title", "price", "source", "url", "date", "note", "match", "for_item", "image"],
                 "additionalProperties": False,
             },
         },
@@ -284,10 +313,45 @@ SCHEMA: dict[str, Any] = {
 _MAX_IMAGE_BYTES = 4_500_000
 
 
-def load_images(urls: list[str], max_images: int = 4, timeout: float = 15.0) -> list[dict[str, Any]]:
+_MATCHES = {"exact", "same_model", "variant", "category"}
+
+
+def clean_comp(c: dict[str, Any]) -> dict[str, Any]:
+    """Keep only the comp fields we store; empty strings dropped, an unknown match left out."""
+    out: dict[str, Any] = {"title": str(c.get("title") or ""), "price": float(c.get("price") or 0), "source": str(c.get("source") or ""),
+                           "url": str(c.get("url") or ""), "date": str(c.get("date") or ""), "note": str(c.get("note") or "")}
+    if c.get("match") in _MATCHES:
+        out["match"] = c["match"]
+    if str(c.get("for_item") or "").strip():
+        out["for_item"] = str(c["for_item"]).strip()
+    if str(c.get("image") or "").startswith(("http://", "https://")):
+        out["image"] = str(c["image"])
+    return out
+
+
+def pick_images(urls: list[str], max_images: int) -> list[str]:
+    """Which photos to send when a lot has more than the budget. Auctioneers shoot the group first and
+    the bases, marks and damage last, so taking the first N would drop exactly the shots that identify a
+    piece. Spread the budget evenly and always keep the first and last."""
+    u = [x for x in urls if x]
+    if max_images <= 0:
+        return []
+    if len(u) <= max_images:
+        return u
+    if max_images == 1:
+        return [u[0]]
+    out: list[str] = []
+    for i in range(max_images):
+        cand = u[round(i * (len(u) - 1) / (max_images - 1))]
+        if cand not in out:
+            out.append(cand)
+    return out
+
+
+def load_images(urls: list[str], max_images: int = 8, timeout: float = 15.0) -> list[dict[str, Any]]:
     """Download lot photos and wrap them as Claude image blocks. Failures are skipped silently."""
     blocks: list[dict[str, Any]] = []
-    for url in [u for u in urls if u][:max_images]:
+    for url in pick_images(urls, max_images):
         try:
             r = httpx.get(url, timeout=timeout, follow_redirects=True, headers={"user-agent": "spread-hunter/0.1"})
             if r.status_code != 200 or len(r.content) > _MAX_IMAGE_BYTES:
@@ -406,7 +470,7 @@ def _lot_content(lot: dict[str, Any], comps: list[Comp], images: list[dict[str, 
 
 class ClaudeValuer:
     def __init__(self, model: str = "claude-opus-5", *, web_search: bool = True, max_searches: int = 3,
-                 effort: str = "medium", vision: bool = True, max_images: int = 4):
+                 effort: str = "medium", vision: bool = True, max_images: int = 8):
         import anthropic  # imported lazily so the tool runs without the SDK when Claude is disabled
 
         self._anthropic = anthropic
@@ -489,11 +553,11 @@ class ClaudeValuer:
         v.value_drivers = list(data.get("value_drivers") or [])
         v.risks = list(data.get("risks") or [])
         v.rationale = data.get("rationale", "")
-        v.comps = [c for c in (data.get("comps") or []) if isinstance(c, dict)]
+        v.comps = [clean_comp(c) for c in (data.get("comps") or []) if isinstance(c, dict)]
         for c in comps[:10]:  # keep the raw eBay pulls too, deduped by url
             if not any(x.get("url") == c.url for x in v.comps):
                 v.comps.append({"title": c.title, "price": c.price, "source": c.source, "url": c.url,
-                                "date": c.date, "note": "raw eBay sold pull"})
+                                "date": c.date, "note": "raw eBay sold pull", **({"image": c.image} if c.image else {})})
         v.authenticity_risk = bool(data.get("authenticity_risk"))
         v.search_query = data.get("search_query", "")
         v.items = [i for i in (data.get("items") or []) if isinstance(i, dict) and i.get("name")]

@@ -27,7 +27,7 @@ export const config = {
   valuationTtlDays: num("SPREAD_VALUATION_TTL_DAYS", 7),
   valuationWorkers: Math.max(1, Math.floor(num("SPREAD_VALUATION_WORKERS", 4))),
   vision: bool("SPREAD_VISION", true), // send lot photos to the model so it can read marks and split multi-item lots
-  maxImages: Math.max(0, Math.floor(num("SPREAD_MAX_IMAGES", 4))),
+  maxImages: Math.max(0, Math.floor(num("SPREAD_MAX_IMAGES", 8))),
   valuePerRun: Math.floor(num("SPREAD_VALUE_PER_RUN", 12)),
   dailyValuationCap: Math.floor(num("SPREAD_DAILY_VALUATION_CAP", 150)),
   runBudgetMs: num("SPREAD_RUN_BUDGET_MS", 240_000), // stay under Vercel's maxDuration
@@ -64,7 +64,7 @@ export const config = {
   /** Extra triage weight a mystery lot gets, so misc lots compete for valuation calls on purpose. */
   mysteryWeight: num("SPREAD_MYSTERY_WEIGHT", 3),
   /** Photos sent for a mystery lot. The whole method is reading them, so send more than usual. */
-  mysteryMaxImages: Math.max(1, Math.floor(num("SPREAD_MYSTERY_MAX_IMAGES", 8))),
+  mysteryMaxImages: Math.max(1, Math.floor(num("SPREAD_MYSTERY_MAX_IMAGES", 12))),
   /** Valuations reserved for mystery lots each run, so a strong playbook cannot crowd them out. */
   mysteryPerRun: Math.floor(num("SPREAD_MYSTERY_PER_RUN", 4)),
   mysteryHuntQueries: Math.floor(num("SPREAD_MYSTERY_HUNT_QUERIES", 3)),
