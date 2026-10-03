@@ -35,6 +35,12 @@ class Comp:
     url: str = ""
     date: str = ""
     note: str = ""
+    # exact / same_model / variant / category: how close this sale is to the thing in the lot
+    match: str = ""
+    # which items[].name in a mixed lot this sale supports
+    for_item: str = ""
+    # the sold listing's photo, for a side-by-side with the lot photo
+    image: str = ""
 
 
 @dataclass

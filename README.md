@@ -40,11 +40,11 @@ Keyless deployments degrade gracefully to deterministic demo mode.
 | `SPREAD_BUYER_PREMIUM` / `SPREAD_SALES_TAX` / `SPREAD_PICKUP_COST` / `SPREAD_RESALE_FEE` / `SPREAD_RESALE_SHIP` | Cost model |
 | `SPREAD_SPREAD_FULL` / `SPREAD_MIN_SPREAD` | Net spread that earns full marks (default $150) and the floor below which scores are scaled down ($10) |
 | `SPREAD_SWEET_MAX_LANDED` / `SPREAD_SWEET_MIN_NET` | Sweet-spot definition: landed ≤ $6 and net ≥ $15 flags the $1–$3 buys that resell for $20–$50 |
-| `SPREAD_VISION` / `SPREAD_MAX_IMAGES` | Send lot photos to the model (default on, 4 photos) so it reads marks and splits multi-item lots |
+| `SPREAD_VISION` / `SPREAD_MAX_IMAGES` | Send lot photos to the model (default on, 8 photos, spread across the set so the base/mark shots at the end are never dropped) so it reads marks and splits multi-item lots |
 | `SPREAD_CALIBRATION` / `SPREAD_CALIBRATION_MIN_CLOSED` / `SPREAD_CALIBRATION_MIN_SALES` / `SPREAD_CALIBRATION_MIN_BIAS` / `SPREAD_CALIBRATION_MAX_BIAS` / `SPREAD_SETTLE_PER_RUN` | The feedback loop (default on): sample floors before an adjustment applies (8 closed lots, 5 sales), the clamp on it (0.5 to 1.5), and how many closed lots each run settles (40) |
 | `SPREAD_PLAYBOOK` / `SPREAD_TARGET_MONTHLY_ROI` / `SPREAD_MIN_BUY_MULTIPLE` / `SPREAD_HUNT_PER_RUN` / `SPREAD_HUNT_PAGES` | The playbook (default on): the return on capital a buy must clear (1.0 = 100%/month), the multiple of net you will never pay within (3), and how many niches each scan hunts (4, two pages each) |
 | `SPREAD_DISCOVER_COUNT` / `SPREAD_RESEARCH_TTL_DAYS` / `SPREAD_THESIS_MIN_SALES` / `SPREAD_THESIS_MIN_ROI` / `SPREAD_THESIS_MAX_FROM_SALES` | How many niches a research pass looks for (8), how stale research may get before a refresh (30 days), and the bar your own sales must clear to propose a niche (3 sales at 150% ROI, 8 proposals max) |
-| `SPREAD_MYSTERY` / `SPREAD_MYSTERY_THRESHOLD` / `SPREAD_MYSTERY_WEIGHT` / `SPREAD_MYSTERY_PER_RUN` / `SPREAD_MYSTERY_MAX_IMAGES` / `SPREAD_MYSTERY_HUNT_QUERIES` | Misc lots (default on): how blind a listing must read to count (0.45), the triage weight it earns (3), appraisals reserved for them each run (4), photos sent (8 instead of 4), and mystery search terms swept per scan (3) |
+| `SPREAD_MYSTERY` / `SPREAD_MYSTERY_THRESHOLD` / `SPREAD_MYSTERY_WEIGHT` / `SPREAD_MYSTERY_PER_RUN` / `SPREAD_MYSTERY_MAX_IMAGES` / `SPREAD_MYSTERY_HUNT_QUERIES` | Misc lots (default on): how blind a listing must read to count (0.45), the triage weight it earns (3), appraisals reserved for them each run (4), photos sent (12 instead of 8), and mystery search terms swept per scan (3) |
 | `SPREAD_LENSES` / `SPREAD_LENS_WEIGHT` | Lenses and your standing instructions (default on) and the triage weight a keyword hit earns (1) |
 | `SPREAD_LOCAL` / `SPREAD_CRAIGSLIST_SITE` / `SPREAD_LOCAL_TRIP_COST` / `SPREAD_LOCAL_COST_PER_MILE` | Local buying: your craigslist subdomain (e.g. `detroit`), and what a collection trip costs ($4 flat plus $0.20/mile). OfferUp and Facebook are paste-only — see above |
 | `SPREAD_LIQUIDITY_WEIGHT` / `SPREAD_HANDLING_DAYS` / `SPREAD_MAX_DAYS_TO_SELL` / `SPREAD_LIQUIDITY_MIN_SALES` / `SPREAD_TREND_WINDOW_DAYS` | How much liquidity discounts the score (0.7; 0 disables it), days of handling before capital comes back (3), the horizon past which "slower" stops meaning anything (365), your own sales needed before measured speed overrides the model (4), and the market-trend window (21 days) |
@@ -187,6 +187,39 @@ Titles like "vintage knic knacs" hide the value in a backstamp. With `SPREAD_VIS
 photos and sends them with the appraisal. The model reads maker's marks and labels, identifies every distinct item
 in a multi-item lot with its own range, names the standout piece, and values the lot as what a reseller would net
 splitting the good pieces out. Vague titles with photos are prioritised for valuation rather than skipped.
+
+Every lot now carries its full photo set from the first scan (the list query asks HiBid for `pictures`, and a
+state-only refresh never overwrites them), so the dashboards can show the photos and the appraiser gets up to
+`SPREAD_MAX_IMAGES` of them. When a lot has more photos than the budget, the budget is spread evenly across the
+set with the first and last always included: auctioneers shoot the group first and the bases, marks and damage
+last, so "the first eight" would drop exactly the shots that identify a piece.
+
+### Proving the price: the comp ladder and the buy plan
+
+An appraisal is only as good as the sales behind it, so every comp the model returns is labelled with how close
+it is (`match`): **exact** (same item, size and version, sold in the last 30–90 days), **same_model**, **variant**
+or **category** (brand + type only: proof a market exists, not a price). Three or more exact sales clustering
+within ~30% of each other is the bar for high confidence; each step down the ladder costs a tier, and the model
+has to say so in `confidence_reason`. Comps also say which item in a mixed lot they support (`for_item`) and carry
+the sold listing's photo (`image`) when the page shows one, so the simple view can put the lot photo and the sold
+item side by side. The prompt also carries the rules a seasoned picker works by: size and generation decide the
+price on thermometers, signs, banks and decanters; the identification checklist (mark, patent, back/bottom shown
+or not, parts present, repairs, working status); mixed lots decomposed into anchor, mid pieces and filler at $0;
+and a shipping kill switch (freight or shipping over ~30% of the quick price pushes the item to a local sale).
+
+Each opportunity then carries a **plan**: a verdict (`strong_buy` / `buy` / `watch` / `pass`), a **target bid**
+whose landed cost is a third of what a quick sale nets after fees (`SPREAD_MIN_BUY_MULTIPLE`, default 3), a
+**walk-away bid** whose landed cost is half of it (so even a hurried flip doubles the money), and the all-in cost
+at that stop. A playbook ceiling for a matched niche can only lower those numbers. The verdict is the multiple at
+the next bid, the dollars clear, the liquidity grade and the identification confidence, all stated in `basis`.
+
+### The simple view
+
+`/spread/simple.html` is the plain-language page for someone who does not want the dashboard: the verdict and
+the two bid numbers first, then the lot's photos, what is in it (a bar per item, the standout flagged), the side-by-side
+of the lot against the sale that proves it, the sold records with their match labels, how fast it sells, and a bid
+box that recomputes landed cost and profit at every selling speed. `?sample` opens it on three made-up lots so the
+layout can be shown before any scan has run.
 
 ### Misc lots: where nobody looked
 

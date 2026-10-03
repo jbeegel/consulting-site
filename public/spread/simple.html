@@ -8,24 +8,27 @@
   :root{
     --bg:#f6f7f9; --card:#fff; --ink:#15181d; --muted:#5e6672; --line:#e3e6ea;
     --good:#0f7a4d; --goodbg:#e7f6ee; --warn:#8a5a00; --warnbg:#fdf3e0;
-    --bad:#a32b2b; --badbg:#fbeaea; --accent:#1f4fd8; --chip:#eef1f5;
+    --bad:#a32b2b; --badbg:#fbeaea; --accent:#1f4fd8; --chip:#eef1f5; --photo:#e9ecf0;
+    --bar:#cfd8ea; --barstar:#1f4fd8;
   }
   @media (prefers-color-scheme: dark){
     :root:not([data-theme="light"]){
       --bg:#111317; --card:#191c22; --ink:#e9ecf1; --muted:#9aa3b0; --line:#2b3039;
       --good:#5bd39b; --goodbg:#12301f; --warn:#e0ae4e; --warnbg:#332713;
-      --bad:#ef8a8a; --badbg:#3a1c1c; --accent:#7ea2ff; --chip:#21262e;
+      --bad:#ef8a8a; --badbg:#3a1c1c; --accent:#7ea2ff; --chip:#21262e; --photo:#232830;
+      --bar:#2f3a52; --barstar:#7ea2ff;
     }
   }
   :root[data-theme="dark"]{
     --bg:#111317; --card:#191c22; --ink:#e9ecf1; --muted:#9aa3b0; --line:#2b3039;
     --good:#5bd39b; --goodbg:#12301f; --warn:#e0ae4e; --warnbg:#332713;
-    --bad:#ef8a8a; --badbg:#3a1c1c; --accent:#7ea2ff; --chip:#21262e;
+    --bad:#ef8a8a; --badbg:#3a1c1c; --accent:#7ea2ff; --chip:#21262e; --photo:#232830;
+    --bar:#2f3a52; --barstar:#7ea2ff;
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);
     font:16px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-  .wrap{max-width:860px;margin:0 auto;padding:16px}
+  .wrap{max-width:920px;margin:0 auto;padding:16px}
   header{position:sticky;top:0;background:var(--bg);padding:16px 0 10px;z-index:5;border-bottom:1px solid var(--line)}
   h1{margin:0;font-size:21px;letter-spacing:-.01em}
   .sub{color:var(--muted);font-size:13px;margin-top:3px}
@@ -34,12 +37,28 @@
     border:1px solid var(--line);border-radius:8px;padding:7px 11px}
   button{cursor:pointer}
   button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.small{padding:3px 9px;font-size:13px}
   button:disabled{opacity:.5;cursor:default}
+  label.chk{display:inline-flex;gap:6px;align-items:center;font-size:14px;color:var(--muted)}
   .banner{margin:12px 0;padding:11px 13px;border-radius:9px;font-size:14px;
     background:var(--warnbg);color:var(--warn);border:1px solid rgba(138,90,0,.25)}
   .banner.err{background:var(--badbg);color:var(--bad);border-color:rgba(163,43,43,.25)}
   .card{background:var(--card);border:1px solid var(--line);border-radius:13px;
-    padding:16px;margin:14px 0}
+    padding:0;margin:14px 0;overflow:hidden}
+  .body{padding:14px 16px 16px}
+
+  /* the verdict strip: the answer before the evidence */
+  .verdict{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap;
+    padding:11px 16px;border-bottom:1px solid var(--line);font-size:14px}
+  .verdict.v-strong_buy,.verdict.v-buy{background:var(--goodbg);color:var(--good)}
+  .verdict.v-watch{background:var(--warnbg);color:var(--warn)}
+  .verdict.v-pass{background:var(--badbg);color:var(--bad)}
+  .verdict.v-none{background:var(--chip);color:var(--muted)}
+  .verdict .word{font-weight:800;font-size:17px;letter-spacing:.02em;text-transform:uppercase}
+  .verdict .bids{display:flex;gap:14px;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+  .verdict .bids b{font-size:16px}
+  .verdict .bids span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;opacity:.8}
+
   .top{display:flex;gap:12px;justify-content:space-between;align-items:flex-start}
   .lot{font-weight:600;font-size:17px;line-height:1.35}
   .lot a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line)}
@@ -47,11 +66,28 @@
   .score{text-align:center;flex:0 0 auto;min-width:74px}
   .score b{display:block;font-size:27px;line-height:1.1;font-variant-numeric:tabular-nums}
   .score span{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
-  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
   .p-good{background:var(--goodbg);color:var(--good)}
   .p-warn{background:var(--warnbg);color:var(--warn)}
   .p-bad{background:var(--badbg);color:var(--bad)}
   .p-flat{background:var(--chip);color:var(--muted)}
+  .p-acc{background:var(--accent);color:#fff}
+
+  /* photos */
+  .gallery{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:8px;margin-top:12px}
+  .hero{position:relative;background:var(--photo);border-radius:10px;overflow:hidden;aspect-ratio:4/3}
+  .hero img{width:100%;height:100%;object-fit:contain;display:block;background:var(--photo)}
+  .hero .n{position:absolute;left:8px;bottom:8px;background:rgba(0,0,0,.6);color:#fff;font-size:12px;
+    padding:2px 8px;border-radius:999px}
+  .thumbs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;align-content:start}
+  .thumbs img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:7px;cursor:pointer;
+    border:2px solid transparent;background:var(--photo);display:block}
+  .thumbs img.on{border-color:var(--accent)}
+  .thumbs .more{display:flex;align-items:center;justify-content:center;aspect-ratio:1;border-radius:7px;
+    background:var(--chip);color:var(--muted);font-size:13px;text-decoration:none}
+  .noimg{display:flex;align-items:center;justify-content:center;height:100%;color:var(--muted);font-size:14px}
+  .photonote{color:var(--muted);font-size:12px;margin-top:6px}
+
   .why{margin:12px 0 0;padding:11px 13px;background:var(--chip);border-radius:9px;font-size:14px}
   h3{margin:18px 0 7px;font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
   .rows{display:grid;gap:6px}
@@ -61,14 +97,47 @@
   .row .k{color:var(--muted)}
   .row .v{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
   .row.tot{font-weight:650;border-top:1px solid var(--line);border-bottom:0;padding-top:8px;margin-top:2px}
-  .comp{display:flex;justify-content:space-between;gap:10px;font-size:13.5px;padding:6px 0;
+
+  /* what's in it: a bar per item */
+  .itemrows{display:grid;gap:7px}
+  .item{display:grid;grid-template-columns:minmax(0,1fr) 92px;gap:10px;align-items:center;font-size:14px}
+  .item .nm{min-width:0}
+  .item .nm small{display:block;color:var(--muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .item .track{height:8px;background:var(--chip);border-radius:4px;margin-top:4px;overflow:hidden}
+  .item .fill{height:100%;background:var(--bar);border-radius:4px}
+  .item.star .fill{background:var(--barstar)}
+  .item .val{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}
+  .item .val small{display:block;font-weight:400;color:var(--muted);font-size:11px}
+  .item.star .nm b::after{content:" ★";color:var(--accent)}
+
+  /* side by side */
+  .sbs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px}
+  .sbs .pane{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--card)}
+  .sbs .pane .img{aspect-ratio:1;background:var(--photo);display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .sbs .pane .img img{width:100%;height:100%;object-fit:contain;display:block}
+  .sbs .pane .cap{padding:8px 10px;font-size:13px;line-height:1.4}
+  .sbs .pane .cap b{font-size:15px}
+  .sbs .pane .cap .k{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;display:block}
+  .sbs .pane .cap a{color:var(--accent);text-decoration:none}
+  .sbs .nophoto{padding:14px;text-align:center;color:var(--muted);font-size:13px}
+
+  /* confidence meter */
+  .meter{display:flex;align-items:center;gap:10px;font-size:13px}
+  .meter .track{flex:1;height:8px;background:var(--chip);border-radius:4px;overflow:hidden}
+  .meter .fill{height:100%;border-radius:4px}
+
+  .comp{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:center;font-size:13.5px;padding:7px 0;
     border-bottom:1px dashed var(--line)}
   .comp:last-child{border-bottom:0}
+  .comp .th{width:44px;height:44px;border-radius:6px;background:var(--chip);object-fit:cover;display:block}
+  .comp .th.blank{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px}
   .comp .t{min-width:0}
   .comp .t a{color:var(--accent);text-decoration:none}
   .comp .t a:hover{text-decoration:underline}
   .comp .meta{color:var(--muted);font-size:12px}
-  .comp .pr{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+  .comp .pr{font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;text-align:right}
+  .comp .pr small{display:block;font-weight:400}
+
   table.speed{width:100%;border-collapse:collapse;font-size:14px}
   table.speed th{text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;
     letter-spacing:.06em;color:var(--muted);padding:0 0 6px}
@@ -76,18 +145,21 @@
   table.speed td:not(:first-child),table.speed th:not(:first-child){text-align:right}
   .bidbox{display:flex;gap:8px;align-items:center;margin:10px 0 2px;flex-wrap:wrap}
   .bidbox input{width:110px;font-variant-numeric:tabular-nums}
+  .nowline{margin:8px 0 0;font-size:14px;padding:9px 12px;border-radius:9px}
   .items{margin:0;padding-left:19px;font-size:14px}
   .items li{margin:3px 0}
-  .star{font-weight:650}
   .empty{text-align:center;padding:50px 20px;color:var(--muted)}
   .foot{color:var(--muted);font-size:12px;margin:26px 0 40px;text-align:center}
   .foot a{color:var(--muted)}
   details summary{cursor:pointer;color:var(--muted);font-size:13px;margin-top:10px}
-  @media (max-width:560px){
+  @media (max-width:600px){
     .wrap{padding:12px}
     .top{flex-direction:column-reverse;align-items:stretch}
     .score{text-align:left;display:flex;gap:9px;align-items:baseline}
     .score b{font-size:22px}
+    .gallery{grid-template-columns:1fr}
+    .thumbs{grid-template-columns:repeat(6,1fr)}
+    .sbs{grid-template-columns:1fr 1fr}
   }
 </style>
 </head>
@@ -100,7 +172,8 @@
   <div class="bar">
     <button class="primary" id="load">Refresh</button>
     <select id="sort">
-      <option value="score">Best score first</option>
+      <option value="verdict">Best buys first</option>
+      <option value="score">Highest score first</option>
       <option value="profit">Biggest profit first</option>
       <option value="fast">Fastest to sell first</option>
       <option value="ending">Ending soonest first</option>
@@ -111,6 +184,7 @@
       <option value="24" selected>Ends within 24h</option>
       <option value="72">Ends within 3 days</option>
     </select>
+    <label class="chk"><input type="checkbox" id="hidepass"> hide passes</label>
     <button id="demo">Show sample</button>
   </div>
 </header>
@@ -119,7 +193,7 @@
 <div id="list"></div>
 
 <div class="foot">
-  Every dollar figure below is computed, not quoted —
+  Every dollar figure is computed from the auction's own fees and real sold prices, not quoted —
   <a href="/spread/index.html">advanced dashboard</a>
 </div>
 
@@ -160,6 +234,10 @@ var countdown = function (sec) {
 var host = function (u) {
   try { return new URL(u).hostname.replace(/^www\./, ""); } catch (e) { return "link"; }
 };
+// Only http(s) and data: images are rendered; anything else becomes "no photo".
+var safeImg = function (u) {
+  return typeof u === "string" && /^(https?:\/\/|data:image\/)/i.test(u) ? u : "";
+};
 // Where a comp came from, in words a person recognises.
 var platform = function (c) {
   var s = (c.source || "").toLowerCase();
@@ -168,9 +246,20 @@ var platform = function (c) {
   if (s.indexOf("worthpoint") >= 0) return "WorthPoint";
   if (s.indexOf("hibid") >= 0) return "HiBid";
   if (s.indexOf("liveauction") >= 0) return "LiveAuctioneers";
+  if (s.indexOf("mercari") >= 0) return "Mercari";
   if (c.source) return c.source;
   return c.url ? host(c.url) : "unknown source";
 };
+var MATCH = {
+  exact: ["Exact match", "p-good"], same_model: ["Same model", "p-good"],
+  variant: ["Close variant", "p-warn"], category: ["Same category", "p-flat"]
+};
+var matchPill = function (c) {
+  var m = MATCH[c.match];
+  if (!m) return "";
+  return ' <span class="pill ' + m[1] + '">' + m[0] + "</span>";
+};
+var MATCH_RANK = { exact: 0, same_model: 1, variant: 2, category: 3 };
 
 // ---------------------------------------------------------------- state
 var STATE = { rows: [], demo: false, cfg: null };
@@ -209,12 +298,34 @@ function atBid(point, bid, cfg) {
   };
 }
 
+// The server sends a plan; if an older payload lacks one, derive the same numbers here so the
+// verdict strip never goes blank. Target = landed at a third of the quick-sale net; stop = half.
+function planFor(o, cfg) {
+  if (o.plan) return o.plan;
+  var pts = (o.listing && o.listing.points) || [];
+  var quick = null;
+  pts.forEach(function (p) { if (p.label === "quick") quick = p; });
+  if (!quick || !(quick.net > 0) || !o.score || !o.score.valued) return null;
+  var f = (1 + (cfg.buyerPremium || 0)) * (1 + (cfg.salesTax || 0)), pick = cfg.pickupCost || 0;
+  var bidFor = function (L) { return Math.max(0, Math.floor((L - pick) / f)); };
+  var walk = bidFor(quick.net / 2), target = Math.min(bidFor(quick.net / 3), walk);
+  var now = o.score.landed_cost > 0 ? quick.net / o.score.landed_cost : null;
+  var profit = quick.net - (o.score.landed_cost || 0);
+  var g = o.score.liquidity && o.score.liquidity.grade;
+  var verdict = now === null || now < 1.3 || profit < 10 ? "pass"
+    : now < 2 || profit < 25 || g === "D" || g === "F" ? "watch"
+    : now < 3 || profit < 40 || g === "C" ? "buy" : "strong_buy";
+  return { verdict: verdict, target_bid: target, walk_away_bid: walk, max_all_in: landed(walk, cfg).total,
+           quick_net: quick.net, multiple_now: now, basis: "" };
+}
+
 // ---------------------------------------------------------------- render
 var LABEL = { quick: "Sell fast", market: "Sell at market", patient: "Wait for the right buyer" };
+var VERDICT = { strong_buy: "Strong buy", buy: "Buy", watch: "Watch", pass: "Pass" };
+var VRANK = { strong_buy: 0, buy: 1, watch: 2, pass: 3 };
 
 function heatPill(h) {
-  var cls = h === "hot" ? "p-good" : h === "warm" ? "p-warn"
-          : h === "unvalued" ? "p-flat" : "p-flat";
+  var cls = h === "hot" ? "p-good" : h === "warm" ? "p-warn" : "p-flat";
   return '<span class="pill ' + cls + '">' + esc(h) + "</span>";
 }
 
@@ -223,77 +334,212 @@ function gradePill(g) {
   return '<span class="pill ' + cls + '">Sells ' + esc(g) + "</span>";
 }
 
+function pictures(lot) {
+  var out = [];
+  (lot.pictures || []).concat([lot.image_full, lot.image]).forEach(function (u) {
+    u = safeImg(u);
+    if (u && out.indexOf(u) < 0) out.push(u);
+  });
+  return out;
+}
+
+function verdictStrip(o, plan, s) {
+  var cls = plan ? "v-" + plan.verdict : "v-none";
+  var h = ['<div class="verdict ' + cls + '">'];
+  h.push('<div><span class="word">' + (plan ? VERDICT[plan.verdict] : s.valued ? "No plan" : "Not appraised") + "</span>");
+  if (s.valued) h.push(' &nbsp;<span class="pill p-flat">score ' + esc(s.score) + "</span> " + heatPill(s.heat || "unvalued"));
+  h.push("</div>");
+  if (plan) {
+    h.push('<div class="bids">');
+    h.push("<div><span>Aim for</span><b>" + money(plan.target_bid) + "</b></div>");
+    h.push("<div><span>Walk away above</span><b>" + money(plan.walk_away_bid) + "</b></div>");
+    h.push("<div><span>Max all-in</span><b>" + money(plan.max_all_in) + "</b></div>");
+    h.push("<div><span>Fast sale nets</span><b>" + money(plan.quick_net) + "</b></div>");
+    h.push("</div>");
+  }
+  h.push("</div>");
+  return h.join("");
+}
+
+function gallery(lot, v, idx) {
+  var pics = pictures(lot);
+  var h = ['<div class="gallery">'];
+  h.push('<div class="hero">');
+  if (pics.length) {
+    h.push('<a href="' + esc(lot.url || pics[0]) + '" target="_blank" rel="noopener">' +
+           '<img src="' + esc(pics[0]) + '" alt="lot photo" data-hero="' + idx + '" loading="lazy"></a>');
+    h.push('<div class="n" data-heron="' + idx + '">1 / ' + pics.length + "</div>");
+  } else {
+    h.push('<div class="noimg">No photo saved for this lot yet</div>');
+  }
+  h.push("</div>");
+  h.push('<div class="thumbs">');
+  pics.slice(0, 11).forEach(function (p, i) {
+    h.push('<img src="' + esc(p) + '" alt="" loading="lazy" data-thumb="' + idx + '" data-i="' + i +
+           '"' + (i === 0 ? ' class="on"' : "") + ">");
+  });
+  if (pics.length > 11)
+    h.push('<a class="more" href="' + esc(lot.url || "#") + '" target="_blank" rel="noopener">+' + (pics.length - 11) + "</a>");
+  h.push("</div></div>");
+  var read = v && v.images_used != null ? v.images_used : null;
+  var total = Math.max(pics.length, lot.picture_count || 0);
+  if (total || read !== null) {
+    var txt = total ? total + " photo" + (total === 1 ? "" : "s") + " on the listing" : "";
+    if (read !== null) txt += (txt ? " · " : "") + (read ? "the appraiser read " + read + " of them, every mark and label it could" : "appraised from the text only — no photo was read");
+    h.push('<div class="photonote">' + esc(txt) + "</div>");
+  }
+  return h.join("");
+}
+
+function itemMid(it) {
+  if (it.value_mid != null) return it.value_mid;
+  var lo = Number(it.est_low), hi = Number(it.est_high);
+  if (isFinite(lo) && isFinite(hi)) return (lo + hi) / 2;
+  return isFinite(hi) ? hi : isFinite(lo) ? lo : null;
+}
+
+function itemsBlock(v) {
+  var h = ["<h3>What's in it</h3>"];
+  var its = (v.items || []).filter(function (x) { return x && (x.name || x.item); });
+  if (!its.length) {
+    h.push('<div style="font-size:14px">' + esc(v.identified_item || "Contents not itemised") +
+           (v.unit_count > 1 ? " (" + v.unit_count + " units)" : "") + "</div>");
+    return h.join("");
+  }
+  var max = 0;
+  its.forEach(function (it) { var m = itemMid(it); if (m && m > max) max = m; });
+  h.push('<div class="itemrows">');
+  its.forEach(function (it) {
+    var nm = it.name || it.item, m = itemMid(it);
+    var star = v.standout_item && (nm === v.standout_item || v.standout_item.indexOf(nm) === 0);
+    var sub = [it.maker_or_mark && it.maker_or_mark !== "unmarked" ? it.maker_or_mark : "", it.era, it.condition].filter(Boolean).join(" · ");
+    var w = max > 0 && m ? Math.max(2, Math.round((m / max) * 100)) : 0;
+    h.push('<div class="item' + (star ? " star" : "") + '"><div class="nm"><b>' + esc(nm) + "</b>" +
+           (star ? ' <span class="pill p-acc">the one that matters</span>' : "") +
+           (sub ? "<small>" + esc(sub) + "</small>" : "") +
+           '<div class="track"><div class="fill" style="width:' + w + '%"></div></div></div>' +
+           '<div class="val">' + (m === null ? "—" : m === 0 ? "filler" : "~" + money(m)) +
+           (it.resell && it.resell !== "list individually" ? "<small>" + esc(it.resell) + "</small>" : "") + "</div></div>");
+  });
+  h.push("</div>");
+  return h.join("");
+}
+
+// The sale that proves the standout piece, or failing that the closest sale with a photo.
+function bestComp(v) {
+  var comps = (v.comps || []).filter(function (c) { return c && c.price; });
+  if (!comps.length) return null;
+  var so = v.standout_item || "";
+  comps = comps.slice().sort(function (a, b) {
+    var fa = so && a.for_item && so.indexOf(a.for_item) >= 0 ? 0 : 1;
+    var fb = so && b.for_item && so.indexOf(b.for_item) >= 0 ? 0 : 1;
+    if (fa !== fb) return fa - fb;
+    var ia = safeImg(a.image) ? 0 : 1, ib = safeImg(b.image) ? 0 : 1;
+    if (ia !== ib) return ia - ib;
+    return (MATCH_RANK[a.match] == null ? 4 : MATCH_RANK[a.match]) - (MATCH_RANK[b.match] == null ? 4 : MATCH_RANK[b.match]);
+  });
+  return comps[0];
+}
+
+function sideBySide(lot, v) {
+  var c = bestComp(v);
+  if (!c) return "";
+  var pics = pictures(lot);
+  var h = ["<h3>Side by side: your lot vs. what actually sold</h3>", '<div class="sbs">'];
+  h.push('<div class="pane"><div class="img">' + (pics.length ? '<img src="' + esc(pics[0]) + '" alt="">' : '<div class="nophoto">no lot photo</div>') +
+         '</div><div class="cap"><span class="k">In this lot</span><b>' + esc(v.standout_item || v.identified_item || lot.title) + "</b>" +
+         "<br>current bid " + money(lot.high_bid || lot.min_bid || 0) + "</div></div>");
+  var img = safeImg(c.image);
+  var link = c.url ? '<a href="' + esc(c.url) + '" target="_blank" rel="noopener">' + esc(c.title || "sold listing") + "</a>" : esc(c.title || "sold listing");
+  h.push('<div class="pane"><div class="img">' + (img ? '<img src="' + esc(img) + '" alt="">' :
+         '<div class="nophoto">No listing photo saved —<br>' + (c.url ? 'open the sale ↗' : 'see the sale below') + "</div>") +
+         '</div><div class="cap"><span class="k">Sold on ' + esc(platform(c)) + (c.date ? " · " + esc(c.date) : "") +
+         "</span><b>" + money(c.price) + "</b>" + matchPill(c) + "<br>" + link + "</div></div>");
+  h.push("</div>");
+  return h.join("");
+}
+
+function confidenceMeter(v) {
+  var p = Math.max(0, Math.min(1, Number(v.confidence) || 0));
+  var col = p >= 0.7 ? "var(--good)" : p >= 0.45 ? "var(--warn)" : "var(--bad)";
+  var word = p >= 0.7 ? "high" : p >= 0.45 ? "medium" : "low";
+  return '<div class="meter"><span class="k" style="color:var(--muted)">Confidence</span>' +
+         '<div class="track"><div class="fill" style="width:' + Math.round(p * 100) + "%;background:" + col + '"></div></div>' +
+         "<b>" + pct(p) + "</b> <span style=\"color:var(--muted)\">" + word + "</span></div>" +
+         (v.confidence_reason ? '<div class="where" style="margin-top:4px">' + esc(v.confidence_reason) + "</div>" : "");
+}
+
 function card(o, idx) {
   var lot = o.lot || {}, v = o.valuation, s = o.score || {}, cfg = STATE.cfg;
+  var plan = v ? planFor(o, cfg) : null;
   var h = [];
 
-  // --- what it is, and what we think of it
+  h.push(verdictStrip(o, plan, s));
+  h.push('<div class="body">');
+
+  // --- what it is
   var title = lot.url
     ? '<a href="' + esc(lot.url) + '" target="_blank" rel="noopener">' + esc(lot.title) + "</a>"
     : esc(lot.title);
   h.push('<div class="top">');
   h.push('<div><div class="lot">' + title + "</div>");
-  h.push('<div class="where">' + esc(lot.auction_name || "auction") + " · " +
-         countdown(s.seconds_left) + " · current bid <b>" + money(lot.high_bid || lot.min_bid || 0) +
-         "</b></div></div>");
-  h.push('<div class="score"><b>' + (s.valued ? s.score : "—") + "</b><span>score " +
-         heatPill(s.heat || "unvalued") + "</span></div>");
+  h.push('<div class="where">' + esc(lot.auction_name || "auction") +
+         (lot.city ? " · " + esc(lot.city) + (lot.state ? ", " + esc(lot.state) : "") : "") + " · " +
+         countdown(s.seconds_left) + " · current bid <b>" + money(lot.high_bid || lot.min_bid || 0) + "</b>" +
+         (lot.bid_count ? " · " + lot.bid_count + " bid" + (lot.bid_count === 1 ? "" : "s") : " · no bids yet") +
+         "</div></div>");
   h.push("</div>");
 
-  if (o.why) h.push('<div class="why">' + esc(o.why) + "</div>");
+  h.push(gallery(lot, v, idx));
+
+  if (plan && plan.basis) h.push('<div class="why">' + esc(plan.basis) + "</div>");
+  else if (o.why) h.push('<div class="why">' + esc(o.why) + "</div>");
 
   if (!v) {
     h.push('<div class="why">Not appraised yet — no value estimate, so no profit figure. ' +
-           "This lot is listed because the title looks worth a closer look.</div>");
+           "This lot is listed because the title or photos look worth a closer look.</div>");
+    h.push("</div>");
     return '<div class="card">' + h.join("") + "</div>";
   }
 
   // --- what's inside it
-  h.push("<h3>What's in it</h3>");
-  var its = (v.items || []).filter(function (x) { return x && (x.name || x.item); });
-  if (its.length) {
-    h.push('<ul class="items">');
-    its.forEach(function (it) {
-      var nm = it.name || it.item;
-      var star = v.standout_item && nm === v.standout_item;
-      h.push("<li" + (star ? ' class="star"' : "") + ">" + esc(nm) +
-             (it.value_mid != null ? " — worth about " + money(it.value_mid) : "") +
-             (star ? " ← the one that matters" : "") + "</li>");
-    });
-    h.push("</ul>");
-  } else {
-    h.push('<div style="font-size:14px">' + esc(v.identified_item || "Contents not itemised") +
-           (v.unit_count > 1 ? " (" + v.unit_count + " units)" : "") + "</div>");
-  }
+  h.push(itemsBlock(v));
 
-  // --- what it's worth, and the receipts
+  // --- the proof
+  h.push(sideBySide(lot, v));
+
+  // --- what it's worth
   h.push("<h3>What it resells for</h3>");
   h.push('<div class="rows">');
   h.push('<div class="row"><span class="k">Our estimate</span><span class="v">' +
          money(v.mid) + " <span class=\"k\">(range " + money(v.low) + "–" + money(v.high) +
          ")</span></span></div>");
-  h.push('<div class="row"><span class="k">How sure we are</span><span class="v">' +
-         pct(v.confidence) + " · " + esc(v.method || "") + "</span></div>");
   if (v.best_channel)
     h.push('<div class="row"><span class="k">Best place to sell</span><span class="v">' +
            esc(v.best_channel) + "</span></div>");
   h.push("</div>");
+  h.push('<div style="margin-top:8px">' + confidenceMeter(v) + "</div>");
 
   var comps = (v.comps || []).filter(function (c) { return c && c.price; });
+  comps.sort(function (a, b) {
+    return (MATCH_RANK[a.match] == null ? 4 : MATCH_RANK[a.match]) - (MATCH_RANK[b.match] == null ? 4 : MATCH_RANK[b.match]);
+  });
+  h.push("<h3>Actual past sales this is based on" + (comps.length ? " (" + comps.length + ")" : "") + "</h3>");
   if (comps.length) {
-    h.push("<h3>Actual past sales this is based on</h3>");
-    comps.slice(0, 6).forEach(function (c) {
+    comps.slice(0, 8).forEach(function (c) {
       var t = c.url
         ? '<a href="' + esc(c.url) + '" target="_blank" rel="noopener">' + esc(c.title || "sold listing") + "</a>"
         : esc(c.title || "sold listing");
-      h.push('<div class="comp"><div class="t">' + t +
+      var img = safeImg(c.image);
+      h.push('<div class="comp">' + (img ? '<img class="th" src="' + esc(img) + '" alt="" loading="lazy">' : '<div class="th blank">' + esc(platform(c)).slice(0, 5) + "</div>") +
+             '<div class="t">' + t + matchPill(c) +
              '<div class="meta">' + esc(platform(c)) +
              (c.date ? " · " + esc(c.date) : "") +
+             (c.for_item ? " · for: " + esc(c.for_item) : "") +
              (c.note ? " · " + esc(c.note) : "") +
              '</div></div><div class="pr">' + money(c.price) + "</div></div>");
     });
   } else {
-    h.push("<h3>Actual past sales this is based on</h3>");
     h.push('<div class="banner">No sale records attached to this estimate. ' +
            "Treat the value above as a guess, not evidence.</div>");
   }
@@ -325,9 +571,13 @@ function card(o, idx) {
   h.push("<h3>If you win it</h3>");
   h.push('<div class="bidbox"><label class="k" style="font-size:14px">Your bid: </label>' +
          '<input type="number" min="0" step="1" value="' + bid +
-         '" data-bid="' + idx + '" aria-label="your bid"> ' +
-         '<span class="k" style="font-size:13px">change it to see the numbers move</span></div>');
-  h.push('<div data-math="' + idx + '">' + mathBlock(o, bid) + "</div>");
+         '" data-bid="' + idx + '" aria-label="your bid"> ');
+  if (plan) {
+    h.push('<button class="small" data-setbid="' + idx + '" data-val="' + plan.target_bid + '">target ' + money(plan.target_bid) + "</button>");
+    h.push('<button class="small" data-setbid="' + idx + '" data-val="' + plan.walk_away_bid + '">walk-away ' + money(plan.walk_away_bid) + "</button>");
+  }
+  h.push('<span class="k" style="font-size:13px;color:var(--muted)">change it to see the numbers move</span></div>');
+  h.push('<div data-math="' + idx + '">' + mathBlock(o, bid, plan) + "</div>");
 
   if ((v.risks || []).length) {
     h.push("<details><summary>What could go wrong (" + v.risks.length + ")</summary>");
@@ -335,15 +585,34 @@ function card(o, idx) {
     v.risks.forEach(function (r) { h.push("<li>" + esc(r) + "</li>"); });
     h.push("</ul></details>");
   }
+  if ((v.value_drivers || []).length) {
+    h.push("<details><summary>Why it is worth that (" + v.value_drivers.length + ")</summary>");
+    h.push('<ul class="items">');
+    v.value_drivers.forEach(function (r) { h.push("<li>" + esc(r) + "</li>"); });
+    h.push("</ul></details>");
+  }
 
+  h.push("</div>");
   return '<div class="card">' + h.join("") + "</div>";
 }
 
 // The cost + profit table. Split out so changing the bid re-renders only this.
-function mathBlock(o, bid) {
+function mathBlock(o, bid, plan) {
   var cfg = STATE.cfg, L = landed(bid, cfg), h = [];
 
-  h.push('<div class="rows">');
+  if (plan && plan.quick_net > 0) {
+    var m = L.total > 0 ? plan.quick_net / L.total : null;
+    var p = plan.quick_net - L.total;
+    var cls = bid > plan.walk_away_bid ? "p-bad" : bid > plan.target_bid ? "p-warn" : "p-good";
+    var bg = cls === "p-bad" ? "var(--badbg)" : cls === "p-warn" ? "var(--warnbg)" : "var(--goodbg)";
+    var fg = cls === "p-bad" ? "var(--bad)" : cls === "p-warn" ? "var(--warn)" : "var(--good)";
+    h.push('<div class="nowline" style="background:' + bg + ";color:" + fg + '">At <b>' + money(bid) + "</b> you are in for <b>" + money(L.total) +
+           "</b> all-in. A fast sale nets " + money(plan.quick_net) + " — " +
+           (m === null ? "" : "<b>" + m.toFixed(1) + "x</b> your money, ") + "<b>" + money(p) + "</b> clear" +
+           (bid > plan.walk_away_bid ? ". <b>Past the walk-away point.</b>" : bid > plan.target_bid ? ". Above target, still inside the line." : ". Inside the target.") + "</div>");
+  }
+
+  h.push('<div class="rows" style="margin-top:10px">');
   h.push('<div class="row"><span class="k">Winning bid</span><span class="v">' + money(L.bid) + "</span></div>");
   h.push('<div class="row"><span class="k">Buyer\'s premium (' +
          Math.round((cfg.buyerPremium || 0) * 100) + "%)</span><span class=\"v\">" +
@@ -388,7 +657,9 @@ function sortRows(rows, how) {
     var p = (o.listing && o.listing.points) || [];
     return p.reduce(function (m, x) { return Math.max(m, x.profit || 0); }, 0);
   };
+  var vr = function (o) { var p = o.valuation ? planFor(o, STATE.cfg) : null; return p ? VRANK[p.verdict] : 4; };
   var c = {
+    verdict: function (a, b) { return (vr(a) - vr(b)) || ((b.score.score || 0) - (a.score.score || 0)); },
     score: function (a, b) { return (b.score.score || 0) - (a.score.score || 0); },
     profit: function (a, b) { return best(b) - best(a); },
     fast: function (a, b) {
@@ -406,6 +677,8 @@ function sortRows(rows, how) {
 function draw() {
   var how = document.getElementById("sort").value;
   var rows = sortRows(STATE.rows, how);
+  if (document.getElementById("hidepass").checked)
+    rows = rows.filter(function (o) { var p = o.valuation ? planFor(o, STATE.cfg) : null; return !p || p.verdict !== "pass"; });
   var el = document.getElementById("list");
 
   if (!rows.length) {
@@ -417,14 +690,34 @@ function draw() {
   el.innerHTML = rows.map(card).join("");
 
   // Wire the bid inputs: recompute that one card's math in place.
+  var recompute = function (i, bid) {
+    var o = rows[i];
+    if (!isFinite(bid) || bid < 0 || !o) return;
+    var tgt = el.querySelector('[data-math="' + i + '"]');
+    if (tgt) tgt.innerHTML = mathBlock(o, bid, o.valuation ? planFor(o, STATE.cfg) : null);
+  };
   Array.prototype.forEach.call(el.querySelectorAll("input[data-bid]"), function (inp) {
     inp.addEventListener("input", function () {
-      var i = Number(inp.getAttribute("data-bid"));
-      var o = rows[i];
-      var bid = Number(inp.value);
-      if (!isFinite(bid) || bid < 0) return;
-      var tgt = el.querySelector('[data-math="' + i + '"]');
-      if (tgt && o) tgt.innerHTML = mathBlock(o, bid);
+      recompute(Number(inp.getAttribute("data-bid")), Number(inp.value));
+    });
+  });
+  Array.prototype.forEach.call(el.querySelectorAll("button[data-setbid]"), function (btn) {
+    btn.addEventListener("click", function () {
+      var i = btn.getAttribute("data-setbid"), v = Number(btn.getAttribute("data-val"));
+      var inp = el.querySelector('input[data-bid="' + i + '"]');
+      if (inp) { inp.value = v; recompute(Number(i), v); }
+    });
+  });
+  // Thumbnails swap the hero photo.
+  Array.prototype.forEach.call(el.querySelectorAll("img[data-thumb]"), function (th) {
+    th.addEventListener("click", function () {
+      var i = th.getAttribute("data-thumb");
+      var hero = el.querySelector('img[data-hero="' + i + '"]');
+      var n = el.querySelector('[data-heron="' + i + '"]');
+      if (hero) hero.src = th.src;
+      if (n) n.textContent = (Number(th.getAttribute("data-i")) + 1) + " / " + n.textContent.split("/")[1].trim();
+      Array.prototype.forEach.call(el.querySelectorAll('img[data-thumb="' + i + '"]'), function (x) { x.classList.remove("on"); });
+      th.classList.add("on");
     });
   });
 }
@@ -448,7 +741,7 @@ function loadDemo() {
   STATE.cfg = { buyerPremium: 0.15, salesTax: 0.06, pickupCost: 20 };
   STATE.rows = SAMPLE;
   note("<b>Sample data.</b> These three lots are made up, so you can see the layout " +
-       "and try the bid box. Nothing here is a real auction.");
+       "and try the bid box. Nothing here is a real auction and the photos are placeholders.");
   document.getElementById("sub").textContent = "3 sample lots";
   draw();
 }
@@ -494,83 +787,104 @@ async function load() {
 }
 
 // ---------------------------------------------------------------- sample
-// Clearly fake, but shaped exactly like the real payload.
+// Clearly fake, but shaped exactly like the real payload. Photos are drawn, not real.
+function fakePic(label, hue) {
+  var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="480">' +
+    '<rect width="640" height="480" fill="hsl(' + hue + ',22%,82%)"/>' +
+    '<rect x="160" y="110" width="320" height="240" rx="18" fill="hsl(' + hue + ',28%,60%)"/>' +
+    '<text x="320" y="420" font-family="sans-serif" font-size="30" text-anchor="middle" fill="#333">' + label + '</text></svg>';
+  return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+}
 var SAMPLE = [
   {
     lot: { id: 1, title: "Box lot - assorted costume jewelry, pocket watches, misc",
-           auction_name: "Thursday Estate Sale, Westland", high_bid: 35, min_bid: 35,
-           url: "https://hibid.com" },
+           auction_name: "Thursday Estate Sale", city: "Boca Raton", state: "FL", high_bid: 35, min_bid: 35, bid_count: 2,
+           url: "https://hibid.com", picture_count: 9,
+           pictures: [fakePic("group shot", 210), fakePic("watch face", 30), fakePic("watch movement", 40),
+                      fakePic("chain + clasp", 50), fakePic("hallmark close-up", 60), fakePic("costume pieces", 200),
+                      fakePic("box underside", 220), fakePic("more pieces", 190), fakePic("damage", 0)] },
     valuation: {
       identified_item: "Mixed jewelry box lot", mid: 520, low: 340, high: 780,
-      confidence: 0.62, method: "claude+web", best_channel: "eBay",
+      confidence: 0.62, confidence_reason: "Three exact sales for the watch inside 30 days; the gold chain's mark is not readable, so it is priced as 14k but could be plated.",
+      method: "claude+web", best_channel: "eBay", images_used: 9,
       standout_item: "Hamilton 992B railroad pocket watch",
       unit_count: 14,
       items: [
-        { name: "Hamilton 992B railroad pocket watch", value_mid: 395 },
-        { name: "14k gold chain, 4.1g", value_mid: 260 },
-        { name: "Assorted costume pieces (12)", value_mid: 45 }
+        { name: "Hamilton 992B railroad pocket watch", maker_or_mark: "Hamilton Watch Co, Lancaster PA; 992B on movement", era: "1940s", est_low: 350, est_high: 440, condition: "running not shown; dial clean, case wear", resell: "list individually" },
+        { name: "14k gold chain, 4.1g", maker_or_mark: "14K stamp, partly readable", era: "", est_low: 230, est_high: 290, condition: "clasp works", resell: "list individually" },
+        { name: "Assorted costume pieces (12)", maker_or_mark: "unmarked", era: "1960s-80s", est_low: 30, est_high: 60, condition: "", resell: "bundle" },
+        { name: "Wooden jewelry box", maker_or_mark: "unmarked", era: "", est_low: 0, est_high: 0, condition: "veneer lifting", resell: "discard" }
       ],
       comps: [
-        { title: "Hamilton 992B 21j Railroad Pocket Watch 10k GF", price: 410,
-          source: "ebay", url: "https://www.ebay.com", date: "2026-09-18", note: "sold" },
-        { title: "Hamilton 992B Montgomery Dial, running", price: 375,
+        { title: "Hamilton 992B 21j Railroad Pocket Watch 10k GF", price: 410, match: "exact", for_item: "Hamilton 992B railroad pocket watch",
+          source: "ebay", url: "https://www.ebay.com", date: "2026-09-18", note: "sold", image: fakePic("sold: 992B", 35) },
+        { title: "Hamilton 992B Montgomery Dial, running", price: 375, match: "exact", for_item: "Hamilton 992B railroad pocket watch",
           source: "ebay", url: "https://www.ebay.com", date: "2026-09-02", note: "sold" },
-        { title: "14k Gold Rope Chain 4.2g Scrap", price: 268,
+        { title: "Hamilton 992B pocket watch, not running", price: 240, match: "same_model", for_item: "Hamilton 992B railroad pocket watch",
+          source: "ebay", url: "https://www.ebay.com", date: "2026-08-14", note: "sold" },
+        { title: "14k Gold Rope Chain 4.2g Scrap", price: 268, match: "exact", for_item: "14k gold chain, 4.1g",
           source: "ebay", url: "https://www.ebay.com", date: "2026-09-21", note: "sold" }
       ],
-      risks: ["Watch may not be running — photos do not show the movement",
+      value_drivers: ["992B is the railroad-grade Hamilton collectors search for by name", "Gold spot price sets a floor on the chain"],
+      risks: ["Watch may not be running — photos do not show the movement ticking",
               "Gold mark unverified; could be plated"]
     },
     score: {
-      valued: true, score: 8.4, heat: "hot", seconds_left: 7200, next_bid: 40,
+      valued: true, score: 84, heat: "hot", seconds_left: 7200, next_bid: 40, landed_cost: 68.76,
       liquidity: { grade: "B", days_p50: 11, days_p80: 34, sold_90d: 62, active_now: 140,
                    capital_days: 14 }
     },
-    why: "A $35 box lot with a railroad pocket watch in it. Three sold comps in the last " +
-         "three weeks put that one watch near $390 on its own.",
+    plan: { verdict: "strong_buy", target_bid: 71, walk_away_bid: 116, max_all_in: 161.4, quick_net: 282.9, multiple_now: 4.1,
+            basis: "4.1x on a quick sale ($214 clear) at the next bid, in a market that moves (liquidity B). Aim for $71; walk away above $116 ($161 all-in)." },
+    why: "",
     listing: { points: [
-      { label: "quick",   price: 390, net: 318, profit: 0, expected_days: 4 },
+      { label: "quick",   price: 350, net: 282.9, profit: 0, expected_days: 4 },
       { label: "market",  price: 520, net: 428, profit: 0, expected_days: 11 },
       { label: "patient", price: 640, net: 530, profit: 0, expected_days: 38 }
     ] }
   },
   {
     lot: { id: 2, title: "Craftsman rolling tool chest with contents",
-           auction_name: "Industrial Liquidation, Taylor", high_bid: 180, min_bid: 180,
-           url: "https://hibid.com" },
+           auction_name: "Industrial Liquidation", city: "Pompano Beach", state: "FL", high_bid: 180, min_bid: 180, bid_count: 7,
+           url: "https://hibid.com", picture_count: 3,
+           pictures: [fakePic("chest front", 0), fakePic("drawers open", 10), fakePic("Craftsman badge", 20)] },
     valuation: {
       identified_item: "Craftsman 10-drawer tool chest, loaded", mid: 430, low: 350, high: 520,
-      confidence: 0.78, method: "ebay_sold", best_channel: "Local pickup / Facebook",
-      items: [{ name: "Craftsman 10-drawer chest", value_mid: 240 },
-              { name: "Mixed hand tools", value_mid: 190 }],
+      confidence: 0.78, confidence_reason: "Common model with many local sales; contents valued as a group.",
+      method: "ebay_sold", best_channel: "Local pickup / Facebook", images_used: 3,
+      items: [{ name: "Craftsman 10-drawer chest", maker_or_mark: "Craftsman badge", era: "1990s", est_low: 220, est_high: 260, resell: "list individually" },
+              { name: "Mixed hand tools", maker_or_mark: "Craftsman, Stanley", era: "", est_low: 160, est_high: 220, resell: "bundle" }],
       comps: [
-        { title: "Craftsman 10 Drawer Rolling Tool Cabinet", price: 275,
-          source: "ebay", url: "https://www.ebay.com", date: "2026-09-12", note: "local pickup" },
-        { title: "Craftsman tool chest + tools lot", price: 450,
+        { title: "Craftsman 10 Drawer Rolling Tool Cabinet", price: 275, match: "same_model", for_item: "Craftsman 10-drawer chest",
+          source: "ebay", url: "https://www.ebay.com", date: "2026-09-12", note: "local pickup", image: fakePic("sold: chest", 5) },
+        { title: "Craftsman tool chest + tools lot", price: 450, match: "variant",
           source: "ebay", url: "https://www.ebay.com", date: "2026-08-29", note: "sold" }
       ],
+      value_drivers: [],
       risks: ["Heavy — freight kills the margin if you ship it"]
     },
     score: {
-      valued: true, score: 4.1, heat: "warm", seconds_left: 86400 * 2, next_bid: 190,
+      valued: true, score: 41, heat: "warm", seconds_left: 86400 * 2, next_bid: 190, landed_cost: 251.6,
       liquidity: { grade: "C", days_p50: 26, days_p80: 70, sold_90d: 18, active_now: 95,
                    capital_days: 29 }
     },
-    why: "Solid but slow. The chest sells locally for roughly double the bid, " +
-         "though shipping is not an option at this weight.",
+    plan: { verdict: "watch", target_bid: 78, walk_away_bid: 125, max_all_in: 172.4, quick_net: 304.9, multiple_now: 1.2,
+            basis: "Only 1.2x ($53) between the next bid and a quick sale; it needs to stay cheap. The price is already past the walk-away bid of $125." },
+    why: "",
     listing: { points: [
-      { label: "quick",   price: 320, net: 286, profit: 0, expected_days: 9 },
-      { label: "market",  price: 430, net: 388, profit: 0, expected_days: 26 },
-      { label: "patient", price: 500, net: 452, profit: 0, expected_days: 75 }
+      { label: "quick",   price: 320, net: 304.9, profit: 0, expected_days: 9 },
+      { label: "market",  price: 430, net: 410, profit: 0, expected_days: 26 },
+      { label: "patient", price: 500, net: 476, profit: 0, expected_days: 75 }
     ] }
   },
   {
     lot: { id: 3, title: "Lot of 3 totes - unsorted household",
-           auction_name: "Thursday Estate Sale, Westland", high_bid: 8, min_bid: 8,
-           url: "https://hibid.com" },
+           auction_name: "Thursday Estate Sale", city: "Boca Raton", state: "FL", high_bid: 8, min_bid: 8, bid_count: 0,
+           url: "https://hibid.com", picture_count: 2, pictures: [fakePic("three totes", 120), fakePic("tote open", 130)] },
     valuation: null,
     score: { valued: false, score: 0, heat: "unvalued", seconds_left: 5400, next_bid: 10,
              liquidity: null },
+    plan: null,
     why: "",
     listing: null
   }
@@ -580,8 +894,10 @@ var SAMPLE = [
 document.getElementById("load").addEventListener("click", load);
 document.getElementById("demo").addEventListener("click", loadDemo);
 document.getElementById("sort").addEventListener("change", draw);
+document.getElementById("hidepass").addEventListener("change", draw);
 document.getElementById("hours").addEventListener("change", function () { if (!STATE.demo) load(); });
-load();
+// ?sample opens straight onto the made-up lots: a link you can send someone to show them the layout.
+if (/[?&]sample\b/.test(location.search)) loadDemo(); else load();
 </script>
 </body>
 </html>

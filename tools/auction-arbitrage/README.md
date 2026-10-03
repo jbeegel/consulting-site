@@ -99,8 +99,8 @@ A typical day: `scan --hours 24` in the morning (valuations are cached 7 days, s
 | `ARB_MODEL` | `claude-opus-5` | Model for appraisals. `claude-sonnet-5` is ~2.5× cheaper and fine for commodity items. |
 | `ARB_WEB_SEARCH` | `1` | Let Claude search the web for sold comps (≤3 searches per lot). |
 | `ARB_CALIBRATION` / `ARB_CALIBRATION_MIN_CLOSED` / `ARB_CALIBRATION_MIN_SALES` | `1` / `8` / `5` | Feedback loop: grade past calls against realized prices and your recorded sales, then adjust. |
-| `ARB_VISION` / `ARB_MAX_IMAGES` | `1` / `4` | Send the lot's photos so the model reads marks and splits multi-item lots into per-item values. |
-| `ARB_MYSTERY` / `ARB_MYSTERY_THRESHOLD` / `ARB_MYSTERY_PER_RUN` / `ARB_MYSTERY_MAX_IMAGES` / `ARB_MYSTERY_HUNT_QUERIES` | `1` / `0.45` / `4` / `8` / `3` | Misc lots: how blind a listing must read to count, appraisals reserved for them each run, photos sent (more than the usual four — the photos *are* the lot), and mystery search terms swept per scan. |
+| `ARB_VISION` / `ARB_MAX_IMAGES` | `1` / `8` | Send the lot's photos so the model reads marks and splits multi-item lots into per-item values. |
+| `ARB_MYSTERY` / `ARB_MYSTERY_THRESHOLD` / `ARB_MYSTERY_PER_RUN` / `ARB_MYSTERY_MAX_IMAGES` / `ARB_MYSTERY_HUNT_QUERIES` | `1` / `0.45` / `4` / `12` / `3` | Misc lots: how blind a listing must read to count, appraisals reserved for them each run, photos sent (more than the usual eight — the photos *are* the lot), and mystery search terms swept per scan. |
 | `ARB_LENSES` / `ARB_LENS_WEIGHT` | `1` / `1` | Lenses and your standing instructions, applied to every appraisal (`arb watch`), and the triage weight a keyword hit earns. |
 | `ARB_EBAY_SOLD` | `1` | Scrape eBay sold listings as comps (no key; best effort, may be rate-limited). |
 | `ARB_VALUER` | `auto` | `auto` \| `claude` \| `ebay` \| `estimate` \| `none` |

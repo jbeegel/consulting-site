@@ -463,7 +463,7 @@ class Scanner:
             return lot
         fresh = normalize_lot(raw, fetched_at=time.time(), site_url=self.settings.hibid_site,
                               default_premium=self.settings.default_buyer_premium)
-        fresh["pictures"] = [p.get("fullSizeLocation") or p.get("hdThumbnailLocation") for p in raw.get("pictures") or []]
+        fresh["pictures"] = fresh.get("pictures") or lot.get("pictures") or []
         fresh["terms"] = (raw.get("auction") or {}).get("termsAndConditions")
         fresh["shipping_info"] = (raw.get("auction") or {}).get("shippingAndPickupInfo")
         fresh["payment_info"] = (raw.get("auction") or {}).get("paymentInfo")

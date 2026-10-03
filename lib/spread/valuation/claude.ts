@@ -98,6 +98,31 @@ Rules:
   * buyer_pool: who actually buys this and how many of them there are.
   Use round honest numbers and report -1 for anything you could not determine rather than inventing counts. A thin market with three
   sales a quarter must be reported as thin even when those three sales were high prices.
+- PROVE THE PRICE WITH A LADDER OF COMPS, and label every comp's \`match\`:
+  * exact: the same item, same size, same version/generation, SOLD in the last 30-90 days. This is what
+    a value rests on. Three or more exact sales that cluster within about 30% of each other = high confidence;
+    underwrite at the MEDIAN of the cluster and ignore the outliers.
+  * same_model: same maker and model, different size/colour/condition or older than 90 days.
+  * variant: a related version (another size of the same sign, a sister pattern, the next model year).
+  * category: brand + type only, or a generic equivalent. Evidence that a market exists, not a price.
+  Every step down the ladder costs a tier of confidence; say so in \`confidence_reason\`. One sale is an
+  anecdote, not a comp. Asking prices are never comps; label them in \`note\` if you include them at all.
+  For the standout item, find its single best comp, set \`for_item\` to that item's name, and give the sold
+  listing's photo URL in \`image\` when the result page shows one, so the buyer can compare side by side.
+- SIZE AND VERSION DECIDE THE PRICE. Advertising thermometers, signs, trays, tins, still banks, decanters
+  and figurines all exist in several sizes and generations that sell for 5-10x apart. Read dimensions
+  off a ruler, a hand, a tile or a doorframe in the photo; state the size you believe it is and how you
+  got it; when you cannot tell, say which sizes exist and price at the COMMON one, not the rare one.
+- IDENTIFICATION CHECKLIST, worked per item: maker's mark or stamp; patent or model number; what the back,
+  bottom or inside shows (or that it was not photographed); parts that must be present (stopper, key,
+  lid, glass, cord, tax stamp, box) and whether they are; repairs, repaints, replaced parts; working
+  status if mechanical or electrical. Reproductions, "style of", fantasy pieces and later re-issues are
+  the commonest way to lose money: name the tells you checked.
+- FOR A MIXED LOT, decompose it: the anchor piece, two to five mid pieces worth listing on their own,
+  and filler. Price filler at $0 unless it sells as a group lot, and say what that residual lot brings.
+  The lot's resale range is the realistic total, not the sum of every item's best case.
+- SHIPPING KILL SWITCH: if shipping would cost more than about 30% of the quick-sale price, or the item
+  needs freight, say so in \`risks\` and set \`best_channel\` to local sale.
 - Report prices in USD. Never exceed 3 web searches per item; stop early when you have 3+ solid comps.
 - Also draft the eBay listing you would post, with three price points (quick sale = around the 25th
   percentile of sold comps, market = median, patient = 75th percentile), a best-offer floor, and a shipping
@@ -233,8 +258,13 @@ const SCHEMA = {
       type: "array",
       items: {
         type: "object",
-        properties: { title: { type: "string" }, price: { type: "number" }, source: { type: "string" }, url: { type: "string" }, date: { type: "string" }, note: { type: "string" } },
-        required: ["title", "price", "source", "url", "date", "note"],
+        properties: {
+          title: { type: "string" }, price: { type: "number" }, source: { type: "string" }, url: { type: "string" }, date: { type: "string" }, note: { type: "string" },
+          match: { type: "string", enum: ["exact", "same_model", "variant", "category", "unknown"], description: "how close this sale is to the item in the lot" },
+          for_item: { type: "string", description: "the items[].name this sale supports, or empty for the lot as a whole" },
+          image: { type: "string", description: "URL of the sold listing's photo if the page showed one, else empty" },
+        },
+        required: ["title", "price", "source", "url", "date", "note", "match", "for_item", "image"],
         additionalProperties: false,
       },
     },
@@ -254,10 +284,26 @@ export function lotImageUrls(lot: Lot): string[] {
   return urls.filter(Boolean);
 }
 
+/** Which photos to send when a lot has more than the budget. Auctioneers shoot the group first and the
+ *  bases, marks and damage last, so taking the first N would drop exactly the shots that identify a piece.
+ *  Spread the budget evenly and always keep the first and last. */
+export function pickImages(urls: string[], maxImages: number): string[] {
+  const u = urls.filter(Boolean);
+  if (maxImages <= 0) return [];
+  if (u.length <= maxImages) return u;
+  if (maxImages === 1) return [u[0]];
+  const out: string[] = [];
+  for (let i = 0; i < maxImages; i++) {
+    const idx = Math.round((i * (u.length - 1)) / (maxImages - 1));
+    if (!out.includes(u[idx])) out.push(u[idx]);
+  }
+  return out;
+}
+
 /** Download lot photos as Claude image blocks. Failures are skipped silently: photos are a bonus, never a blocker. */
-export async function loadImages(urls: string[], maxImages = 4): Promise<ImageBlock[]> {
+export async function loadImages(urls: string[], maxImages = 8): Promise<ImageBlock[]> {
   const out: ImageBlock[] = [];
-  for (const url of urls.slice(0, maxImages)) {
+  for (const url of pickImages(urls, maxImages)) {
     try {
       const res = await fetch(url, { headers: { "user-agent": "spread-hunter/0.1" }, signal: AbortSignal.timeout(15000), cache: "no-store" });
       if (!res.ok) continue;
@@ -310,6 +356,16 @@ export function parseDemand(raw: unknown): DemandSignals | null {
   return empty ? null : out;
 }
 
+const MATCHES = new Set(["exact", "same_model", "variant", "category"]);
+/** Keep only the comp fields we store, with empty strings dropped and an unknown match left unknown. */
+export function cleanComp(c: Comp): Comp {
+  const out: Comp = { title: String(c.title ?? ""), price: Number(c.price) || 0, source: String(c.source ?? ""), url: String(c.url ?? ""), date: String(c.date ?? ""), note: String(c.note ?? "") };
+  if (MATCHES.has(String(c.match))) out.match = c.match;
+  if (c.for_item && String(c.for_item).trim()) out.for_item = String(c.for_item).trim();
+  if (c.image && /^https?:\/\//.test(String(c.image))) out.image = String(c.image);
+  return out;
+}
+
 function lotPrompt(lot: Lot, comps: Comp[], guidance = "", mystery = false): string {
   let desc = (lot.description || "").trim();
   if (desc.length > 2500) desc = desc.slice(0, 2500) + " …";
@@ -325,7 +381,8 @@ function lotPrompt(lot: Lot, comps: Comp[], guidance = "", mystery = false): str
   ];
   if (comps.length) {
     parts.push("Comparable listings we already pulled (verify relevance; 'asking price' entries are NOT sold prices):");
-    for (const c of comps.slice(0, 15)) parts.push(`- $${c.price.toFixed(2)} | ${c.title} | ${c.source}${c.note ? " (" + c.note + ")" : ""} | ${c.date} | ${c.url}`);
+    for (const c of comps.slice(0, 15)) parts.push(`- $${c.price.toFixed(2)} | ${c.title} | ${c.source}${c.note ? " (" + c.note + ")" : ""} | ${c.date} | ${c.url}${c.image ? " | photo: " + c.image : ""}`);
+    parts.push("Keep the ones that actually match (copy their url and photo into your comps with the right `match`), drop the rest.");
   }
   parts.push("Search the web for sold comps if the evidence above is thin or ambiguous, then return the appraisal.");
   if (isCard(lot)) parts.push(CARD_PROMPT);
@@ -338,7 +395,7 @@ function lotPrompt(lot: Lot, comps: Comp[], guidance = "", mystery = false): str
 
 export class ClaudeValuer {
   private client = new Anthropic();
-  constructor(private model: string, private webSearch = true, private maxSearches = 3, private vision = true, private maxImages = 4) {}
+  constructor(private model: string, private webSearch = true, private maxSearches = 3, private vision = true, private maxImages = 8) {}
 
   private request(messages: Anthropic.MessageParam[], maxSearches = this.maxSearches) {
     const params: Anthropic.MessageCreateParamsNonStreaming = {
@@ -409,7 +466,7 @@ export class ClaudeValuer {
     v.demand_signals = parseDemand(data.demand_signals);
     v.value_drivers = Array.isArray(data.value_drivers) ? data.value_drivers.map(String) : [];
     v.risks = Array.isArray(data.risks) ? data.risks.map(String) : [];
-    v.comps = Array.isArray(data.comps) ? (data.comps as Comp[]).filter((c) => c && typeof c === "object") : [];
+    v.comps = Array.isArray(data.comps) ? (data.comps as Comp[]).filter((c) => c && typeof c === "object").map(cleanComp) : [];
     for (const c of comps.slice(0, 10)) if (!v.comps.some((x) => x.url === c.url)) v.comps.push({ ...c, note: c.note || `raw ${c.source} pull` });
     v.authenticity_risk = !!data.authenticity_risk;
     v.search_query = s("search_query");

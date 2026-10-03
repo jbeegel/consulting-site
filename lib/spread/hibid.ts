@@ -30,6 +30,7 @@ const LOT_FIELDS = `
   id itemId lotNumber lead description estimate bidAmount bidQuantity quantity ringNumber
   shippingOffered pictureCount
   featuredPicture { description fullSizeLocation hdThumbnailLocation thumbnailLocation }
+  pictures { fullSizeLocation hdThumbnailLocation }
   category { id baseCategoryId parentCategoryId categoryName fullCategory uRLPath }
   lotState { ...lotState }`;
 
@@ -56,6 +57,10 @@ query LotSearch($auctionId: Int = null, $pageNumber: Int!, $pageLength: Int!, $c
   }
 }${FRAGMENT_LOT_STATE}${FRAGMENT_AUCTION_MIN}`;
 
+/** The same search without the per-lot photo list, for a HiBid schema that does not expose it on
+ *  search results: losing the photos is a degradation, losing every scan is not. */
+const QUERY_LOT_SEARCH_NO_PICTURES = QUERY_LOT_SEARCH.replace(/\n\s*pictures \{[^}]*\}/, "");
+
 export const QUERY_LOT_STATE = `
 query GetLotStateQuery($lotId: ID!) { lotState(input: $lotId) { ...lotState } }${FRAGMENT_LOT_STATE}`;
 
@@ -64,7 +69,6 @@ query GetLotDetails($lotId: ID!, $countAsView: Boolean = false) {
   lot(input: $lotId, countAsView: $countAsView) {
     accessability
     lot { ${LOT_FIELDS} saleOrder
-      pictures { description fullSizeLocation hdThumbnailLocation thumbnailLocation }
       auction { ...auctionMinimum termsAndConditions shippingAndPickupInfo paymentInfo } }
   }
 }${FRAGMENT_LOT_STATE}${FRAGMENT_AUCTION_MIN}`;
@@ -170,10 +174,12 @@ export class HiBidClient {
     throw new HiBidError(`${operationName} failed after ${this.retries} attempts: ${String(lastErr)}`);
   }
 
+  private searchQuery = QUERY_LOT_SEARCH;
+
   async searchLots(o: SearchOptions = {}): Promise<Page> {
     const page = o.page ?? 1;
     const pageLength = o.pageLength ?? 100;
-    const data = await this.execute("LotSearch", QUERY_LOT_SEARCH, {
+    const vars = {
       pageNumber: page,
       pageLength,
       status: o.status ?? "OPEN",
@@ -191,7 +197,16 @@ export class HiBidClient {
       countAsView: false,
       hideGoogle: false,
       isArchive: false,
-    });
+    };
+    let data: Raw;
+    try {
+      data = await this.execute("LotSearch", this.searchQuery, vars);
+    } catch (e) {
+      if (!(this.searchQuery === QUERY_LOT_SEARCH && e instanceof HiBidError && /pictures/i.test(e.message))) throw e;
+      console.warn("HiBid rejected `pictures` on lot search; continuing without per-lot photo lists:", e.message);
+      this.searchQuery = QUERY_LOT_SEARCH_NO_PICTURES;
+      data = await this.execute("LotSearch", this.searchQuery, vars);
+    }
     const paged = data?.lotSearch?.pagedResults ?? {};
     const results: Raw[] = paged.results ?? [];
     const filteredCount = paged.filteredCount ?? 0;
@@ -253,6 +268,18 @@ export function slugify(text: string): string {
   return s.slice(0, 80) || "lot";
 }
 
+/** Every photo URL on the lot, full size first. Absent when the query did not ask for pictures, so a
+ *  refresh that lacks them never wipes the ones a scan already stored. */
+export function picturesOf(raw: Raw): string[] | undefined {
+  if (!Array.isArray(raw.pictures)) return undefined;
+  const out: string[] = [];
+  for (const p of raw.pictures as { fullSizeLocation?: string; hdThumbnailLocation?: string }[]) {
+    const u = p?.fullSizeLocation || p?.hdThumbnailLocation || "";
+    if (u && !out.includes(u)) out.push(u);
+  }
+  return out;
+}
+
 export function normalizeLot(raw: Raw, fetchedAt: number, site: string, defaultPremium: number): Lot {
   const st = raw.lotState ?? {};
   const au = raw.auction ?? {};
@@ -276,6 +303,7 @@ export function normalizeLot(raw: Raw, fetchedAt: number, site: string, defaultP
     image: pic.hdThumbnailLocation || pic.thumbnailLocation || pic.fullSizeLocation || null,
     image_full: pic.fullSizeLocation ?? null,
     picture_count: raw.pictureCount ?? null,
+    pictures: picturesOf(raw),
     shipping_offered: !!raw.shippingOffered,
     url: `${site}/lot/${id}/${slugify(title)}`,
     auction_id: au.id ?? null,

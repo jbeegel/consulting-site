@@ -11,6 +11,8 @@ const ITEM = /<li class="s-item[^"]*"[^>]*>([\s\S]*?)<\/li>/g;
 const TITLE = /<(?:div|span|h3) class="s-item__title[^"]*"[^>]*>([\s\S]*?)<\/(?:div|span|h3)>/;
 const PRICE = /<span class="s-item__price"[^>]*>([\s\S]*?)<\/span>/;
 const LINK = /<a class="s-item__link"[^>]*href="([^"]+)"/;
+const IMG = /<img[^>]*class="s-item__image-img"[^>]*>/;
+const SRC = /\b(?:data-src|src)="(https?:\/\/[^"]+)"/;
 const DATE = /(?:Sold|Ended)\s+([A-Z][a-z]{2}\s+\d{1,2},\s+\d{4})/;
 const TAG = /<[^>]+>/g;
 const MONEY = /[\d,]+(?:\.\d{2})?/;
@@ -52,7 +54,11 @@ export async function fetchSoldComps(query: string, limit = 30): Promise<Comp[]>
     if (!money) continue;
     const link = LINK.exec(block);
     const d = DATE.exec(unescape(block.replace(TAG, " ")));
-    comps.push({ title, price: Number(money[0].replace(/,/g, "")), source: "ebay_sold", url: link ? link[1].split("?")[0] : url, date: d ? d[1] : "", note: "" });
+    const img = IMG.exec(block);
+    const src = img ? SRC.exec(img[0]) : null;
+    // eBay serves fixed thumbnail sizes; s-l500 is big enough to compare against a lot photo side by side.
+    const image = src ? src[1].replace(/\/s-l\d+\./, "/s-l500.") : "";
+    comps.push({ title, price: Number(money[0].replace(/,/g, "")), source: "ebay_sold", url: link ? link[1].split("?")[0] : url, date: d ? d[1] : "", note: "", ...(image ? { image } : {}) });
     if (comps.length >= limit) break;
   }
   return comps;

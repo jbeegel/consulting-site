@@ -8,7 +8,7 @@ import { buildIntel } from "./intel";
 import { researcherFor, staleTheses } from "./discovery";
 import { applyOutcomeStats, huntOrder, matchTheses, normalizeThesis, refreshAll, thesesFromOutcomes } from "./playbook";
 import { SEED_THESES } from "./seeds";
-import { gradingEconomics, landedCost, listingEconomics, scoreLot, whyUpside, type ScoreOptions } from "./scoring";
+import { buyPlan, gradingEconomics, landedCost, listingEconomics, scoreLot, whyUpside, type ScoreOptions } from "./scoring";
 import { getStore, type Store } from "./store";
 import type { CalibrationReport, IntelParams, Lot, MarketIntel, Opportunity, Outcome, ScanParams, Thesis, Valuation, Watchlist } from "./types";
 import { MYSTERY_QUERIES, mysteryBoost, mysteryEconomics, readMystery } from "./mystery";
@@ -31,10 +31,13 @@ export function buildOpportunity(lot: Lot, val: Valuation | null, c: Config = co
   // has a researched price and a bid ceiling behind it, which is the whole point of hunting.
   const hits = theses.length ? matchTheses(lot, theses) : [];
   const ceilings = hits.map((h) => h.max_bid).filter((x): x is number => x !== null);
+  const listing = listingEconomics(lot, val, score, c);
   return {
     lot, valuation: val, score,
     why: val ? whyUpside(lot, val, score, c) : "",
-    listing: listingEconomics(lot, val, score, c),
+    listing,
+    // The playbook's bid ceiling caps the plan: a researched niche median beats a one-off appraisal.
+    plan: buyPlan(lot, val, score, listing, c, ceilings.length ? Math.min(...ceilings) : null),
     grading: gradingEconomics(val, score, c),
     theses: hits,
     max_bid: ceilings.length ? Math.min(...ceilings) : null,
@@ -448,7 +451,7 @@ export class Scanner {
     const raw = await this.client.lotDetails(lotId);
     if (!raw || !raw.id) return lot;
     const fresh = normalizeLot(raw, Date.now() / 1000, this.c.hibidSite, this.c.buyerPremium);
-    fresh.pictures = ((raw.pictures ?? []) as { fullSizeLocation?: string; hdThumbnailLocation?: string }[]).map((p) => p.fullSizeLocation || p.hdThumbnailLocation || "").filter(Boolean);
+    fresh.pictures = fresh.pictures ?? lot.pictures ?? [];
     fresh.terms = raw.auction?.termsAndConditions ?? null;
     fresh.shipping_info = raw.auction?.shippingAndPickupInfo ?? null;
     fresh.payment_info = raw.auction?.paymentInfo ?? null;

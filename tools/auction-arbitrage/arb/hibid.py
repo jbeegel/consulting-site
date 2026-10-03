@@ -73,6 +73,7 @@ query LotSearch($auctionId: Int = null, $pageNumber: Int!, $pageLength: Int!, $c
         id itemId lotNumber lead description estimate bidAmount bidQuantity quantity ringNumber
         shippingOffered pictureCount
         featuredPicture { description fullSizeLocation hdThumbnailLocation thumbnailLocation }
+        pictures { fullSizeLocation hdThumbnailLocation }
         category { id baseCategoryId parentCategoryId categoryName fullCategory uRLPath }
         lotState { ...lotState }
         auction { ...auctionMinimum }
@@ -275,6 +276,20 @@ def slugify(text: str) -> str:
     return s[:80] or "lot"
 
 
+
+def pictures_of(raw: dict[str, Any]) -> list[str] | None:
+    """Full-size photo URLs, in listing order. None when the query did not ask for pictures, so a
+    state-only refresh never wipes the ones a scan already stored."""
+    pics = raw.get("pictures")
+    if not isinstance(pics, list):
+        return None
+    out: list[str] = []
+    for p in pics:
+        u = (p or {}).get("fullSizeLocation") or (p or {}).get("hdThumbnailLocation") or ""
+        if u and u not in out:
+            out.append(u)
+    return out
+
 def normalize_lot(raw: dict[str, Any], *, fetched_at: float, site_url: str = "https://hibid.com",
                   default_premium: float = 0.15) -> dict[str, Any]:
     st = raw.get("lotState") or {}
@@ -302,6 +317,8 @@ def normalize_lot(raw: dict[str, Any], *, fetched_at: float, site_url: str = "ht
         "image": pic.get("hdThumbnailLocation") or pic.get("thumbnailLocation") or pic.get("fullSizeLocation"),
         "image_full": pic.get("fullSizeLocation"),
         "picture_count": raw.get("pictureCount"),
+        # Every photo from the first scan, so the dashboards can show them and the appraiser reads them all.
+        "pictures": pictures_of(raw),
         "shipping_offered": bool(raw.get("shippingOffered")),
         "url": f"{site_url}/lot/{lot_id}/{slugify(title)}",
         # auction

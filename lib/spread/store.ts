@@ -141,6 +141,14 @@ class SupabaseStore implements Store {
   constructor(private sb: SB) {}
 
   async upsertLots(lots: Lot[]) {
+    // A lot-state refresh carries no pictures; without this merge it would wipe the ones a scan stored.
+    const blind = lots.filter((l) => !l.pictures).map((l) => l.id);
+    const kept = new Map<number, string[]>();
+    for (let i = 0; i < blind.length; i += 200) {
+      const { data } = await this.sb.from("spread_lots").select("id, data->pictures").in("id", blind.slice(i, i + 200));
+      for (const r of (data ?? []) as { id: number; pictures: string[] | null }[]) if (r.pictures?.length) kept.set(r.id, r.pictures);
+    }
+    lots = lots.map((l) => (!l.pictures && kept.has(l.id) ? { ...l, pictures: kept.get(l.id) } : l));
     for (let i = 0; i < lots.length; i += 200) {
       const rows = lots.slice(i, i + 200).map((l) => ({
         id: l.id, title: l.title, category: l.category, category_path: l.category_path, auction_id: l.auction_id ?? null,
