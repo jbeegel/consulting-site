@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300; // a scan values several lots with web search; each takes 10–60s
 
 export async function POST(req: Request) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   const body = (await req.json().catch(() => ({}))) as Partial<ScanParams>;
   const params: ScanParams = {
     status: body.status || "OPEN", hours: body.hours ?? 24, category: body.category ?? null,

@@ -44,6 +44,9 @@ const clamp = (x: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, x
 export const MYSTERY_QUERIES = [
   "misc", "miscellaneous lot", "assorted lot", "box lot", "shelf lot", "contents of drawer",
   "junk drawer", "knick knacks", "smalls lot", "estate box lot", "unsorted lot", "grab bag",
+  "misc advertising", "vintage collectibles", "garage lot", "small antiques", "advertising lot", "dresser items",
+  "desk items", "old tins", "estate box", "garage collectibles", "small metal items", "vintage household",
+  "old store items", "assorted advertising", "contents of shelf", "contents of cabinet",
 ];
 
 /**

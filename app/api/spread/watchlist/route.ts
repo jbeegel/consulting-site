@@ -15,7 +15,7 @@ export const dynamic = "force-dynamic";
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
 
 export async function GET(req: Request) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   const w = await new Scanner().watchlist(true);
   return NextResponse.json({
     watchlist: w,
@@ -37,7 +37,7 @@ export async function GET(req: Request) {
  * keeps its current value, so the UI can send just the one switch that changed.
  */
 export async function POST(req: Request) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   const body = (await req.json().catch(() => ({}))) as {
     lenses?: { id: string; enabled?: boolean }[];
     custom_instructions?: string;

@@ -262,6 +262,9 @@ export interface Valuation {
   created_at: number;
   error: string;
   cache_hit?: boolean;
+  /** Estimated dollars this appraisal cost (tokens x list price, plus a flat per-search estimate). */
+  cost_usd?: number;
+  usage?: { input: number; output: number; cache_read: number; cache_write: number; searches: number };
 }
 
 export interface Score {
@@ -660,4 +663,112 @@ export interface MarketIntel {
   velocity_leaders: { lot_id: number; title: string; category: string; monthly_roi: number; liquidity_grade: string; eta: string; spread: number; landed_cost: number; ends_at: number | null }[];
   /** Valued high but effectively unsellable — the trap this layer exists to catch. */
   value_traps: { lot_id: number; title: string; category: string; mid: number | null; liquidity_grade: string; eta: string; reason: string }[];
+}
+
+// ----------------------------------------------------------------------------- people and the ledger
+/** Someone with a key to the tool. The owner sees everything; a partner sees their own book. */
+export interface User {
+  id: string;
+  name: string;
+  role: "owner" | "partner";
+  /** sha256 of the access key. The key itself is shown once, at creation, and never stored. */
+  key_hash: string;
+  email: string | null;
+  /** The owner's cut of this person's tracked profit, 0-1. */
+  share_pct: number;
+  /** Dollars of model spend this person may trigger per day (manual re-appraisals). */
+  daily_budget_usd: number;
+  /** HiBid bidder numbers, for matching wins when the archive exposes the winning bidder. */
+  bidder_numbers: string[];
+  /** eBay seller link, when they have authorised it. Tokens are server-side only. */
+  ebay: { refresh_token: string; expires_at: number; linked_at: number; username?: string } | null;
+  active: boolean;
+  created_at: number;
+  last_seen_at: number | null;
+  last_nudged_at: number | null;
+}
+
+export type EventKind = "view" | "bid_intent" | "won" | "lost" | "skip" | "listed" | "sale" | "kept" | "ebay_match" | "nudge" | "revalue";
+
+/** The immutable log: everything a person did with a lot, stamped with who and when. */
+export interface LedgerEvent {
+  id?: number;
+  user_id: string;
+  lot_id: number;
+  kind: EventKind;
+  amount: number | null;
+  at: number;
+  note: string;
+}
+
+export type PositionStatus = "watching" | "bidding" | "likely_won" | "won" | "lost" | "listed" | "sold" | "kept";
+
+/** One person's current state on one lot: the row the statement is built from. */
+export interface Position {
+  user_id: string;
+  lot_id: number;
+  title: string;
+  category: string;
+  auction_name: string | null;
+  lot_url: string;
+  status: PositionStatus;
+  /** What they said they would bid. */
+  bid_intent: number | null;
+  /** When the lot closed, and what it hammered for (from HiBid, not from them). */
+  closed_at: number | null;
+  hammer: number | null;
+  /** What they paid: the hammer they reported (or we inferred) plus premium, tax, pickup. */
+  won_price: number | null;
+  landed_cost: number | null;
+  won_at: number | null;
+  /** The quick-sale net the tool expected at the time of the win. The default settlement value. */
+  estimated_net: number | null;
+  listed_at: number | null;
+  list_price: number | null;
+  sale_price: number | null;
+  sale_at: number | null;
+  sale_channel: string;
+  sale_source: "manual" | "ebay" | "estimate" | "";
+  /** eBay orders that look like this lot but were not strong enough to apply automatically. */
+  ebay_candidates: { order_id: string; title: string; price: number; sold_at: number; score: number }[];
+  notes: string;
+  created_at: number;
+  updated_at: number;
+}
+
+/** One line of a monthly statement. */
+export interface StatementLine {
+  lot_id: number;
+  title: string;
+  lot_url: string;
+  status: PositionStatus;
+  won_at: number | null;
+  landed_cost: number | null;
+  sale_at: number | null;
+  sale_price: number | null;
+  /** What the line settles at: the reported sale, or the estimate once a win is overdue, or null while open. */
+  settled_value: number | null;
+  settled_basis: "sale" | "estimate" | "open" | "loss";
+  profit: number | null;
+  days_held: number | null;
+}
+
+export interface Statement {
+  user_id: string;
+  user_name: string;
+  month: string; // YYYY-MM
+  share_pct: number;
+  lines: StatementLine[];
+  totals: {
+    wins: number;
+    landed: number;
+    sold: number;
+    estimated: number;
+    open: number;
+    revenue: number;
+    profit: number;
+    owner_share: number;
+  };
+  /** Wins with no sale reported and no estimate yet: the list to chase. */
+  unresolved: StatementLine[];
 }

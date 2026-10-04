@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 async function run(req: Request) {
-  if (!authorized(req, { cron: true })) return deny();
+  if (!(await authorized(req, { cron: true }))) return deny();
   const scanner = new Scanner();
   const result = await scanner.scan({
     status: config.cronStatus, hours: config.cronHours, max_pages: config.cronMaxPages,

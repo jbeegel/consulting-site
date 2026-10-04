@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 export async function POST(req: Request) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   const body = (await req.json().catch(() => ({}))) as { ids?: number[] };
   const ids = (body.ids ?? []).map(Number).filter(Number.isFinite).slice(0, 60);
   try {

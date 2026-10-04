@@ -20,7 +20,7 @@ export const config = {
   hibidSite: str("SPREAD_HIBID_SITE") ?? "https://hibid.com",
   requestDelayMs: num("SPREAD_REQUEST_DELAY_MS", 400),
 
-  model: str("SPREAD_MODEL") ?? "claude-opus-5",
+  model: str("SPREAD_MODEL") ?? "claude-sonnet-5-5",
   valuer: (str("SPREAD_VALUER") ?? "auto") as "auto" | "claude" | "ebay" | "estimate" | "none",
   webSearch: bool("SPREAD_WEB_SEARCH", true),
   ebaySold: bool("SPREAD_EBAY_SOLD", true),
@@ -30,6 +30,13 @@ export const config = {
   maxImages: Math.max(0, Math.floor(num("SPREAD_MAX_IMAGES", 8))),
   valuePerRun: Math.floor(num("SPREAD_VALUE_PER_RUN", 12)),
   dailyValuationCap: Math.floor(num("SPREAD_DAILY_VALUATION_CAP", 150)),
+  /** Hard stop on model spend per day, in dollars, estimated from token usage. The count cap above is
+   *  the coarse limit; this is the one that protects the card. */
+  dailyCostUsd: num("SPREAD_DAILY_COST_USD", 1.5),
+  /** A win with no sale reported for this long settles at the tool's quick-sale estimate. */
+  settleDays: Math.max(7, num("SPREAD_SETTLE_DAYS", 60)),
+  /** The redirect-URL name from the eBay developer portal; needed only to link seller accounts. */
+  ebayRuName: str("EBAY_RU_NAME"),
   runBudgetMs: num("SPREAD_RUN_BUDGET_MS", 240_000), // stay under Vercel's maxDuration
 
   buyerPremium: num("SPREAD_BUYER_PREMIUM", 0.15),

@@ -393,6 +393,32 @@ function lotPrompt(lot: Lot, comps: Comp[], guidance = "", mystery = false): str
   return parts.join("\n");
 }
 
+/** List prices per million tokens, by model family. Cache reads are a tenth of input; a web search is
+ *  estimated flat. Close enough to stop a runaway day; not an invoice. */
+const PRICES: [RegExp, { input: number; output: number }][] = [
+  [/fable/i, { input: 10, output: 50 }],
+  [/opus-5-5/i, { input: 4, output: 20 }],
+  [/opus/i, { input: 5, output: 25 }],
+  [/sonnet-4/i, { input: 3, output: 15 }],
+  [/sonnet/i, { input: 2, output: 10 }],
+  [/haiku/i, { input: 1, output: 5 }],
+];
+const SEARCH_USD = 0.01;
+export type Usage = NonNullable<Valuation["usage"]>;
+export function estimateCost(model: string, u: Usage): number {
+  const p = PRICES.find(([re]) => re.test(model))?.[1] ?? { input: 5, output: 25 };
+  const usd = (u.input * p.input + u.cache_write * p.input * 1.25 + u.cache_read * p.input * 0.1 + u.output * p.output) / 1e6 + u.searches * SEARCH_USD;
+  return Math.round(usd * 10000) / 10000;
+}
+function addUsage(total: Usage, resp: Anthropic.Message): void {
+  const u = resp.usage;
+  total.input += u.input_tokens ?? 0;
+  total.output += u.output_tokens ?? 0;
+  total.cache_read += u.cache_read_input_tokens ?? 0;
+  total.cache_write += u.cache_creation_input_tokens ?? 0;
+  total.searches += (u as { server_tool_use?: { web_search_requests?: number } }).server_tool_use?.web_search_requests ?? 0;
+}
+
 export class ClaudeValuer {
   private client = new Anthropic();
   constructor(private model: string, private webSearch = true, private maxSearches = 3, private vision = true, private maxImages = 8) {}
@@ -429,15 +455,20 @@ export class ClaudeValuer {
     const messages: Anthropic.MessageParam[] = [{ role: "user", content }];
     let data: Record<string, unknown>;
     let searched = false;
+    const usage: Usage = { input: 0, output: 0, cache_read: 0, cache_write: 0, searches: 0 };
     // Cards get a deeper pass (APR, pop report, price-by-grade); so do mystery lots, where the searches
     // go on identifying the one piece that matters rather than on pricing a box.
     const searches = isCard(lot) || (isMystery && images.length > 0) ? 5 : this.maxSearches;
     try {
       let resp = await this.request(messages, searches);
+      addUsage(usage, resp);
       for (let i = 0; i < 3 && resp.stop_reason === "pause_turn"; i++) {
         messages.push({ role: "assistant", content: resp.content });
         resp = await this.request(messages, searches);
+        addUsage(usage, resp);
       }
+      v.usage = usage;
+      v.cost_usd = estimateCost(this.model, usage);
       if (resp.stop_reason === "refusal") {
         v.error = "model declined";
         return v;
@@ -447,6 +478,8 @@ export class ClaudeValuer {
       data = JSON.parse(text);
     } catch (e) {
       v.error = `${e instanceof Error ? e.name + ": " + e.message : String(e)}`.slice(0, 300);
+      v.usage = usage;
+      v.cost_usd = estimateCost(this.model, usage);
       return v;
     }
     const n = (k: string) => Number(data[k] ?? 0) || 0;

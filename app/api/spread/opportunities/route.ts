@@ -8,7 +8,7 @@ import type { IntelParams } from "@/lib/spread/types";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   const u = new URL(req.url);
   const hours = Number(u.searchParams.get("hours")) || null;
   const category = u.searchParams.get("category") || null;

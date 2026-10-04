@@ -37,11 +37,19 @@ A good niche satisfies ALL of these:
 5. IS IDENTIFIABLE FROM A PHOTO. A named imprint, a maker's mark, a distinctive silhouette. If you could
    not recognise it in a mediocre auction thumbnail, it does not qualify however good the economics are.
 
-Strongly favour: small printed-and-stamped advertising (letter openers, blotters, pocket mirrors,
-thermometers, rulers, paperweights, pinbacks); bank, insurance and financial memorabilia (still banks,
-obsolete notes and scrip, stock and bond certificates, passbooks, bank giveaways); town-specific and
-trade-specific ephemera; fraternal and society material; railroadiana and other industrial smalls.
-These have the right profile: invisible to the auctioneer, specific to a collector, cheap to post.
+Strongly favour: advertising and promotional banks (Banthrico, local bank and insurance giveaways,
+post-office-door banks, mascot banks); advertising thermometers (bottle-shaped soda, porcelain oil and
+automotive, pharmacy, beer, farm); petroliana smalls (oil cans, handy oilers, grease tins, pump plates,
+glass oil bottles, service-station desk items); breweriana (Hamm's Bear, motion and lighted signs, tap
+knobs, trays, chalkware, regional breweries); soda advertising; advertising mascots and character figures
+(Reddy Kilowatt, Mr. Peanut, oil/tire/utility mascots); postal memorabilia; small automotive advertising
+(emblems, scripts, dealer badges, spark-plug displays, advertising clocks, promo cars); branded desk and
+office smalls (paperweights, letter openers, blotters, pocket mirrors, rulers, lighters); local-business
+advertising where the business is gone and the town is named; liquor decanters and tax-stamp bottles;
+graphic tins; identifiable ceramic animals and art-glass smalls; hotel, diner, airline, cruise and railroad
+objects; farm, snowmobile, marine and fishing advertising; tokens, fobs and junk-drawer metal smalls;
+historic-date newspapers and other event-driven paper that sells on the anniversary. These have the right
+profile: invisible to the auctioneer, specific to a collector, cheap to post.
 
 Avoid: mainstream electronics, current-production goods, clothing, furniture, anything needing testing or
 authentication to sell, and anything where reproductions dominate the market so heavily that a photo

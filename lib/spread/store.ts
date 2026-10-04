@@ -1,7 +1,7 @@
 // Persistence for Spread Hunter. Supabase when configured (durable across serverless instances);
 // an in-process Map store otherwise so local dev and keyless deployments still work.
 import { db } from "@/lib/db";
-import type { CategorySummary, Lot, Outcome, ScanParams, ScanRecord, Thesis, Valuation } from "./types";
+import type { CategorySummary, LedgerEvent, Lot, Outcome, Position, ScanParams, ScanRecord, Thesis, User, Valuation } from "./types";
 
 export interface LotQuery {
   includeClosed?: boolean;
@@ -43,6 +43,18 @@ export interface Store {
   // --- small key/value settings (the watchlist, and whatever comes next)
   getSetting<T>(key: string): Promise<T | null>;
   putSetting(key: string, value: unknown): Promise<void>;
+  // --- spend: dollars of model cost on valuations created since `since`
+  costSince(sinceSeconds: number): Promise<number>;
+  // --- people and the ledger
+  users(): Promise<User[]>;
+  getUser(id: string): Promise<User | null>;
+  userByKeyHash(hash: string): Promise<User | null>;
+  saveUser(u: User): Promise<void>;
+  logEvent(e: LedgerEvent): Promise<void>;
+  events(q: { userId?: string; lotId?: number; since?: number; limit?: number }): Promise<LedgerEvent[]>;
+  getPosition(userId: string, lotId: number): Promise<Position | null>;
+  savePosition(p: Position): Promise<void>;
+  positions(q: { userId?: string; status?: Position["status"][]; since?: number; limit?: number }): Promise<Position[]>;
   readonly kind: "supabase" | "memory";
 }
 
@@ -56,6 +68,9 @@ class MemoryStore implements Store {
   private thes = new Map<string, Thesis>();
   private settings = new Map<string, unknown>();
   private scans: ScanRecord[] = [];
+  private usersMap = new Map<string, User>();
+  private eventLog: LedgerEvent[] = [];
+  private posMap = new Map<string, Position>();
 
   async upsertLots(lots: Lot[]) {
     for (const l of lots) {
@@ -129,6 +144,26 @@ class MemoryStore implements Store {
   async deleteThesis(id: string) { this.thes.delete(id); }
   async getSetting<T>(key: string) { return (this.settings.get(key) as T) ?? null; }
   async putSetting(key: string, value: unknown) { this.settings.set(key, value); }
+  async costSince(since: number) {
+    return [...this.vals.values()].filter((v) => v.created_at >= since && !v.cache_hit).reduce((a, v) => a + (v.cost_usd ?? 0), 0);
+  }
+  async users() { return [...this.usersMap.values()]; }
+  async getUser(id: string) { return this.usersMap.get(id) ?? null; }
+  async userByKeyHash(hash: string) { return [...this.usersMap.values()].find((u) => u.key_hash === hash) ?? null; }
+  async saveUser(u: User) { this.usersMap.set(u.id, u); }
+  async logEvent(e: LedgerEvent) { this.eventLog.push({ ...e, id: this.eventLog.length + 1 }); }
+  async events(q: { userId?: string; lotId?: number; since?: number; limit?: number }) {
+    return this.eventLog
+      .filter((e) => (!q.userId || e.user_id === q.userId) && (!q.lotId || e.lot_id === q.lotId) && (!q.since || e.at >= q.since))
+      .sort((a, b) => b.at - a.at).slice(0, q.limit ?? 2000);
+  }
+  async getPosition(userId: string, lotId: number) { return this.posMap.get(userId + ":" + lotId) ?? null; }
+  async savePosition(p: Position) { this.posMap.set(p.user_id + ":" + p.lot_id, p); }
+  async positions(q: { userId?: string; status?: Position["status"][]; since?: number; limit?: number }) {
+    return [...this.posMap.values()]
+      .filter((p) => (!q.userId || p.user_id === q.userId) && (!q.status || q.status.includes(p.status)) && (!q.since || p.updated_at >= q.since))
+      .sort((a, b) => b.updated_at - a.updated_at).slice(0, q.limit ?? 5000);
+  }
 }
 
 // ----------------------------------------------------------------------------- supabase
@@ -312,13 +347,74 @@ class SupabaseStore implements Store {
       .upsert({ key, value, updated_at: iso(Date.now() / 1000) }, { onConflict: "key" });
     if (error) throw new Error("spread_settings upsert: " + error.message);
   }
+  async costSince(since: number) {
+    const { data } = await this.sb.from("spread_valuations").select("data->cost_usd").gte("created_at", iso(since)!).eq("cache_hit", false);
+    return ((data ?? []) as { cost_usd: number | null }[]).reduce((a, r) => a + (Number(r.cost_usd) || 0), 0);
+  }
+  private row2user(r: { data: User; last_seen_at?: string | null }): User {
+    return { ...r.data, last_seen_at: r.last_seen_at ? secs(r.last_seen_at) : r.data.last_seen_at ?? null };
+  }
+  async users() {
+    const { data, error } = await this.sb.from("spread_users").select("data, last_seen_at").order("created_at", { ascending: true });
+    if (error) throw new Error("spread_users select: " + error.message);
+    return (data ?? []).map((r) => this.row2user(r as { data: User; last_seen_at: string | null }));
+  }
+  async getUser(id: string) {
+    const { data } = await this.sb.from("spread_users").select("data, last_seen_at").eq("id", id).maybeSingle();
+    return data ? this.row2user(data as { data: User; last_seen_at: string | null }) : null;
+  }
+  async userByKeyHash(hash: string) {
+    const { data } = await this.sb.from("spread_users").select("data, last_seen_at").eq("key_hash", hash).maybeSingle();
+    return data ? this.row2user(data as { data: User; last_seen_at: string | null }) : null;
+  }
+  async saveUser(u: User) {
+    const { error } = await this.sb.from("spread_users").upsert({
+      id: u.id, name: u.name, role: u.role, key_hash: u.key_hash, email: u.email, share_pct: u.share_pct,
+      daily_budget_usd: u.daily_budget_usd, active: u.active, created_at: iso(u.created_at), last_seen_at: iso(u.last_seen_at), data: u,
+    }, { onConflict: "id" });
+    if (error) throw new Error("spread_users upsert: " + error.message);
+  }
+  async logEvent(e: LedgerEvent) {
+    const { error } = await this.sb.from("spread_events").insert({ user_id: e.user_id, lot_id: e.lot_id, kind: e.kind, amount: e.amount, at: iso(e.at), note: e.note });
+    if (error) throw new Error("spread_events insert: " + error.message);
+  }
+  async events(q: { userId?: string; lotId?: number; since?: number; limit?: number }) {
+    let qb = this.sb.from("spread_events").select("id, user_id, lot_id, kind, amount, at, note").order("at", { ascending: false }).limit(q.limit ?? 2000);
+    if (q.userId) qb = qb.eq("user_id", q.userId);
+    if (q.lotId) qb = qb.eq("lot_id", q.lotId);
+    if (q.since) qb = qb.gte("at", iso(q.since)!);
+    const { data, error } = await qb;
+    if (error) throw new Error("spread_events select: " + error.message);
+    return (data ?? []).map((r) => ({ id: r.id as number, user_id: r.user_id as string, lot_id: Number(r.lot_id), kind: r.kind as LedgerEvent["kind"], amount: r.amount as number | null, at: secs(r.at as string) ?? 0, note: (r.note as string) ?? "" }));
+  }
+  async getPosition(userId: string, lotId: number) {
+    const { data } = await this.sb.from("spread_positions").select("data").eq("user_id", userId).eq("lot_id", lotId).maybeSingle();
+    return (data?.data as Position) ?? null;
+  }
+  async savePosition(p: Position) {
+    const { error } = await this.sb.from("spread_positions").upsert({
+      user_id: p.user_id, lot_id: p.lot_id, status: p.status, closed_at: iso(p.closed_at), won_at: iso(p.won_at), sale_at: iso(p.sale_at),
+      landed_cost: p.landed_cost, sale_price: p.sale_price, updated_at: iso(p.updated_at), data: p,
+    }, { onConflict: "user_id,lot_id" });
+    if (error) throw new Error("spread_positions upsert: " + error.message);
+  }
+  async positions(q: { userId?: string; status?: Position["status"][]; since?: number; limit?: number }) {
+    let qb = this.sb.from("spread_positions").select("data").order("updated_at", { ascending: false }).limit(q.limit ?? 5000);
+    if (q.userId) qb = qb.eq("user_id", q.userId);
+    if (q.status?.length) qb = qb.in("status", q.status);
+    if (q.since) qb = qb.gte("updated_at", iso(q.since)!);
+    const { data, error } = await qb;
+    if (error) throw new Error("spread_positions select: " + error.message);
+    return (data ?? []).map((r) => r.data as Position);
+  }
 }
 
-let memory: MemoryStore | null = null;
+// One memory store per process, pinned on globalThis so every route module in a dev server shares it.
+const g = globalThis as { __spreadMemoryStore?: MemoryStore };
 export function getStore(): Store {
   const sb = db();
   if (sb) return new SupabaseStore(sb);
-  return (memory ??= new MemoryStore());
+  return (g.__spreadMemoryStore ??= new MemoryStore());
 }
 
 export function summarizeCategories(lots: Lot[], scoreOf: (l: Lot) => number | null): CategorySummary[] {

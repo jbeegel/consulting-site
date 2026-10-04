@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 300;
 
 export async function POST(req: Request) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   const body = (await req.json().catch(() => ({}))) as { max_theses?: number; ids?: string[] };
   const scanner = new Scanner();
   const all = await scanner.theses();

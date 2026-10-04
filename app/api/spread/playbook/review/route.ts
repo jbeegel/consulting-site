@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   const scanner = new Scanner();
   const { theses, proposed } = await scanner.playbookReview();
   const accept = new URL(req.url).searchParams.get("accept") === "true";

@@ -169,6 +169,7 @@
 <header>
   <h1>Spread Hunter</h1>
   <div class="sub" id="sub">Loading…</div>
+  <div class="sub" id="me"></div>
   <div class="bar">
     <button class="primary" id="load">Refresh</button>
     <select id="sort">
@@ -262,7 +263,7 @@ var matchPill = function (c) {
 var MATCH_RANK = { exact: 0, same_model: 1, variant: 2, category: 3 };
 
 // ---------------------------------------------------------------- state
-var STATE = { rows: [], demo: false, cfg: null };
+var STATE = { rows: [], demo: false, cfg: null, me: null, positions: {} };
 
 function headers() {
   var k = localStorage.getItem(KEY);
@@ -272,6 +273,43 @@ function headers() {
 function note(html, isErr) {
   document.getElementById("msg").innerHTML = html
     ? '<div class="banner' + (isErr ? " err" : "") + '">' + html + "</div>" : "";
+}
+
+// ---------------------------------------------------------------- the ledger
+// Every "I'm bidding", "won it" and lot-link click is stamped with who did it, so the book page and
+// the monthly statement build themselves. Sample mode never writes anything.
+var POS = { watching: ["watching", "p-flat"], bidding: ["you're bidding", "p-warn"], likely_won: ["likely won — confirm", "p-acc"],
+            won: ["you won", "p-good"], lost: ["passed", "p-flat"], listed: ["listed", "p-warn"], sold: ["sold", "p-good"], kept: ["kept", "p-flat"] };
+function posPill(lotId) {
+  var p = STATE.positions[lotId]; if (!p) return "";
+  var m = POS[p.status] || [p.status, "p-flat"];
+  return ' <span class="pill ' + m[1] + '">' + m[0] + (p.bid_intent && p.status === "bidding" ? " " + money(p.bid_intent) : "") + "</span>";
+}
+async function logEvent(lotId, kind, amount, note) {
+  if (STATE.demo) return null;
+  var h = headers(); h["content-type"] = "application/json";
+  try {
+    var res = await fetch("/api/spread/events", { method: "POST", headers: h, keepalive: true,
+      body: JSON.stringify({ lot_id: lotId, kind: kind, amount: amount == null ? undefined : amount, note: note || "" }) });
+    if (!res.ok) return null;
+    var j = await res.json();
+    if (j.position) STATE.positions[lotId] = j.position;
+    return j.position;
+  } catch (e) { return null; }
+}
+async function loadMe() {
+  try {
+    var me = await fetch("/api/spread/me", { headers: headers() });
+    if (!me.ok) return;
+    var j = await me.json();
+    STATE.me = j.user;
+    var book = await fetch("/api/spread/book", { headers: headers() });
+    if (book.ok) { var b = await book.json(); STATE.positions = {}; (b.positions || []).forEach(function (p) { STATE.positions[p.lot_id] = p; });
+      var un = (b.unresolved || []).length;
+      document.getElementById("me").innerHTML = "Signed in as <b>" + esc(j.user.name) + "</b> · <a href=\"/spread/book.html\" style=\"color:var(--accent)\">my book</a>" +
+        (un ? ' · <span class="pill p-warn">' + un + " win" + (un > 1 ? "s" : "") + " to settle</span>" : "");
+    }
+  } catch (e) { /* the page works without a ledger */ }
 }
 
 // ---------------------------------------------------------------- the math
@@ -366,7 +404,7 @@ function gallery(lot, v, idx) {
   var h = ['<div class="gallery">'];
   h.push('<div class="hero">');
   if (pics.length) {
-    h.push('<a href="' + esc(lot.url || pics[0]) + '" target="_blank" rel="noopener">' +
+    h.push('<a href="' + esc(lot.url || pics[0]) + '" target="_blank" rel="noopener" data-open="' + lot.id + '">' +
            '<img src="' + esc(pics[0]) + '" alt="lot photo" data-hero="' + idx + '" loading="lazy"></a>');
     h.push('<div class="n" data-heron="' + idx + '">1 / ' + pics.length + "</div>");
   } else {
@@ -479,10 +517,10 @@ function card(o, idx) {
 
   // --- what it is
   var title = lot.url
-    ? '<a href="' + esc(lot.url) + '" target="_blank" rel="noopener">' + esc(lot.title) + "</a>"
+    ? '<a href="' + esc(lot.url) + '" target="_blank" rel="noopener" data-open="' + lot.id + '">' + esc(lot.title) + "</a>"
     : esc(lot.title);
   h.push('<div class="top">');
-  h.push('<div><div class="lot">' + title + "</div>");
+  h.push('<div><div class="lot">' + title + posPill(lot.id) + "</div>");
   h.push('<div class="where">' + esc(lot.auction_name || "auction") +
          (lot.city ? " · " + esc(lot.city) + (lot.state ? ", " + esc(lot.state) : "") : "") + " · " +
          countdown(s.seconds_left) + " · current bid <b>" + money(lot.high_bid || lot.min_bid || 0) + "</b>" +
@@ -577,6 +615,17 @@ function card(o, idx) {
     h.push('<button class="small" data-setbid="' + idx + '" data-val="' + plan.walk_away_bid + '">walk-away ' + money(plan.walk_away_bid) + "</button>");
   }
   h.push('<span class="k" style="font-size:13px;color:var(--muted)">change it to see the numbers move</span></div>');
+  if (!STATE.demo) {
+    var p = STATE.positions[lot.id], st = p ? p.status : "";
+    h.push('<div class="bidbox" data-ledger="' + lot.id + '">');
+    if (st === "won" || st === "sold" || st === "kept" || st === "listed") h.push('<span class="k" style="font-size:13px;color:var(--muted)">In your book — <a href="/spread/book.html" style="color:var(--accent)">record the sale</a></span>');
+    else {
+      h.push('<button class="small" data-led="bid_intent" data-lot="' + lot.id + '" data-idx="' + idx + '">I\u2019m bidding this</button>');
+      h.push('<button class="small" data-led="won" data-lot="' + lot.id + '" data-idx="' + idx + '">Won it</button>');
+      h.push('<button class="small" data-led="skip" data-lot="' + lot.id + '">Pass</button>');
+    }
+    h.push("</div>");
+  }
   h.push('<div data-math="' + idx + '">' + mathBlock(o, bid, plan) + "</div>");
 
   if ((v.risks || []).length) {
@@ -708,6 +757,26 @@ function draw() {
       if (inp) { inp.value = v; recompute(Number(i), v); }
     });
   });
+  // The ledger: bidding / won / pass, and which lots were actually opened.
+  Array.prototype.forEach.call(el.querySelectorAll("button[data-led]"), function (btn) {
+    btn.addEventListener("click", async function () {
+      var lotId = Number(btn.getAttribute("data-lot")), kind = btn.getAttribute("data-led"), amount = null;
+      var inp = el.querySelector('input[data-bid="' + btn.getAttribute("data-idx") + '"]');
+      if (kind === "bid_intent") { amount = inp ? Number(inp.value) : null; if (!amount) { alert("Enter the bid you plan to place first."); return; } }
+      if (kind === "won") { var w = prompt("What did it hammer for (your winning bid, before premium)?", inp ? inp.value : ""); if (w === null) return; amount = Number(w) || 0; }
+      btn.disabled = true;
+      var p = await logEvent(lotId, kind, amount, "");
+      var box = el.querySelector('[data-ledger="' + lotId + '"]');
+      if (!p) { btn.disabled = false; if (box) box.insertAdjacentHTML("beforeend", '<span class="pill p-bad">could not save</span>'); return; }
+      if (box) box.innerHTML = '<span class="pill ' + (POS[p.status] || ["", "p-flat"])[1] + '">' + (POS[p.status] || [p.status])[0] + "</span> " +
+        (p.status === "won" ? '<a href="/spread/book.html" style="color:var(--accent);font-size:13px">it\u2019s in your book</a>' : '<button class="small" data-led="won" data-lot="' + lotId + '" data-idx="' + btn.getAttribute("data-idx") + '">Won it</button>');
+      var again = box && box.querySelector("button[data-led]");
+      if (again) again.addEventListener("click", function () { btn.getAttribute && (async function () { var w2 = prompt("What did it hammer for?"); if (w2 === null) return; var p2 = await logEvent(lotId, "won", Number(w2) || 0, ""); if (p2) box.innerHTML = '<span class="pill p-good">you won</span> <a href="/spread/book.html" style="color:var(--accent);font-size:13px">it\u2019s in your book</a>'; })(); });
+    });
+  });
+  Array.prototype.forEach.call(el.querySelectorAll("a[data-open]"), function (a) {
+    a.addEventListener("click", function () { logEvent(Number(a.getAttribute("data-open")), "view", null, ""); });
+  });
   // Thumbnails swap the hero photo.
   Array.prototype.forEach.call(el.querySelectorAll("img[data-thumb]"), function (th) {
     th.addEventListener("click", function () {
@@ -738,6 +807,7 @@ function readCfg(j) {
 
 function loadDemo() {
   STATE.demo = true;
+  document.getElementById("me").innerHTML = "";
   STATE.cfg = { buyerPremium: 0.15, salesTax: 0.06, pickupCost: 20 };
   STATE.rows = SAMPLE;
   note("<b>Sample data.</b> These three lots are made up, so you can see the layout " +
@@ -758,7 +828,7 @@ async function load() {
 
     var cfgRes = await fetch("/api/spread/config", { headers: headers() });
     if (cfgRes.status === 401) {
-      var pw = prompt("Spread Hunter password:");
+      var pw = prompt("Your Spread Hunter access key:");
       if (pw) { localStorage.setItem(KEY, pw); btn.disabled = false; btn.textContent = "Refresh"; return load(); }
       throw new Error("A password is required.");
     }
@@ -768,6 +838,7 @@ async function load() {
     if (!res.ok) throw new Error("The server said " + res.status + ".");
     var data = await res.json();
     STATE.rows = (data.opportunities || []).filter(function (o) { return o && o.lot && o.score; });
+    await loadMe();
     document.getElementById("sub").textContent =
       STATE.rows.length + " lot" + (STATE.rows.length === 1 ? "" : "s") +
       " · updated " + new Date().toLocaleTimeString();
