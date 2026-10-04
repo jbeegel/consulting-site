@@ -17,6 +17,147 @@ import type { Thesis } from "./types";
 type Seed = Omit<Partial<Thesis>, "name"> & { name: string };
 
 export const SEED_THESES: Seed[] = [
+  // ---------------------------------------------------------------- the hunting taxonomy's top families
+  {
+    name: "Advertising and promotional banks",
+    family: "Advertising banks",
+    queries: ["vintage advertising bank", "banthrico bank", "promotional coin bank", "post office door bank", "cast metal advertising bank"],
+    must_any: ["advertising bank", "banthrico", "coin bank", "still bank", "promotional bank", "post office box door", "po box door bank", "mailbox bank", "savings bank"],
+    negative: ["reproduction", "piggy bank modern", "power bank", "blood bank", "food bank", "bank statement", "bank of america card"],
+    ship_cost: 9,
+    ebay_category: "Collectibles > Banks, Registers & Vending > Banks",
+    rationale:
+      "Banthrico, local banks, insurance agents, breweries, bottlers and oil companies all gave away banks. Small, "
+      + "searchable, and bought by three pools at once: the brand collector, the still-bank collector and the "
+      + "local-history buyer. A bank built around a real post-office box door adds a fourth. Usually catalogued "
+      + "as 'metal box' or 'coin bank'.",
+    tells: [
+      "Read the imprint: the business, its town and state, and whether it still exists",
+      "Banthrico is marked on the base; its building and vehicle shapes are the strong ones",
+      "A real post-office box door (brass, with a combination or key lock) beats a cast copy",
+      "Mascot and figural banks (Reddy Kilowatt, bears, tires, gas pumps, bottles) cross into character collecting",
+      "Original key or working combination adds; repaints and replaced traps subtract",
+    ],
+    risks: ["Reproduction cast-iron banks are everywhere: check casting seams and wear placement", "Pot-metal corrosion and missing traps"],
+    origin: "seed",
+    confidence: 0.5,
+  },
+  {
+    name: "Petroliana oil cans and oilers",
+    family: "Petroliana",
+    queries: ["vintage oil can", "handy oiler advertising", "long spout oil can", "vintage grease tin", "outboard oil can vintage", "snowmobile oil can"],
+    must_any: ["oil can", "oiler", "grease tin", "grease can", "quart can", "pint can", "motor oil", "outboard oil", "2 cycle", "two cycle", "oil bottle", "pump plate"],
+    negative: ["reproduction", "modern", "empty plastic", "watering can", "garden"],
+    ship_cost: 12,
+    ebay_category: "Collectibles > Advertising > Gas & Oil",
+    rationale:
+      "Every brand that ever sold lubricant put it in a lithographed can, and the cans survive in garages and "
+      + "estate box lots. Obsolete brands, snowmobile and outboard oils, household oilers (Singer, 3-In-One) and "
+      + "service-station desk items each have their own collector base. Texaco, Shell, Gulf, Quaker State, Pennzoil, "
+      + "Esso, Standard, D-X, Sunoco, Mobil, Union 76, Kendall, Valvoline, Castrol, Bardahl, John Deere, Sears/Allstate.",
+    tells: ["Graphics strength and obsolete brand first", "Full, sealed or NOS cans step up", "Dents, rust and fading on the display side matter most", "Small oilers and grease tins ship cheaply; full quart cans do not"],
+    risks: ["Leaking or full cans cannot ship by air", "Common brands in poor condition are worth a few dollars"],
+    origin: "seed",
+    confidence: 0.5,
+  },
+  {
+    name: "Breweriana and Hamm's Bear",
+    family: "Breweriana",
+    queries: ["hamm's bear", "vintage beer sign", "brewery advertising lot", "beer motion sign", "tap knob lot", "chalkware beer"],
+    must_any: ["hamm's", "hamms", "beer sign", "brewery", "tap knob", "tap handle", "beer tray", "beer thermometer", "breweriana", "schlitz", "pabst", "blatz", "stroh", "falstaff", "grain belt", "olympia beer"],
+    negative: ["reproduction", "neon modern", "bud light modern", "home brew kit"],
+    ship_cost: 12,
+    ebay_category: "Collectibles > Breweriana, Beer",
+    rationale:
+      "Hamm's Bear material is the standout: early ceramic and Red Wing figures and working motion signs sell for "
+      + "hundreds, and they appear in box lots described as 'bear figurine' or 'beer sign'. Regional defunct "
+      + "breweries have loyal local collectors.",
+    tells: ["Hamm's Bear: ceramic vs vinyl, Red Wing marks on the base, generation of the figure", "Motion and lighted signs: does it work; original motor and lens", "Tap knobs with enamel inserts and regional breweries", "Chalkware mascots with original paint"],
+    risks: ["Motion signs often need motors; price as non-working unless shown running", "Reproduction Hamm's pieces exist"],
+    origin: "seed",
+    confidence: 0.5,
+  },
+  {
+    name: "Advertising mascots and character figures",
+    family: "Advertising ephemera",
+    queries: ["reddy kilowatt", "advertising mascot figure", "mr peanut bank", "vintage advertising figure", "tire company mascot", "oil company mascot"],
+    must_any: ["reddy kilowatt", "mr peanut", "mr. peanut", "planters peanut", "mascot", "advertising figure", "advertising statue", "bibendum", "michelin man", "big boy", "speedy alka", "elsie the cow", "poppin fresh"],
+    negative: ["reproduction", "modern funko", "pop vinyl", "plush modern"],
+    ship_cost: 10,
+    ebay_category: "Collectibles > Advertising",
+    rationale:
+      "Brand collector plus character collector plus advertising buyer: three pools for one object. Reddy "
+      + "Kilowatt (utility companies), Mr. Peanut, oil and tire mascots, insurance and utility figures in vinyl, "
+      + "ceramic, rubber, chalkware or translucent plastic. Often sold as 'vintage figurine'.",
+    tells: ["Name the character and the company that issued it", "Material and era: early ceramic and painted metal beat later vinyl", "Scripto VU lighters and other Reddy Kilowatt crossover pieces", "Counter-display sizes step up sharply"],
+    risks: ["Repaints and reproductions on the famous characters", "Missing parts (hats, signs, bases)"],
+    origin: "seed",
+    confidence: 0.5,
+  },
+  {
+    name: "Small automotive advertising: emblems, spark plugs, clocks",
+    family: "Automobilia",
+    queries: ["vintage car emblem lot", "hood ornament lot", "dealer badge vintage", "champion spark plug display", "pam advertising clock", "amt promo car", "dealership promotional"],
+    must_any: ["emblem", "emblems", "hood ornament", "trunk script", "dealer badge", "dealership", "spark plug", "champion", "autolite", "pam clock", "advertising clock", "promo car", "promotional model", "license plate topper"],
+    negative: ["reproduction", "modern", "diecast lot modern", "hot wheels"],
+    ship_cost: 9,
+    ebay_category: "Collectibles > Transportation > Automobilia",
+    rationale:
+      "Boards of emblems and 'misc car parts' lots hide dozens of individually searchable $10-50 pieces; "
+      + "oversized Champion and AC spark-plug displays and PAM-style advertising clocks turn up in $5 mixed lots "
+      + "and sell for $100-class money. Dealer promos and AMT models have year/colour collectors.",
+    tells: ["Read every script and emblem: make, model and year", "Spark-plug displays: oversized models and counter cabinets", "Clocks: working, original dial and crystal, maker (PAM, Pam Clock Co., Telechron)", "Promo cars: unusual colours and dealership stamps"],
+    risks: ["Reproduction emblems and clock housings", "Clocks need working movements to reach the top of the range"],
+    origin: "seed",
+    confidence: 0.45,
+  },
+  {
+    name: "Postal and post-office memorabilia",
+    family: "Postal",
+    queries: ["post office box door", "postal bank", "railway mail", "postal scale vintage", "post office lock"],
+    must_any: ["post office", "postal", "po box door", "p.o. box", "mailbox bank", "railway mail", "rpo", "letter box", "stamp dispenser"],
+    negative: ["reproduction", "modern mailbox", "usps uniform modern"],
+    ship_cost: 10,
+    ebay_category: "Collectibles > Historical Memorabilia > Postal",
+    rationale: "Dedicated collectors, and the objects are almost always buried in 'bank', 'wood box' or 'metal box' lots.",
+    tells: ["Real brass box doors with eagle, combination or key locks and door numbers", "Railway mail and RPO pieces", "Postal scales with maker and date"],
+    risks: ["Cast reproduction doors mounted on new wood"],
+    origin: "seed",
+    confidence: 0.45,
+  },
+  {
+    name: "Identifiable ceramic animals and art-glass smalls",
+    family: "Decorative smalls",
+    queries: ["rinconada", "hagen renaker", "beswick animal", "josef originals", "fenton glass animal", "mosser glass", "uranium glass lot", "west german pottery"],
+    must_any: ["rinconada", "hagen renaker", "hagen-renaker", "beswick", "royal doulton", "goebel", "josef originals", "lefton", "napco", "freeman mcfarlin", "fenton", "mosser", "boyd glass", "viking glass", "blenko", "uranium glass", "carnival glass", "west german", "studio pottery", "fat lava"],
+    negative: ["reproduction", "resin", "modern decor", "home interiors"],
+    ship_cost: 9,
+    ebay_category: "Collectibles > Decorative Collectibles",
+    rationale:
+      "The decomposition setup: a cheap lot of 'figurines' or 'glass' where the maker is on the base and each "
+      + "animal is individually searchable. Small, colourful, easy to photograph and post.",
+    tells: ["Turn each piece over and read the mark: Rinconada incised, Hagen-Renaker paper labels, Beswick and Doulton backstamps", "Uranium glass fluoresces; carnival glass colour and pattern decide", "Rare colours and discontinued moulds are the money"],
+    risks: ["Chips, repairs and crazing", "Generic unmarked decor is worth nothing — identify or discard"],
+    origin: "seed",
+    confidence: 0.45,
+  },
+  {
+    name: "Historic-date newspapers and event paper",
+    family: "Event-driven paper",
+    queries: ["vintage newspaper lot", "historic newspaper", "kennedy assassination newspaper", "war ends newspaper", "moon landing newspaper", "pearl harbor newspaper"],
+    must_any: ["newspaper", "newspapers", "front page", "extra edition", "headline"],
+    negative: ["reprint", "reproduction", "replica", "facsimile", "commemorative reprint", "modern"],
+    ship_cost: 8,
+    ebay_category: "Collectibles > Historical Memorabilia",
+    rationale:
+      "Papers from the day of a famous event — JFK, V-J Day, Pearl Harbor, the moon landing, a title win — sell "
+      + "fast and sell again every anniversary, and arrive in estate lots as 'old newspapers'. Flat, light, cheap "
+      + "to post in a rigid mailer.",
+    tells: ["The date and the headline are the whole value; read them", "City of publication and a local angle add", "Complete issues beat single pages; original folds and toning are fine, water damage is not", "Reprints (often on glossier paper, with later copyright lines) are the main trap"],
+    risks: ["Reprint editions of famous front pages are common", "Brittle paper does not survive handling"],
+    origin: "seed",
+    confidence: 0.5,
+  },
   // ---------------------------------------------------------------- advertising ephemera
   {
     name: "Advertising letter openers",
@@ -93,8 +234,13 @@ export const SEED_THESES: Seed[] = [
       "Hardware stores, feed mills, banks and implement dealers gave these away. Yardsticks in particular "
       + "are near-worthless to an auctioneer, sell steadily to sign-and-advertising collectors, and ship "
       + "cheaply in a triangular tube.",
-    tells: ["Named town and state", "Porcelain or embossed tin beats printed masonite", "Farm implement, seed and brewery imprints lead"],
-    risks: ["Warping and paint loss", "Long items cost more to ship than people expect"],
+    tells: [
+      "Named town and state", "Porcelain or embossed tin beats printed masonite", "Farm implement, seed and brewery imprints lead",
+      "Thermometers: EXACT dimensions decide the price (NuGrape 16-17in, Hires 28-29in, Orange Crush 29in, Prestone 36in sell in different brackets)",
+      "Working tube, original paint, maker mark, mounting holes intact; chips and restoration drop a bracket",
+      "Bottle-shaped soda thermometers and porcelain oil/automotive examples lead; small 10-18in ones ship easily",
+    ],
+    risks: ["Warping and paint loss", "Long items cost more to ship than people expect", "Reproduction tin thermometers are common for the famous soda brands"],
     origin: "seed",
     confidence: 0.4,
   },

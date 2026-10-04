@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Book</title>
+<style>
+  :root{
+    --bg:#f6f7f9; --card:#fff; --ink:#15181d; --muted:#5e6672; --line:#e3e6ea;
+    --good:#0f7a4d; --goodbg:#e7f6ee; --warn:#8a5a00; --warnbg:#fdf3e0;
+    --bad:#a32b2b; --badbg:#fbeaea; --accent:#1f4fd8; --chip:#eef1f5;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#111317; --card:#191c22; --ink:#e9ecf1; --muted:#9aa3b0; --line:#2b3039;
+      --good:#5bd39b; --goodbg:#12301f; --warn:#e0ae4e; --warnbg:#332713;
+      --bad:#ef8a8a; --badbg:#3a1c1c; --accent:#7ea2ff; --chip:#21262e;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#111317; --card:#191c22; --ink:#e9ecf1; --muted:#9aa3b0; --line:#2b3039;
+    --good:#5bd39b; --goodbg:#12301f; --warn:#e0ae4e; --warnbg:#332713;
+    --bad:#ef8a8a; --badbg:#3a1c1c; --accent:#7ea2ff; --chip:#21262e;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:960px;margin:0 auto;padding:16px}
+  header{padding:14px 0 10px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap}
+  h1{margin:0;font-size:21px}
+  .sub{color:var(--muted);font-size:13px;margin-top:3px}
+  nav a{color:var(--accent);text-decoration:none;margin-left:14px;font-size:14px}
+  h2{font-size:13px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:22px 0 8px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:14px 16px;margin:10px 0}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:11px;padding:10px 12px}
+  .tile b{display:block;font-size:22px;font-variant-numeric:tabular-nums;line-height:1.2}
+  .tile span{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th{text-align:left;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:0 8px 6px 0}
+  td{padding:8px 8px 8px 0;border-top:1px solid var(--line);vertical-align:top}
+  td.n,th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+  a.lot{color:inherit;text-decoration:none;border-bottom:1px solid var(--line)}
+  .pill{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;white-space:nowrap}
+  .p-good{background:var(--goodbg);color:var(--good)}
+  .p-warn{background:var(--warnbg);color:var(--warn)}
+  .p-bad{background:var(--badbg);color:var(--bad)}
+  .p-flat{background:var(--chip);color:var(--muted)}
+  .p-acc{background:var(--accent);color:#fff}
+  button,select,input{font:inherit;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+  button{cursor:pointer}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  button.small{padding:3px 8px;font-size:12.5px}
+  input.money{width:92px;font-variant-numeric:tabular-nums}
+  input.txt{width:120px}
+  .act{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .banner{margin:12px 0;padding:11px 13px;border-radius:9px;font-size:14px;background:var(--warnbg);color:var(--warn);border:1px solid rgba(138,90,0,.25)}
+  .banner.err{background:var(--badbg);color:var(--bad)}
+  .banner.ok{background:var(--goodbg);color:var(--good)}
+  .muted{color:var(--muted);font-size:13px}
+  .key{font-family:ui-monospace,Menlo,Consolas,monospace;background:var(--chip);padding:8px 10px;border-radius:8px;word-break:break-all;user-select:all}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:6px 0}
+  details summary{cursor:pointer;color:var(--muted);font-size:13px}
+  .cand{background:var(--chip);border-radius:8px;padding:6px 9px;margin-top:6px;font-size:13px}
+  @media (max-width:640px){ .wrap{padding:12px} td,th{padding-right:6px} .hide-m{display:none} }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <div><h1>My book</h1><div class="sub" id="who">Loading…</div></div>
+  <nav><a href="/spread/simple.html">Lots</a><a href="/spread/index.html">Advanced</a></nav>
+</header>
+<div id="msg"></div>
+<div id="viewas"></div>
+<div id="unresolved"></div>
+<h2>All time</h2>
+<div class="tiles" id="tiles"></div>
+<h2>Positions</h2>
+<div id="positions"></div>
+<h2>Monthly statement</h2>
+<div class="card" id="statement"></div>
+<h2>eBay sales</h2>
+<div class="card" id="ebay"></div>
+<div id="admin"></div>
+<p class="muted" style="margin:30px 0 40px;text-align:center">A win with no sale recorded settles at the tool's quick-sale estimate after the grace period, so a real number is always better than silence.</p>
+</div>
+<script>
+"use strict";
+var KEY = "spreadKey";
+var money = function (n) { if (n === null || n === undefined || !isFinite(n)) return "—"; var neg = n < 0, v = Math.abs(n); var s = v >= 100 ? Math.round(v).toLocaleString() : v.toFixed(2).replace(/\.00$/, ""); return (neg ? "−$" : "$") + s; };
+var esc = function (s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); };
+var date = function (s) { return s ? new Date(s * 1000).toLocaleDateString() : "—"; };
+var STATUS = { watching: ["Watching", "p-flat"], bidding: ["Bidding", "p-warn"], likely_won: ["Likely won", "p-acc"], won: ["Won", "p-good"], lost: ["Lost", "p-flat"], listed: ["Listed", "p-warn"], sold: ["Sold", "p-good"], kept: ["Kept", "p-flat"] };
+var pill = function (st) { var m = STATUS[st] || [st, "p-flat"]; return '<span class="pill ' + m[1] + '">' + esc(m[0]) + "</span>"; };
+var STATE = { me: null, book: null, viewing: null, users: [], ebayAvailable: false };
+
+function headers(json) { var k = localStorage.getItem(KEY); var h = k ? { "x-spread-key": k } : {}; if (json) h["content-type"] = "application/json"; return h; }
+function note(html, cls) { document.getElementById("msg").innerHTML = html ? '<div class="banner ' + (cls || "") + '">' + html + "</div>" : ""; }
+async function api(path, opts) {
+  var res = await fetch(path, Object.assign({ headers: headers(!!(opts && opts.body)) }, opts || {}));
+  if (res.status === 401) { var pw = prompt("Your Spread Hunter access key:"); if (pw) { localStorage.setItem(KEY, pw); return api(path, opts); } throw new Error("An access key is required."); }
+  var j = await res.json().catch(function () { return {}; });
+  if (!res.ok) throw new Error(j.detail || j.error || ("The server said " + res.status));
+  return j;
+}
+function userQ() { return STATE.viewing && STATE.me && STATE.viewing !== STATE.me.id ? "user=" + encodeURIComponent(STATE.viewing) : ""; }
+
+async function load() {
+  try {
+    var me = await api("/api/spread/me");
+    STATE.me = me.user; STATE.ebayAvailable = !!me.ebay_available;
+    if (!STATE.viewing) STATE.viewing = STATE.me.id;
+    document.getElementById("who").textContent = STATE.me.name + " · " + (STATE.me.role === "owner" ? "owner" : "partner, " + Math.round(STATE.me.share_pct * 100) + "% of profit to the owner");
+    if (STATE.me.role === "owner") { STATE.users = (await api("/api/spread/users")).users; }
+    var q = userQ();
+    STATE.book = await api("/api/spread/book" + (q ? "?" + q : ""));
+    var p = new URLSearchParams(location.search);
+    if (p.get("ebay")) { note(p.get("ebay") === "linked" ? "eBay account linked. Press <b>Sync eBay sales</b> to pull your orders." : "eBay link did not complete (" + esc(p.get("ebay")) + ").", p.get("ebay") === "linked" ? "ok" : "err"); history.replaceState(null, "", location.pathname); }
+    draw();
+    await drawStatement();
+  } catch (e) { note("<b>Could not load.</b> " + esc(e.message), "err"); }
+}
+
+function draw() {
+  var b = STATE.book, t = b.totals, isMe = STATE.viewing === STATE.me.id;
+  // owner: view-as
+  var va = document.getElementById("viewas");
+  if (STATE.me.role === "owner" && STATE.users.length) {
+    va.innerHTML = '<div class="row"><span class="muted">Viewing the book of</span> <select id="viewsel">' +
+      '<option value="' + esc(STATE.me.id) + '">me (' + esc(STATE.me.name) + ')</option>' +
+      STATE.users.filter(function (u) { return u.id !== STATE.me.id; }).map(function (u) { return '<option value="' + esc(u.id) + '"' + (u.id === STATE.viewing ? " selected" : "") + ">" + esc(u.name) + (u.active ? "" : " (inactive)") + "</option>"; }).join("") + "</select></div>";
+    document.getElementById("viewsel").addEventListener("change", function (ev) { STATE.viewing = ev.target.value; load(); });
+  } else va.innerHTML = "";
+
+  // unresolved
+  var un = document.getElementById("unresolved");
+  if (b.unresolved.length) {
+    un.innerHTML = '<div class="banner"><b>' + b.unresolved.length + " win" + (b.unresolved.length > 1 ? "s" : "") + " with nothing recorded yet.</b> Sold, kept, or still listed? Record it below — after the grace period each one settles at the tool's estimate.</div>";
+  } else un.innerHTML = "";
+
+  document.getElementById("tiles").innerHTML =
+    tile("Wins", t.wins) + tile("Paid (landed)", money(t.landed)) + tile("Sold for", money(t.sold)) +
+    (t.estimated ? tile("Settled at estimate", money(t.estimated)) : "") + tile("Still open", money(t.open)) +
+    tile("Profit", money(t.profit)) + (b.user.share_pct ? tile("Owner's share", money(t.owner_share)) : "");
+
+  var groups = [["likely_won", "Likely won — confirm"], ["won", "Won — record what happened"], ["listed", "Listed"], ["bidding", "Bidding"], ["watching", "Watching"], ["sold", "Sold"], ["kept", "Kept"], ["lost", "Lost / passed"]];
+  var by = {}; b.positions.forEach(function (p) { (by[p.status] = by[p.status] || []).push(p); });
+  var h = [];
+  groups.forEach(function (g) {
+    var rows = by[g[0]] || []; if (!rows.length) return;
+    var open = ["likely_won", "won", "listed", "bidding"].indexOf(g[0]) >= 0;
+    h.push("<details" + (open ? " open" : "") + '><summary>' + esc(g[1]) + " (" + rows.length + ")</summary><div class=\"card\"><table><thead><tr><th>Lot</th><th class=\"n\">Paid</th><th class=\"n hide-m\">Est. quick net</th><th class=\"n\">Sold</th><th>Action</th></tr></thead><tbody>");
+    rows.forEach(function (p) {
+      h.push("<tr><td>" + pill(p.status) + ' <a class="lot" href="' + esc(p.lot_url) + '" target="_blank" rel="noopener">' + esc(p.title) + "</a>" +
+        '<div class="muted">' + esc(p.auction_name || "") + (p.won_at ? " · won " + date(p.won_at) : p.bid_intent ? " · bidding " + money(p.bid_intent) : "") + (p.hammer ? " · hammer " + money(p.hammer) : "") + (p.sale_source === "ebay" ? " · from eBay" : "") + "</div>" +
+        (p.ebay_candidates && p.ebay_candidates.length ? p.ebay_candidates.map(function (c) { return '<div class="cand">eBay sale: <b>' + esc(c.title) + "</b> for " + money(c.price) + " on " + date(c.sold_at) + ' <button class="small" data-act="ebay" data-lot="' + p.lot_id + '" data-order="' + esc(c.order_id) + '">That’s this lot</button></div>'; }).join("") : "") +
+        '</td><td class="n">' + money(p.landed_cost) + '</td><td class="n hide-m">' + money(p.estimated_net) + '</td><td class="n">' + (p.sale_price != null ? money(p.sale_price) : "—") + "</td><td>" + actions(p, isMe || STATE.me.role === "owner") + "</td></tr>");
+    });
+    h.push("</tbody></table></div></details>");
+  });
+  document.getElementById("positions").innerHTML = h.join("") || '<div class="card muted">Nothing yet. Press <b>I’m bidding</b> or <b>Won it</b> on a lot and it shows up here.</div>';
+  wire(document.getElementById("positions"));
+  drawEbay();
+  drawAdmin();
+}
+
+function tile(label, val) { return '<div class="tile"><b>' + val + "</b><span>" + esc(label) + "</span></div>"; }
+
+function actions(p, can) {
+  if (!can) return "";
+  var id = p.lot_id, h = [];
+  if (p.status === "likely_won") h.push('<button class="small primary" data-act="won" data-lot="' + id + '">Yes, I won it</button> <button class="small" data-act="lost" data-lot="' + id + '">Not me</button>');
+  else if (p.status === "bidding" || p.status === "watching") h.push('<button class="small" data-act="wonprompt" data-lot="' + id + '">Won it</button> <button class="small" data-act="lost" data-lot="' + id + '">Lost / passed</button>');
+  else if (p.status === "won" || p.status === "listed") {
+    h.push('<div class="act"><input class="money" type="number" min="0" step="1" placeholder="sold $" data-sale="' + id + '"><input class="txt" placeholder="where (eBay, FB…)" data-chan="' + id + '"><button class="small primary" data-act="sale" data-lot="' + id + '">Sold</button></div>');
+    h.push('<div class="act" style="margin-top:4px">' + (p.status === "won" ? '<input class="money" type="number" min="0" step="1" placeholder="list $" data-list="' + id + '"><button class="small" data-act="listed" data-lot="' + id + '">Listed</button> ' : "") + '<button class="small" data-act="kept" data-lot="' + id + '">Kept it</button></div>');
+  } else if (p.status === "sold" || p.status === "kept") h.push('<span class="muted">settled</span>');
+  return h.join("");
+}
+
+function wire(root) {
+  Array.prototype.forEach.call(root.querySelectorAll("button[data-act]"), function (btn) {
+    btn.addEventListener("click", async function () {
+      var act = btn.getAttribute("data-act"), lot = btn.getAttribute("data-lot"), body = {};
+      if (userQ()) body.user = STATE.viewing;
+      if (act === "won") body.won_price = 0;
+      if (act === "wonprompt") { var w = prompt("What did it hammer for (your winning bid, before premium)?"); if (w === null) return; body.won_price = Number(w) || 0; }
+      if (act === "lost") body.lost = true;
+      if (act === "kept") body.kept = true;
+      if (act === "listed") { body.listed = true; var lp = root.querySelector('input[data-list="' + lot + '"]'); if (lp && lp.value) body.list_price = Number(lp.value); }
+      if (act === "sale") { var sp = root.querySelector('input[data-sale="' + lot + '"]'); if (!sp || !sp.value) { alert("Enter what it sold for."); return; } body.sale_price = Number(sp.value); var ch = root.querySelector('input[data-chan="' + lot + '"]'); body.sale_channel = ch ? ch.value : ""; }
+      if (act === "ebay") body.ebay_order_id = btn.getAttribute("data-order");
+      btn.disabled = true;
+      try {
+        if (act === "won") { var pos = STATE.book.positions.filter(function (p) { return String(p.lot_id) === lot; })[0]; body.won_price = pos && pos.hammer ? pos.hammer : (pos && pos.bid_intent) || 0; }
+        await api("/api/spread/position/" + lot, { method: "POST", body: JSON.stringify(body) });
+        await load();
+      } catch (e) { note("<b>Could not save.</b> " + esc(e.message), "err"); btn.disabled = false; }
+    });
+  });
+}
+
+async function drawStatement(month) {
+  var b = STATE.book, el = document.getElementById("statement");
+  var months = b.months.length ? b.months : [new Date().toISOString().slice(0, 7)];
+  month = month || months[0];
+  var q = "month=" + month + (userQ() ? "&" + userQ() : "");
+  var s;
+  try { s = await api("/api/spread/statement?" + q); } catch (e) { el.innerHTML = '<div class="muted">' + esc(e.message) + "</div>"; return; }
+  var h = ['<div class="row"><select id="month">' + months.map(function (m) { return '<option value="' + m + '"' + (m === month ? " selected" : "") + ">" + m + "</option>"; }).join("") + '<option value="all"' + (month === "all" ? " selected" : "") + '>all time</option></select> <button class="small" id="csv">Download CSV</button></div>'];
+  if (!s.lines.length) h.push('<div class="muted">No wins in this month.</div>');
+  else {
+    h.push('<table><thead><tr><th>Lot</th><th class="n">Won</th><th class="n">Paid</th><th class="n">Settled at</th><th class="hide-m">Basis</th><th class="n">Profit</th></tr></thead><tbody>');
+    s.lines.forEach(function (l) {
+      var basis = l.settled_basis === "sale" ? "sale" : l.settled_basis === "estimate" ? "estimate (no sale reported)" : l.settled_basis === "open" ? "open" : "—";
+      h.push("<tr><td>" + pill(l.status) + " " + esc(l.title) + '</td><td class="n">' + date(l.won_at) + '</td><td class="n">' + money(l.landed_cost) + '</td><td class="n">' + money(l.settled_value) + '</td><td class="hide-m muted">' + basis + '</td><td class="n">' + (l.profit == null ? "—" : '<span class="pill ' + (l.profit >= 0 ? "p-good" : "p-bad") + '">' + money(l.profit) + "</span>") + "</td></tr>");
+    });
+    h.push("</tbody></table>");
+    h.push('<div class="tiles" style="margin-top:10px">' + tile("Paid", money(s.totals.landed)) + tile("Revenue", money(s.totals.revenue)) + tile("Profit", money(s.totals.profit)) + (s.share_pct ? tile("Owner's share (" + Math.round(s.share_pct * 100) + "%)", money(s.totals.owner_share)) : "") + (s.totals.open ? tile("Still open", money(s.totals.open)) : "") + "</div>");
+  }
+  el.innerHTML = h.join("");
+  document.getElementById("month").addEventListener("change", function (ev) { drawStatement(ev.target.value); });
+  document.getElementById("csv").addEventListener("click", async function () {
+    var res = await fetch("/api/spread/statement?" + q + "&format=csv", { headers: headers() });
+    var blob = await res.blob(); var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "spread-" + (STATE.viewing || "me") + "-" + month + ".csv"; a.click();
+  });
+}
+
+function drawEbay() {
+  var el = document.getElementById("ebay"), me = STATE.me, isMe = STATE.viewing === me.id;
+  var u = isMe ? me : (STATE.users.filter(function (x) { return x.id === STATE.viewing; })[0] || me);
+  var h = [];
+  if (!STATE.ebayAvailable) h.push('<div class="muted">eBay linking is not configured on the server yet (EBAY_CLIENT_ID, EBAY_CLIENT_SECRET, EBAY_RU_NAME). Sales can still be recorded by hand above.</div>');
+  else if (u.ebay_linked) h.push('<div class="row"><span class="pill p-good">linked</span><span class="muted">since ' + date(u.ebay_linked_at) + '</span> <button class="small primary" id="sync">Sync eBay sales</button></div><div class="muted">Orders are matched to the lots you won by title. Clear matches are applied; near matches appear on the position with a one-tap confirm.</div>');
+  else if (isMe) h.push('<div class="row"><button class="primary" id="link">Link my eBay seller account</button><span class="muted">You approve once on eBay; we only read your orders.</span></div>');
+  else h.push('<div class="muted">Not linked.</div>');
+  el.innerHTML = h.join("");
+  var link = document.getElementById("link"); if (link) link.addEventListener("click", async function () { try { var j = await api("/api/spread/ebay/connect"); location.href = j.url; } catch (e) { note(esc(e.message), "err"); } });
+  var sync = document.getElementById("sync"); if (sync) sync.addEventListener("click", async function () { sync.disabled = true; sync.textContent = "Syncing…"; try { var r = await api("/api/spread/ebay/sync" + (userQ() ? "?" + userQ() : ""), { method: "POST" }); note("eBay: " + r.sales + " sales read, " + r.applied + " matched, " + r.candidates + " to confirm.", "ok"); await load(); } catch (e) { note("<b>eBay sync failed.</b> " + esc(e.message), "err"); sync.disabled = false; sync.textContent = "Sync eBay sales"; } });
+}
+
+function drawAdmin() {
+  var el = document.getElementById("admin");
+  if (STATE.me.role !== "owner") { el.innerHTML = ""; return; }
+  var h = ["<h2>Access</h2>", '<div class="card">'];
+  if (STATE.users.length) {
+    h.push('<table><thead><tr><th>Who</th><th class="n">Owner’s %</th><th class="n hide-m">Budget/day</th><th class="hide-m">eBay</th><th class="hide-m">Last seen</th><th></th></tr></thead><tbody>');
+    STATE.users.forEach(function (u) {
+      h.push("<tr><td><b>" + esc(u.name) + "</b> <span class=\"muted\">" + esc(u.role) + (u.active ? "" : " · inactive") + (u.email ? " · " + esc(u.email) : "") + '</span></td><td class="n">' + Math.round(u.share_pct * 100) + '%</td><td class="n hide-m">' + money(u.daily_budget_usd) + '</td><td class="hide-m">' + (u.ebay_linked ? "linked" : "—") + '</td><td class="hide-m muted">' + date(u.last_seen_at) + '</td><td class="act">' +
+        '<button class="small" data-adm="rotate" data-id="' + esc(u.id) + '">New key</button>' +
+        '<button class="small" data-adm="share" data-id="' + esc(u.id) + '">Set %</button>' +
+        (u.id !== "owner" ? '<button class="small" data-adm="' + (u.active ? "off" : "on") + '" data-id="' + esc(u.id) + '">' + (u.active ? "Deactivate" : "Reactivate") + "</button>" : "") + "</td></tr>");
+    });
+    h.push("</tbody></table>");
+  } else h.push('<div class="muted">Only you so far.</div>');
+  h.push('<div class="row" style="margin-top:12px"><input class="txt" id="nu-name" placeholder="name"><input class="txt" id="nu-email" placeholder="email (for reminders)"><input class="money" id="nu-share" type="number" min="0" max="100" step="1" placeholder="owner %"><input class="money" id="nu-budget" type="number" min="0" step="0.5" placeholder="$/day" value="1"><button class="primary" id="nu-add">Give access</button></div>');
+  h.push('<div id="newkey"></div></div>');
+  el.innerHTML = h.join("");
+  document.getElementById("nu-add").addEventListener("click", async function () {
+    var name = document.getElementById("nu-name").value.trim(); if (!name) return alert("Name?");
+    try {
+      var j = await api("/api/spread/users", { method: "POST", body: JSON.stringify({ name: name, email: document.getElementById("nu-email").value, share_pct: Number(document.getElementById("nu-share").value || 0) / 100, daily_budget_usd: Number(document.getElementById("nu-budget").value || 1) }) });
+      showKey(j.user.name, j.key); STATE.users = (await api("/api/spread/users")).users; drawAdmin(); document.getElementById("newkey").innerHTML = keyBox(j.user.name, j.key);
+    } catch (e) { note("<b>Could not add.</b> " + esc(e.message), "err"); }
+  });
+  Array.prototype.forEach.call(el.querySelectorAll("button[data-adm]"), function (btn) {
+    btn.addEventListener("click", async function () {
+      var id = btn.getAttribute("data-id"), act = btn.getAttribute("data-adm"), body = { id: id };
+      if (act === "rotate") { if (!confirm("Issue a new key? The old one stops working immediately.")) return; body.rotate_key = true; }
+      if (act === "share") { var v = prompt("Owner's share of this person's profit, in percent:"); if (v === null) return; body.share_pct = Number(v) / 100; }
+      if (act === "off") body.active = false; if (act === "on") body.active = true;
+      try { var j = await api("/api/spread/users", { method: "PATCH", body: JSON.stringify(body) }); STATE.users = (await api("/api/spread/users")).users; drawAdmin(); if (j.key) document.getElementById("newkey").innerHTML = keyBox(j.user.name, j.key); } catch (e) { note(esc(e.message), "err"); }
+    });
+  });
+}
+function keyBox(name, key) { return '<div class="banner ok" style="margin-top:10px">Access key for <b>' + esc(name) + '</b> — shown once, copy it now:<div class="key">' + esc(key) + '</div><div class="muted" style="margin-top:6px">They enter it when the Lots page asks for a key. It opens their own book; it cannot see yours.</div></div>'; }
+function showKey() {}
+load();
+</script>
+</body>
+</html>

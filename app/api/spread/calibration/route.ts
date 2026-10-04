@@ -8,7 +8,7 @@ import { getStore } from "@/lib/spread/store";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   const store = getStore();
   const outcomes = await store.outcomes();
   const report = buildReport(outcomes, config);

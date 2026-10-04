@@ -32,6 +32,76 @@ const phraseIn = (hay: string, phrase: string): boolean => {
  */
 export const BUILTIN_LENSES: Omit<Lens, "enabled">[] = [
   {
+    id: "hunting-grounds",
+    name: "Hunting grounds",
+    hint: "The advertising-and-smalls families where the spread lives, and the rule for when one is actionable",
+    builtin: true,
+    keywords: [
+      "advertising", "thermometer", "bank", "still bank", "banthrico", "oil can", "oiler", "grease", "texaco", "shell", "gulf", "sinclair",
+      "mobil", "esso", "sunoco", "pennzoil", "quaker state", "brewery", "beer", "hamm's", "schlitz", "pabst", "coca cola", "coke", "pepsi",
+      "hires", "orange crush", "nugrape", "rc cola", "dr pepper", "7up", "moxie", "nehi", "mascot", "reddy kilowatt", "mr peanut", "planters",
+      "lighter", "scripto", "zippo", "decanter", "jim beam", "ezra brooks", "wild turkey", "postal", "post office", "mailbox", "emblem",
+      "hood ornament", "script", "badge", "champion", "spark plug", "autolite", "ac delco", "clock", "pam clock", "paperweight", "letter opener",
+      "blotter", "pocket mirror", "singer", "sewing", "tin", "tobacco tin", "coffee tin", "spice tin", "pharmacy", "drug store", "ex-lax",
+      "rinconada", "hagen renaker", "beswick", "goebel", "josef originals", "lefton", "napco", "fenton", "mosser", "boyd", "viking", "blenko",
+      "uranium", "carnival glass", "west german", "studio pottery", "diner", "hotel", "motel", "railroad", "john deere", "international harvester",
+      "ski-doo", "arctic cat", "polaris", "johnson", "evinrude", "mercury outboard", "padlock", "salesman sample", "neon", "lighted sign",
+      "motion sign", "promo car", "amt", "dealer", "dealership", "token", "watch fob", "key fob", "keychain", "matchbook", "door push", "push plate",
+      "display", "counter display", "sealed", "nos", "florida", "miami", "boca", "delray", "citrus", "airline", "pan am", "eastern airlines",
+      "cruise", "world's fair", "cereal premium", "chalkware", "lucite", "tire gauge", "goodyear", "firestone", "michelin", "kodak", "rca", "zenith",
+      "bell system", "western electric", "ibm", "caterpillar", "mack", "kenworth", "peterbilt", "ice cream", "dairy", "gumball", "vending",
+    ],
+    queries: [
+      "misc advertising", "advertising lot", "oil cans", "old tins", "desk items", "dresser items", "small metal items", "old store items",
+      "assorted advertising", "garage collectibles", "contents of shelf", "contents of cabinet", "advertising thermometer", "still bank lot",
+      "beer sign", "soda sign", "gas station", "service station", "mascot figure", "decanter lot", "emblems lot", "spark plug display",
+      "advertising clock", "salesman sample", "hotel ashtray", "railroad lot", "florida advertising",
+    ],
+    prompt:
+      "HUNTING GROUNDS. The families below are where undervalued lots recur: a recognisable niche with recent sold "
+      + "activity, a poor auction description, a low opening price, and an easy, searchable resale. Treat them as "
+      + "places to LOOK, not as targets in themselves: an item in one of these families becomes actionable only "
+      + "when recent SOLD evidence supports the demand and the acquisition price leaves a large spread. "
+      + "Prioritise exact-match sold comps, repeated transactions, compact and shippable pieces, under-described "
+      + "lots, and mixed lots that decompose into several individually searchable items. Penalise large or "
+      + "fragile objects, uncertain reproductions, condition problems, high shipping, and any value resting on "
+      + "asking prices.\n"
+      + "The strongest families, in order: (1) advertising and promotional BANKS — Banthrico, local bank and "
+      + "insurance giveaways, building-shaped, calendar, mascot, cast-metal, ceramic, and banks built around a real "
+      + "post-office box door; (2) advertising THERMOMETERS — bottle-shaped soda (NuGrape, Hires, Orange Crush, "
+      + "Sun Crest, RC/Royal Crown, Canada Dry), porcelain automotive and oil (Prestone, Quaker State), pharmacy "
+      + "(Ex-Lax), beer, feed and farm; exact size, working tube, porcelain vs tin, embossing and original paint "
+      + "decide the price, and sizes sell 5-10x apart; (3) PETROLIANA — oil cans, handy oilers, long-spout cans, "
+      + "quart and pint cans, grease tins, snowmobile, outboard and 2-cycle oil, household and sewing-machine oilers "
+      + "(Singer, 3-In-One), pump plates, glass oil bottles, branded spouts and funnels, service-station desk items; "
+      + "Texaco, Shell, Gulf, Quaker State, Pennzoil, Esso, Standard, D-X, Sunoco, Mobil, Union 76, Kendall, "
+      + "Valvoline, Castrol, Bardahl, John Deere, Sears/Allstate; (4) BREWERIANA — Hamm's Bear material above all "
+      + "(early ceramic and Red Wing variants, working motion signs), brewery banks and mascots, motion and lighted "
+      + "signs, tap knobs, trays, chalkware, regional breweries; (5) SODA — thermometers, trays, clocks, bottle and "
+      + "tin signs, push bars, menu boards, carriers, banks, mascots, regional bottlers; (6) advertising MASCOTS and "
+      + "character figures — Reddy Kilowatt, Hamm's Bear, Mr. Peanut/Planters, oil, tire, gas, soda, insurance and "
+      + "utility mascots in vinyl, ceramic, rubber, chalkware or translucent plastic; (7) POSTAL — post-office box "
+      + "doors and door banks, railway mail, postal scales and locks, often buried in 'metal box' lots; (8) small "
+      + "AUTOMOTIVE advertising — emblems, scripts, hood ornaments, dealer badges, spark-plug displays (oversized "
+      + "Champion, AC, Autolite), PAM and other advertising clocks, dealership promos, AMT promo cars, tire and "
+      + "battery brands; (9) branded DESK and office smalls — paperweights, perpetual calendars, letter openers, "
+      + "blotters, pen stands, lighters (Scripto VU, Zippo advertising), ashtrays only with a strong brand; "
+      + "(10) LOCAL-BUSINESS advertising, strongest when the business is gone, the town is named, and the object "
+      + "is displayable — and for South Florida specifically: Miami hotels, Boca/Delray businesses, old Florida "
+      + "banks, airlines, citrus, tourism, motels, race tracks, cruise lines, defunct retailers.\n"
+      + "Also worth a close look: liquor decanters and tax-stamp bottles (Ezra Brooks, Wild Turkey/Austin Nichols, "
+      + "racing and wildlife themes); tins with strong graphics and obsolete brands; pharmacy and patent-medicine "
+      + "advertising; food, coffee and tea brands; identifiable ceramic animals (Rinconada, Hagen-Renaker, Beswick, "
+      + "Royal Doulton, Goebel, Josef Originals, Lefton, Napco, Freeman-McFarlin); art-glass smalls (Fenton, Mosser, "
+      + "Boyd, Viking, Blenko, uranium and carnival glass); signed studio, West German and Japanese pottery smalls; "
+      + "diner, hotel, motel, airline, cruise-line and railroad objects; farm, snowmobile, marine and fishing "
+      + "advertising; locks and salesman samples; motion and illuminated advertising (working examples step up "
+      + "sharply); sealed or unopened old product; tokens, watch fobs, key fobs and advertising pocket knives in "
+      + "junk-drawer lots; promotional models and cereal premiums.\n"
+      + "When a vague mixed lot contains three or more of the above, treat it as a decomposition opportunity and "
+      + "inventory it piece by piece.",
+  },
+  {
     id: "occupied-japan",
     name: "Occupied Japan",
     hint: "Marks dating a piece to 1945–1952 exactly",
@@ -187,7 +257,7 @@ export const BUILTIN_LENSES: Omit<Lens, "enabled">[] = [
 
 export function defaultWatchlist(now = Date.now() / 1000): Watchlist {
   // The three the user named start on; the rest are there to switch on when they become relevant.
-  const ON = new Set(["occupied-japan", "bank-objects", "advertising-signs"]);
+  const ON = new Set(["hunting-grounds", "occupied-japan", "bank-objects", "advertising-signs"]);
   return {
     lenses: BUILTIN_LENSES.map((l) => ({ ...l, enabled: ON.has(l.id) })),
     custom_instructions: "",

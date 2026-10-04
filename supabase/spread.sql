@@ -109,3 +109,44 @@ create table if not exists spread_settings (
   value jsonb,
   updated_at timestamptz default now()
 );
+
+-- People and the ledger: who has a key, what each of them did with each lot, and what it came to.
+create table if not exists spread_users (
+  id text primary key,
+  name text not null,
+  role text not null default 'partner',
+  key_hash text not null unique,
+  email text,
+  share_pct double precision not null default 0,
+  daily_budget_usd double precision not null default 1,
+  active boolean not null default true,
+  created_at timestamptz default now(),
+  last_seen_at timestamptz,
+  data jsonb not null
+);
+create table if not exists spread_events (
+  id bigserial primary key,
+  user_id text not null,
+  lot_id bigint not null,
+  kind text not null,
+  amount double precision,
+  at timestamptz not null default now(),
+  note text default ''
+);
+create index if not exists spread_events_user on spread_events (user_id, at desc);
+create index if not exists spread_events_lot on spread_events (lot_id);
+create table if not exists spread_positions (
+  user_id text not null,
+  lot_id bigint not null,
+  status text not null,
+  closed_at timestamptz,
+  won_at timestamptz,
+  sale_at timestamptz,
+  landed_cost double precision,
+  sale_price double precision,
+  updated_at timestamptz default now(),
+  data jsonb not null,
+  primary key (user_id, lot_id)
+);
+create index if not exists spread_positions_user on spread_positions (user_id, updated_at desc);
+create index if not exists spread_positions_status on spread_positions (status);

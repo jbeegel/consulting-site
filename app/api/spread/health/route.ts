@@ -12,7 +12,7 @@ export const maxDuration = 60;
 type Check = { name: string; ok: boolean; level: "required" | "recommended"; detail: string; fix?: string };
 
 export async function GET(req: Request) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   const checks: Check[] = [];
   const add = (c: Check) => checks.push(c);
 

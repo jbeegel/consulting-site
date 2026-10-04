@@ -7,7 +7,7 @@ import { getStore } from "@/lib/spread/store";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   return NextResponse.json({
     buyer_premium: config.buyerPremium, sales_tax: config.salesTax, resale_fee: config.resaleFee,
     resale_shipping: config.resaleShipping, pickup_cost: config.pickupCost, model: config.model,

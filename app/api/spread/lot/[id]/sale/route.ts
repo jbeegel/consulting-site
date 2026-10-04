@@ -13,7 +13,7 @@ import type { Outcome } from "@/lib/spread/types";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   const id = Number((await params).id);
   const body = (await req.json().catch(() => ({}))) as Partial<{
     bought_price: number; sale_price: number; sale_at: number; sale_channel: string; notes: string; bought: boolean;

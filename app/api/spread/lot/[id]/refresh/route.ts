@@ -6,7 +6,7 @@ import { getStore } from "@/lib/spread/store";
 export const dynamic = "force-dynamic";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   const id = Number((await params).id);
   try {
     const lot = await new Scanner().refreshLot(id);

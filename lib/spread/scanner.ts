@@ -14,6 +14,7 @@ import type { CalibrationReport, IntelParams, Lot, MarketIntel, Opportunity, Out
 import { MYSTERY_QUERIES, mysteryBoost, mysteryEconomics, readMystery } from "./mystery";
 import { lensQueries, matchedLenses, mergeWatchlist } from "./lenses";
 import { ValuationPipeline } from "./valuation";
+import { nudge, settlePositions } from "./ledger";
 
 /** Score options for one lot: the user's liquidity weight plus whatever the feedback loop knows about
  *  how fast this category really moves. */
@@ -339,9 +340,12 @@ export class Scanner {
       if (p.value !== false && lots.length) {
         const dayStart = Math.floor(Date.now() / 86400000) * 86400;
         const usedToday = await this.store.valuationsSince(dayStart);
-        const budget = Math.max(0, this.c.dailyValuationCap - usedToday);
+        const spentToday = await this.store.costSince(dayStart).catch(() => 0);
+        const budget = spentToday >= this.c.dailyCostUsd ? 0 : Math.max(0, this.c.dailyValuationCap - usedToday);
         const maxLots = Math.min(p.max_value ?? this.c.valuePerRun, budget);
-        if (maxLots > 0) {
+        if (spentToday >= this.c.dailyCostUsd) {
+          await this.store.updateScan(id, { message: `daily spend cap reached ($${spentToday.toFixed(2)} of $${this.c.dailyCostUsd})` });
+        } else if (maxLots > 0) {
           const unvalued = new Set((await this.store.lots({ onlyUnvalued: true })).map((l) => l.id));
           const todo = lots.filter((l) => unvalued.has(l.id));
           // A lot that matches a researched niche outranks one that merely contains a hot word; a lot
@@ -389,6 +393,17 @@ export class Scanner {
         out.alerted = await sendAlerts(this.store, opps);
       }
       out.settled = await this.settleClosedLots(this.c.settlePerRun, deadline);
+      // People's positions settle against the same hammer prices, then anyone sitting on an
+      // unreported win gets a reminder (email, at most weekly).
+      try {
+        await settlePositions(this.store, async (lotId) => {
+          const st = await this.client.lotState(lotId);
+          return Number(st?.priceRealized ?? 0) || null;
+        }, this.c);
+        for (const u of await this.store.users()) if (u.active) await nudge(this.store, u, this.c).catch(() => false);
+      } catch (e) {
+        console.warn("position settlement failed", e);
+      }
       if (theses.length) {
         // Local arithmetic over outcomes we already hold, so the playbook never goes stale waiting
         // for someone to press a button.

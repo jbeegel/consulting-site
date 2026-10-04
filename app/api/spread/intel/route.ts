@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function GET(req: Request) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   const u = new URL(req.url);
   const numParam = (k: string): number | undefined => {
     const v = u.searchParams.get(k);

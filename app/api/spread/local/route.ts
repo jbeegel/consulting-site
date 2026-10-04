@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 export async function GET(req: Request) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   const theses = await new Scanner().theses();
   if (!config.local || !config.craigslistSite) {
     return NextResponse.json({
@@ -29,7 +29,7 @@ export async function GET(req: Request) {
 
 /** Score one pasted listing: a URL, or title/price/description copied out of any app. */
 export async function POST(req: Request) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   const body = (await req.json().catch(() => ({}))) as { url?: string; text?: string; price?: number; title?: string; distance_miles?: number };
   const listing = parsePastedListing(body);
   if (!listing) return NextResponse.json({ detail: "send a url or some text" }, { status: 400 });

@@ -10,7 +10,7 @@ import type { Thesis } from "@/lib/spread/types";
 export const dynamic = "force-dynamic";
 
 export async function GET(req: Request) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   const theses = await new Scanner().theses();
   return NextResponse.json({
     theses: theses.sort((a, b) => (b.max_bid ?? 0) - (a.max_bid ?? 0) || a.name.localeCompare(b.name)),
@@ -25,7 +25,7 @@ export async function GET(req: Request) {
 
 /** Create or edit a thesis by hand. Partial bodies are fine; derived fields are always recomputed. */
 export async function POST(req: Request) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   const body = (await req.json().catch(() => ({}))) as Partial<Thesis> & { name?: string };
   const scanner = new Scanner();
   const existing = await scanner.theses();
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
 }
 
 export async function DELETE(req: Request) {
-  if (!authorized(req)) return deny();
+  if (!(await authorized(req))) return deny();
   const id = new URL(req.url).searchParams.get("id");
   if (!id) return NextResponse.json({ detail: "id required" }, { status: 400 });
   await getStore().deleteThesis(id);

@@ -27,12 +27,14 @@ Keyless deployments degrade gracefully to deterministic demo mode.
 |---|---|
 | `ANTHROPIC_API_KEY` | Claude appraisals with web search (already set for the audit) |
 | `SUPABASE_URL` / `SUPABASE_SERVICE_ROLE_KEY` | Durable lots, valuations, scan log |
-| `SPREAD_PASSWORD` | Required. Gate for the dashboard/API (you're prompted once in the browser) |
+| `SPREAD_PASSWORD` | Required. The owner's key for the dashboard/API (you're prompted once in the browser). Other people get their own keys from the book page — see *Giving someone access* |
 | `CRON_SECRET` | Required. Vercel Cron and the GitHub Actions trigger authenticate with it |
 | `SPREAD_ZIP` / `SPREAD_MILES` | Only auctions near you (pickup) |
 | `SPREAD_CRON_HOURS` / `SPREAD_CRON_STATUS` / `SPREAD_CRON_SEARCH` / `SPREAD_CRON_CATEGORY` | What each scheduled scan pulls (default: OPEN lots closing within 24h) |
-| `SPREAD_VALUE_PER_RUN` / `SPREAD_DAILY_VALUATION_CAP` | Spend control: lots valued per run (12) and per day (150) |
-| `SPREAD_MODEL` | `claude-opus-5` default; `claude-sonnet-5` is ~2.5× cheaper |
+| `SPREAD_VALUE_PER_RUN` / `SPREAD_DAILY_VALUATION_CAP` / `SPREAD_DAILY_COST_USD` | Spend control: lots valued per run (12), per day (150), and the hard stop that matters — dollars of model spend per day ($1.50), estimated from each appraisal's token usage |
+| `SPREAD_MODEL` | `claude-sonnet-5-5` default (about $0.08 per appraisal with photos and search); `claude-opus-5-5` is roughly 2× the cost |
+| `SPREAD_SETTLE_DAYS` | A won lot with no sale recorded settles at the tool's quick-sale estimate after this many days (60) |
+| `EBAY_RU_NAME` | With the eBay keyset: the redirect-URL name from the developer portal, which lets people link their own eBay seller account so sales flow in automatically |
 | `SPREAD_ALERT_WEBHOOK` | Slack/Discord incoming-webhook URL for hot-lot alerts |
 | `RESEND_API_KEY` + `SPREAD_ALERT_EMAIL` | Email alerts instead of / as well as the webhook |
 | `SPREAD_ALERT_MIN_SCORE` / `SPREAD_ALERT_WINDOW_MIN` | Alert when score ≥ 60 and closing within 90 min |
@@ -45,7 +47,7 @@ Keyless deployments degrade gracefully to deterministic demo mode.
 | `SPREAD_PLAYBOOK` / `SPREAD_TARGET_MONTHLY_ROI` / `SPREAD_MIN_BUY_MULTIPLE` / `SPREAD_HUNT_PER_RUN` / `SPREAD_HUNT_PAGES` | The playbook (default on): the return on capital a buy must clear (1.0 = 100%/month), the multiple of net you will never pay within (3), and how many niches each scan hunts (4, two pages each) |
 | `SPREAD_DISCOVER_COUNT` / `SPREAD_RESEARCH_TTL_DAYS` / `SPREAD_THESIS_MIN_SALES` / `SPREAD_THESIS_MIN_ROI` / `SPREAD_THESIS_MAX_FROM_SALES` | How many niches a research pass looks for (8), how stale research may get before a refresh (30 days), and the bar your own sales must clear to propose a niche (3 sales at 150% ROI, 8 proposals max) |
 | `SPREAD_MYSTERY` / `SPREAD_MYSTERY_THRESHOLD` / `SPREAD_MYSTERY_WEIGHT` / `SPREAD_MYSTERY_PER_RUN` / `SPREAD_MYSTERY_MAX_IMAGES` / `SPREAD_MYSTERY_HUNT_QUERIES` | Misc lots (default on): how blind a listing must read to count (0.45), the triage weight it earns (3), appraisals reserved for them each run (4), photos sent (12 instead of 8), and mystery search terms swept per scan (3) |
-| `SPREAD_LENSES` / `SPREAD_LENS_WEIGHT` | Lenses and your standing instructions (default on) and the triage weight a keyword hit earns (1) |
+| `SPREAD_LENSES` / `SPREAD_LENS_WEIGHT` | Lenses and your standing instructions (default on) and the triage weight a keyword hit earns (1). The built-in *Hunting grounds* lens carries the advertising-and-smalls taxonomy (banks, thermometers, petroliana, breweriana, mascots, postal, automotive, desk smalls, local-business, Florida) and the rule that a family is a place to look, not a target |
 | `SPREAD_LOCAL` / `SPREAD_CRAIGSLIST_SITE` / `SPREAD_LOCAL_TRIP_COST` / `SPREAD_LOCAL_COST_PER_MILE` | Local buying: your craigslist subdomain (e.g. `detroit`), and what a collection trip costs ($4 flat plus $0.20/mile). OfferUp and Facebook are paste-only — see above |
 | `SPREAD_LIQUIDITY_WEIGHT` / `SPREAD_HANDLING_DAYS` / `SPREAD_MAX_DAYS_TO_SELL` / `SPREAD_LIQUIDITY_MIN_SALES` / `SPREAD_TREND_WINDOW_DAYS` | How much liquidity discounts the score (0.7; 0 disables it), days of handling before capital comes back (3), the horizon past which "slower" stops meaning anything (365), your own sales needed before measured speed overrides the model (4), and the market-trend window (21 days) |
 | `SPREAD_GRADING` / `SPREAD_GRADING_FEE` / `SPREAD_GRADING_SHIP` / `SPREAD_GRADING_DAYS` | Trading-card grading analysis (default on), $75 per-card fee + $15 shipping (about $90 all-in), 60-day turnaround |
@@ -212,6 +214,27 @@ whose landed cost is a third of what a quick sale nets after fees (`SPREAD_MIN_B
 **walk-away bid** whose landed cost is half of it (so even a hurried flip doubles the money), and the all-in cost
 at that stop. A playbook ceiling for a matched niche can only lower those numbers. The verdict is the multiple at
 the next bid, the dollars clear, the liquidity grade and the identification confidence, all stated in `basis`.
+
+### Giving someone access, and the book
+
+The API is keyed per person. `SPREAD_PASSWORD` is the owner's key; from `/spread/book.html` the owner can
+**Give access** to someone else, which issues them a key (shown once, stored hashed), an owner's percentage of
+their tracked profit, and a daily budget for manual re-appraisals. Their key opens their own book and the lots
+page; it cannot read anyone else's. Keys can be rotated or deactivated from the same panel.
+
+Every action is a ledger event stamped with who did it: opening a lot, "I'm bidding $X", "Won it", "Pass",
+listed, sold, kept. From those the tool keeps a **position** per person per lot and settles it against HiBid's
+own hammer prices: a stated bid at or above the hammer on a closed lot becomes *likely won* (HiBid does not say
+who won, so this is confirmed with one tap); a bid below it is a loss and needs nothing. A person with an eBay
+seller account can link it (standard OAuth consent; we read orders only) and **Sync eBay sales** pairs their
+orders with the lots they won by title similarity — clear matches apply, near matches wait for a one-tap confirm.
+Sales recorded by hand cover everything else, and anyone sitting on an unreported win for two weeks gets an
+email reminder (with `RESEND_API_KEY`).
+
+The **monthly statement** (`/api/spread/statement?month=YYYY-MM`, JSON or CSV) lists each win with what it
+settled at and the owner's share. The rule that keeps it honest: a win with no sale recorded for
+`SPREAD_SETTLE_DAYS` settles at the quick-sale net the tool expected when they won it, so silence is never
+cheaper than a real number. Recorded sales also feed the calibration loop as ground truth.
 
 ### The simple view
 
