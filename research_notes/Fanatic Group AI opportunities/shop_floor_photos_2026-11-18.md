@@ -49,7 +49,7 @@ Printed one page per work order, titled "Work Order", with the Fanatic Group log
 
 # Video observations (two of four clips reviewed, 18 Nov 2026)
 
-Clips IMG_6590.MOV (74 s, press workstation) and IMG_6596.MOV (60 s, shipping bench) were reviewed frame by frame (one frame every three seconds plus full-resolution stills of key screens). IMG_6587.MOV and IMG_6593.MOV could not be retrieved yet. Audio was not transcribed.
+Clips IMG_6590.MOV (74 s, press workstation) and IMG_6596.MOV (60 s, shipping bench) were reviewed frame by frame (one frame every three seconds plus full-resolution stills of key screens). IMG_6587.MOV and IMG_6593.MOV could not be retrieved yet. Audio transcripts are in the final section of this file.
 
 ## Clip 1: press workstation (IMG_6590)
 
@@ -154,3 +154,46 @@ No additional detail beyond the earlier section: Inkcups X5 with ~28-position ji
 5. **GS1/UCC labels have been done before** (UCC_LABEL flag, Party City field), so retailer compliance for Rally House and Von Maur is likely configured in TrueCommerce already; confirm rather than rebuild.
 6. **Royalty reporting is spreadsheet-per-school in Dropbox** (`Royalties/Q2/YALE Q2.xlsx`), even though royalty code and percentage are on every NetSuite line. This is a clean target for a SuiteQL report that generates each school's quarterly file.
 7. **The Florida address question is now more pointed**: it appears on customer-facing packing slips and in NetSuite's location and bin names, not just in directories.
+
+---
+
+# Audio transcripts (Whisper small/medium, 18 Nov 2026 clips)
+
+Machine transcription of the phone audio. Gregg narrates clips 1, 3 and 4; clip 2 is mostly the consultant and operator. Low-confidence segments are marked. Timestamps in seconds.
+
+## IMG_6587 (press cart, 35 s) — Gregg walking the Dropbox folder tree
+- 0–16: "Team folder. Custom orders. Fanatics. Dropship. Xavier. The item. And then here's the print files."
+- 18–20: "He does every single… every [expletive] work order."
+- 23–29: "And then he's gotta put in the quantity and put in the right template. Like that really probably can't change." (the consultant: "So you gotta try this part.")
+
+Reading: Gregg is reciting the exact Dropbox path hierarchy that prints on the traveler (Team Folder → CUSTOM ORDERS → FANATICS → DROP SHIP → school → item → print files) and confirming the operator repeats the lookup for every work order; after the file is found, the operator still enters quantity and selects the jig template in the RIP.
+
+## IMG_6590 (press workstation, 74 s) — operator and consultant on the ideal flow
+- 14–17 (operator): "Yeah, we have to save it and then load it, now?"
+- 18–23 (operator): "Yes, but if it was able to be scanned, it would always be in the downloads folder."
+- 24–29: "It would pull it up right there. So somehow it could automatically…"
+- 54–57: "So you can scan it, it would download it and then load it."
+- 57–64 (operator): "I don't know if you're going to be able to integrate it to load directly in here, maybe you can. But this program is a little bit on the older side, so to speak."
+- 64–73: "This program being ColorPRINT… Server 5.0, okay. And some of them are different versions, like this one's 5.1."
+
+Reading: the operator independently describes the target design (scan traveler → file appears → load into RIP) and flags that ColorPRINT Server is old and that the shop runs mixed versions (5.0 and 5.1) across machines. Whether ColorPRINT can be driven by hot folder or job ticket is the open question.
+
+## IMG_6593 (production room, 33 s) — Gregg on the machine fleet
+- 0–6: "[Nocai]… the company's called Nocai, that's from China. This is gonna be our, like, going-forward machine."
+- 6–14: "And then we have two of these machines over here called SunTax [as heard; nameplate reads "…ARTECH"], which are our original rotary set."
+- 15–23: "We have them, we're going to use them, but when we add more they're going to be the Nocais."
+- 24–28 (consultant): "So basically [Helix/X5, unclear] and Nocai, it sounds like."
+- 29–30 (Gregg): "They all require different art [file types]."
+
+Reading: the fleet is the Inkcups X5 flatbed, two original rotary UV printers of a brand heard as "SunTax" (spelling to confirm; the nameplate begins with a stylised letter and ends in "ARTECH"), and the Nocai, which is the standard for future purchases. The conversion matrix therefore needs three RIP targets today and should treat Nocai's input format as the long-term default.
+
+## IMG_6596 (shipping bench, 60 s) — Gregg narrating the label process
+- 0–10: "Here's the packing slip. Up here is the OzLINK connector, okay, and they scan it… for the load."
+- 13–17: "Okay, so we're gonna pack it, and…"
+- 19–26: "Let's just say this is a box that's 18 by 12 by 13. It fits all of these units."
+- 27–29: "Then I got to put in the weight."
+- 29–38: "Hit OK, hit Done… and then, let's just say this is going UPS. Yes, click UPS. Yes."
+- 41–48: "And then process label, and then the labels spit out, and then they'll go find the box and they'll ship it out."
+- 48–52: "Now this could happen over 500 times in a day."
+
+Reading: Gregg's own description matches the screen capture step for step: scan packing slip → OzLINK pack dialog → type box dims → type weight → OK → Done → choose carrier → WorldShip Process Shipment → label prints → find box → ship. He puts the volume at "over 500 times in a day".
