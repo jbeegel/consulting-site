@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ArtFile, ResolveResult, StageResult, Traveler } from "@/lib/artpull/types";
 import { DEFAULT_MACHINES, MACHINES } from "@/lib/artpull/parse";
 
-type Status = { reader: boolean; dropbox: { connected: boolean; account: string | null; team: boolean; error: string | null }; gated: boolean };
+type Status = { reader: boolean; dropbox: { connected: boolean; account: string | null; team: boolean; error: string | null; probe?: { path: string; found: boolean } | null }; gated: boolean };
 type Settings = { token: string; key: string; queueRoot: string; machineMap: Record<string, string> };
 type Job = { at: string; wo: string; file: string; machine: string; dest: string; mode: string };
 
@@ -69,10 +69,15 @@ export default function ArtPull() {
   async function testConnections() {
     setConnMsg("Testing…");
     try {
-      const r = await fetch("/api/artpull/status", { headers, cache: "no-store" });
+      // Probe the top-level folder of the queue path (e.g. "/TFG Team Folder") so team-space access is proven, not assumed.
+      const top = "/" + (settings.queueRoot.split("/").filter(Boolean)[0] ?? "");
+      const r = await fetch(`/api/artpull/status?probe=${encodeURIComponent(top)}`, { headers, cache: "no-store" });
       const j = (await r.json()) as Status;
       setStatus(j);
-      setConnMsg(j.dropbox.connected ? `Connected to Dropbox as ${j.dropbox.account}${j.dropbox.team ? " (team space)" : ""}. Reader ${j.reader ? "on" : "off"}.` : `Dropbox not connected${j.dropbox.error ? `: ${j.dropbox.error}` : " (no token)"}. Reader ${j.reader ? "on" : "off"}.`);
+      if (!j.dropbox.connected) { setConnMsg(`Dropbox not connected${j.dropbox.error ? `: ${j.dropbox.error}` : " (no token)"}. Reader ${j.reader ? "on" : "off"}.`); return; }
+      const probe = j.dropbox.probe;
+      const seen = probe ? (probe.found ? `Can see ${probe.path}.` : `Cannot see ${probe.path} from this token (it will be created on first send, or fix the queue folder).`) : "";
+      setConnMsg(`Connected to Dropbox as ${j.dropbox.account}${j.dropbox.team ? " (team space)" : " (personal)"}. ${seen} Reader ${j.reader ? "on" : "off"}.`);
     } catch (e) { setConnMsg(e instanceof Error ? e.message : String(e)); }
   }
   async function seedTestFiles() {
