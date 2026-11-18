@@ -1,6 +1,8 @@
 // Minimal Dropbox v2 client. Token comes from the request header (pasted in the UI) or DROPBOX_ACCESS_TOKEN.
 // Team spaces: paths like "/TFG Team Folder/..." live under the team root, so we set Dropbox-API-Path-Root.
 
+import { accessFromRefresh, oauthConfigured, refreshFromCookie } from "./oauth";
+
 export type DbxCtx = { token: string; pathRoot: string | null; account: string | null; team: boolean };
 
 type Entry = { ".tag": "file" | "folder" | "deleted"; name: string; path_display?: string; path_lower?: string; size?: number; server_modified?: string; id?: string };
@@ -8,11 +10,17 @@ type Entry = { ".tag": "file" | "folder" | "deleted"; name: string; path_display
 const API = "https://api.dropboxapi.com/2";
 const CONTENT = "https://content.dropboxapi.com/2";
 
-export function tokenFrom(req: Request): string | null {
+/** Resolve a Dropbox access token for this request: pasted header, then env, then the OAuth refresh-token cookie. */
+export async function tokenFrom(req: Request): Promise<string | null> {
   const h = req.headers.get("x-dropbox-token");
   if (h && h.trim()) return h.trim();
   const e = process.env.DROPBOX_ACCESS_TOKEN;
-  return e && e.trim() ? e.trim() : null;
+  if (e && e.trim()) return e.trim();
+  if (oauthConfigured()) {
+    const refresh = refreshFromCookie(req);
+    if (refresh) return accessFromRefresh(refresh);
+  }
+  return null;
 }
 
 async function rpc<T>(ctx: DbxCtx, path: string, body: unknown): Promise<T> {

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ArtFile, ResolveResult, StageResult, Traveler } from "@/lib/artpull/types";
 import { DEFAULT_MACHINES, MACHINES } from "@/lib/artpull/parse";
 
-type Status = { reader: boolean; dropbox: { connected: boolean; account: string | null; team: boolean; error: string | null; probe?: { path: string; found: boolean } | null }; gated: boolean };
+type Status = { reader: boolean; dropbox: { connected: boolean; account: string | null; team: boolean; error: string | null; probe?: { path: string; found: boolean } | null; source?: "token" | "linked" | "env" | null }; oauth?: boolean; linked?: boolean; gated: boolean };
 type Settings = { token: string; key: string; queueRoot: string; machineMap: Record<string, string> };
 type Job = { at: string; wo: string; file: string; machine: string; dest: string; mode: string };
 
@@ -55,7 +55,15 @@ export default function ArtPull() {
   const [seeding, setSeeding] = useState(false);
   const barcodeRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { setSettings(loadSettings()); }, []);
+  useEffect(() => {
+    setSettings(loadSettings());
+    try {
+      const q = new URLSearchParams(window.location.search).get("dropbox");
+      if (q === "linked") { setShowSettings(true); setConnMsg("Dropbox connected. This browser stays connected; no token to paste."); }
+      else if (q?.startsWith("error:")) { setShowSettings(true); setConnMsg(`Dropbox connection failed: ${q.slice(6)}`); }
+      if (q) window.history.replaceState({}, "", window.location.pathname);
+    } catch {}
+  }, []);
   const headers = useMemo(() => {
     const h: Record<string, string> = { "Content-Type": "application/json" };
     if (settings.token) h["x-dropbox-token"] = settings.token;
@@ -178,7 +186,14 @@ export default function ArtPull() {
       {showSettings && (
         <section className="card settings">
           <h2>Connections</h2>
-          <label>Dropbox access token
+          {status?.oauth && (
+            <div className="row" style={{ marginBottom: 14 }}>
+              {status.linked
+                ? <><span className="okline">Dropbox is connected to this browser (stays connected).</span><button className="ghost" onClick={async () => { await fetch("/api/artpull/dropbox/disconnect", { method: "POST" }); setConnMsg(null); refreshStatus(); }}>Disconnect</button></>
+                : <><a className="btnlink" href="/api/artpull/dropbox/connect">Connect Dropbox</a><span className="dim small">One-time login and approve. No token to paste, nothing expires.</span></>}
+            </div>
+          )}
+          <label>{status?.oauth ? "Or paste a short-lived access token (4 hours)" : "Dropbox access token"}
             <input id="ap-token" type="password" value={settings.token} onChange={(e) => persist({ ...settings, token: e.target.value })} placeholder="Paste a token from the Dropbox App Console" />
             <small>Dropbox App Console → your app → Settings → Generate access token. Scopes needed: files.metadata.read, files.content.read, files.content.write. Tokens last about 4 hours. Stored only in this browser.</small>
           </label>
@@ -336,7 +351,7 @@ const CSS = `
 .ap button{font:inherit;font-weight:600;border-radius:10px;border:1px solid var(--border);background:var(--surface-3);color:var(--ink);padding:10px 14px;cursor:pointer}
 .ap button.primary{background:var(--accent);color:var(--accent-ink);border-color:transparent;font-size:18px;padding:14px 20px}
 .ap button:disabled{opacity:.45;cursor:default}
-.ap button.ghost{background:transparent} .ap button.link{background:none;border:0;padding:0;color:var(--accent);text-decoration:underline;font-weight:500}
+.ap button.ghost{background:transparent} .btnlink{display:inline-block;font-weight:700;border-radius:10px;background:var(--accent);color:var(--accent-ink);padding:12px 18px;text-decoration:none;font-size:16px} .ap button.link{background:none;border:0;padding:0;color:var(--accent);text-decoration:underline;font-weight:500}
 .ap input,.ap select{font:inherit;width:100%;padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface-2);color:var(--ink)}
 .ap input:focus,.ap select:focus,.ap button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 .barcode input{font-size:18px}

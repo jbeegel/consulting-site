@@ -8,7 +8,7 @@ export const maxDuration = 60;
 
 export async function POST(req: Request) {
   if (!allowed(req)) return denied();
-  const token = tokenFrom(req);
+  const token = await tokenFrom(req);
   if (!token) return NextResponse.json({ error: "Connect Dropbox first (paste a token in Settings)." }, { status: 400 });
   const body = (await req.json().catch(() => ({}))) as { root?: string };
   try {

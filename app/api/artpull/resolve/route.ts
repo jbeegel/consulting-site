@@ -11,7 +11,7 @@ export async function POST(req: Request) {
   if (!allowed(req)) return denied();
   const body = (await req.json()) as { traveler: Partial<Traveler>; machineMap?: Record<string, string> };
   try {
-    const out = await resolveArt(body.traveler ?? {}, tokenFrom(req), body.machineMap);
+    const out = await resolveArt(body.traveler ?? {}, await tokenFrom(req), body.machineMap);
     return NextResponse.json(out);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 502 });

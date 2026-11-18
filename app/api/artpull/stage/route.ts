@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   const body = (await req.json()) as { artPath: string; machine: string; traveler: Partial<Traveler>; queueRoot?: string };
   if (!body.artPath || !body.machine) return NextResponse.json({ error: "artPath and machine are required" }, { status: 400 });
   try {
-    const out = await stageArt({ token: tokenFrom(req), artPath: body.artPath, machine: body.machine, traveler: body.traveler ?? {}, queueRoot: body.queueRoot });
+    const out = await stageArt({ token: await tokenFrom(req), artPath: body.artPath, machine: body.machine, traveler: body.traveler ?? {}, queueRoot: body.queueRoot });
     return NextResponse.json(out);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 502 });
