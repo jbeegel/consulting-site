@@ -1,8 +1,9 @@
 // Read a photographed/scanned NetSuite Work Order traveler into structured fields with Claude vision.
+// Uses structured outputs (output_config.format); forced tool_choice is not supported on current models.
 import Anthropic from "@anthropic-ai/sdk";
 import type { Traveler } from "./types";
 
-const MODEL = process.env.ARTPULL_MODEL || "claude-sonnet-5-5";
+const MODEL = process.env.ARTPULL_MODEL || "claude-opus-5-5";
 
 export function extractorConfigured(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
@@ -21,60 +22,72 @@ Rules:
   and collapse letter-spaced words. Folder separators are "/".
 - Work order number is the digits printed under the barcode (6 digits), not the sales order number.
 - Dates as YYYY-MM-DD. Quantities as integers. Unknown or unreadable fields are null; never guess a path.
-- Put anything you are unsure about in notes, and set path_confidence between 0 and 1 for the frontside path.`;
+- Put anything you are unsure about in notes, and set path_confidence between 0 and 1 for the frontside path.
+Return only the JSON object.`;
 
-const TOOL = {
-  name: "traveler",
-  description: "The structured content of one work-order traveler.",
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      work_order_number: { type: ["string", "null"] },
-      work_order_date: { type: ["string", "null"] },
-      customer: { type: ["string", "null"] },
-      sales_order: { type: ["string", "null"] },
-      assembly: { type: ["string", "null"] },
-      client_sku: { type: ["string", "null"] },
-      description: { type: ["string", "null"] },
-      qty_required: { type: ["integer", "null"] },
-      frontside_file_path: { type: ["string", "null"] },
-      backside_file_name: { type: ["string", "null"] },
-      backside_file_path: { type: ["string", "null"] },
-      royalty_code: { type: ["string", "null"] },
-      royalty_agency: { type: ["string", "null"] },
-      needs_by: { type: ["string", "null"] },
-      do_not_ship_til: { type: ["string", "null"] },
-      upc: { type: ["string", "null"] },
-      components: {
-        type: "array",
-        items: { type: "object", properties: { item: { type: "string" }, description: { type: ["string", "null"] }, qty: { type: ["integer", "null"] } }, required: ["item"] },
+const nullableString = { type: ["string", "null"] };
+const nullableInt = { type: ["integer", "null"] };
+
+const SCHEMA = {
+  type: "object",
+  properties: {
+    work_order_number: nullableString,
+    work_order_date: nullableString,
+    customer: nullableString,
+    sales_order: nullableString,
+    assembly: nullableString,
+    client_sku: nullableString,
+    description: nullableString,
+    qty_required: nullableInt,
+    frontside_file_path: nullableString,
+    backside_file_name: nullableString,
+    backside_file_path: nullableString,
+    royalty_code: nullableString,
+    royalty_agency: nullableString,
+    needs_by: nullableString,
+    do_not_ship_til: nullableString,
+    upc: nullableString,
+    components: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: { item: { type: "string" }, description: nullableString, qty: nullableInt },
+        required: ["item", "description", "qty"],
+        additionalProperties: false,
       },
-      notes: { type: "array", items: { type: "string" } },
-      path_confidence: { type: "number" },
     },
-    required: ["work_order_number", "assembly", "frontside_file_path", "components", "notes", "path_confidence"],
+    notes: { type: "array", items: { type: "string" } },
+    path_confidence: { type: "number" },
   },
+  required: [
+    "work_order_number", "work_order_date", "customer", "sales_order", "assembly", "client_sku", "description",
+    "qty_required", "frontside_file_path", "backside_file_name", "backside_file_path", "royalty_code", "royalty_agency",
+    "needs_by", "do_not_ship_til", "upc", "components", "notes", "path_confidence",
+  ],
+  additionalProperties: false,
 };
 
 export async function extractTraveler(imageBase64: string, mediaType: "image/jpeg" | "image/png" | "image/webp" | "image/gif"): Promise<{ traveler: Traveler; usage: { input: number; output: number }; model: string }> {
   const client = new Anthropic({ timeout: 90_000, maxRetries: 1 });
   const res = await client.messages.create({
     model: MODEL,
-    max_tokens: 2000,
+    max_tokens: 4000,
     system: SYSTEM,
-    tools: [TOOL],
-    tool_choice: { type: "tool", name: "traveler" },
+    output_config: { format: { type: "json_schema", schema: SCHEMA } },
     messages: [{
       role: "user",
       content: [
         { type: "image", source: { type: "base64", media_type: mediaType, data: imageBase64 } },
-        { type: "text", text: "Read this traveler." },
+        { type: "text", text: "Read this traveler and return the JSON." },
       ],
     }],
   });
-  const block = res.content.find((b) => b.type === "tool_use");
-  if (!block || block.type !== "tool_use") throw new Error("No structured result from the reader");
-  const t = block.input as Traveler;
+  if (res.stop_reason === "refusal") throw new Error("The reader declined this image. Try a clearer photo of just the paper.");
+  const text = res.content.filter((b) => b.type === "text").map((b) => (b.type === "text" ? b.text : "")).join("").trim();
+  if (!text) throw new Error("The reader returned nothing. Try again with a sharper photo.");
+  let t: Traveler;
+  try { t = JSON.parse(text) as Traveler; }
+  catch { throw new Error("The reader's answer was not valid JSON. Try again."); }
   t.components ??= [];
   t.notes ??= [];
   t.path_confidence = typeof t.path_confidence === "number" ? t.path_confidence : 0.5;
