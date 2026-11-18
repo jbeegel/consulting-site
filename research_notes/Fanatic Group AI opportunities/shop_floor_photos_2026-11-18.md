@@ -75,3 +75,29 @@ Clips IMG_6590.MOV (74 s, press workstation) and IMG_6596.MOV (60 s, shipping be
 3. **TrueCommerce** handles EDI for Rally House and Von Maur, so 856 ASNs and GS1-128 labels, if required by those retailers, likely already flow through it. Confirm what TrueCommerce generates today and whether OzLINK or WorldShip produces the retailer carton label.
 4. **"Florida Warehouse"** as the fulfillment Location, combined with the `FL-WH-PROD` bin on travelers and the Deerfield Beach FL address in D&B, needs a direct question: is there a second physical site, or a legacy location name used for Edison inventory? It affects any inventory sync to Shopify.
 5. The art-lookup clip confirms the staging design: the search string the operator types is exactly the filename in the Frontside File Path field, so a script can do the same lookup and place the file in a queue folder before the operator reaches the press.
+
+---
+
+# Video observations, clips 3 and 4 (IMG_6587, 35 s; IMG_6593, 33 s)
+
+## Clip 3: press workstation, continued (IMG_6587)
+
+- Same operator and traveler stack at the ColorPRINT/PCS workstation; the RIP preview shows a row of nested marks ready to print.
+- Inbound master cartons on the floor beside the press carry supplier labels: "PO NO. 1002385 / ITEM & COLOR: CM102-GRAY / QTY: 24 PCS / G.W. 14.8 KGS / N.W. 13.2 KGS / MEASUREMENT: 45.2x30.7x35.6 CM" (and a second CM102 carton, PO 1002387). Blanks arrive in 24-unit master cartons with a PO number and item code printed on the box, so receiving against NetSuite purchase orders can be scan-based, and carton gross weights and dimensions exist on the box even though item weights are zero in NetSuite.
+- Closing frames show the Inkcups flatbed bed under UV light with a cylindrical fixture holding a tumbler, i.e. rotary printing on the flatbed.
+
+## Clip 4: production room walk-through (IMG_6593)
+
+- The **Inkcups X5** flatbed is loaded with a jig of roughly 28 dark-green tumblers in rows, which confirms high-count ganging per bed cycle and explains the hand-built "Nest" jobs in the RIP. The machine sits on a wooden crate base on a dolly.
+- Wire shelving along the wall holds blank inventory; stacked Fanatic Group shipping cartons; a blue bin; Gregg (black cap) walking the room.
+- A **Nocai** UV printer (white cabinet, "Nocai" badge) with an operator seated in front of it, feeding **black Owala FreeSip bottles**. Open Owala master cartons with cell dividers sit beside it, labelled "24-OZ OWALA FREESIP / STAINLESS STEEL / COLOR: BLACK (VERY VERY DARK)" with carton barcodes. Two dozen printed black bottles stand lined up on the table.
+- A large dark-grey industrial UV printer with an "ARTECH"-style nameplate (first letter stylised; exact brand to confirm) with a touchscreen, its own PC and monitor, more Owala cartons in front of it, and an employee in a Fanatic Group shirt at its station. A monitor on the right shows the machine's own job software.
+- The press room therefore contains at least three UV printer brands (Inkcups X5 with ColorPRINT, Nocai, and the ARTECH-badged unit), each with its own RIP and input expectations. This is the concrete basis for Gregg's "each machine needs a different file type".
+- Owala bottles are in active production, so the Owala line is already running on the Nocai and ARTECH machines rather than the Inkcups.
+
+## Implications (consultant judgment)
+
+1. The conversion matrix in the debrief should be rebuilt around these three RIPs rather than the generic laser and sublimation rows. Discovery item: for each machine, the RIP name and version, accepted input formats, hot-folder or job-ticket support, and whether the Owala cylinder templates are stored per machine.
+2. Routing work orders to machines is itself a rule the staging job can apply: item family (RSST2, CM102, OWALA24FS, PF4x6, JRNPN) maps to a machine and jig, which determines the output format and the nest group.
+3. The X5 jig count (about 28 positions) is the nesting unit; a nest builder that fills a jig from released work orders of the same blank and colorway is a direct throughput gain.
+4. Supplier cartons carry PO number, item code, quantity and weights; scanning them at receiving can post NetSuite item receipts and populate the missing item weights and dimensions that the shipping step needs.
