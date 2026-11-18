@@ -37,9 +37,14 @@ export function parseCode(input: string | null | undefined): ParsedCode | null {
   return out;
 }
 
+/** Route by the assembly code first (what is being made), and only then by the art filename, which can carry a
+ *  different item prefix when a design is reused across products (e.g. KES-FSB-… art on a KES-RH-RSST2-15 tumbler). */
 export function machineFor(code: ParsedCode | null, assembly: string | null, map: Record<string, string> = DEFAULT_MACHINES): string {
-  const hay = `${code?.item ?? ""} ${assembly ?? ""}`.toUpperCase();
-  for (const [k, v] of Object.entries(map)) if (hay.includes(k)) return v;
+  const keys = Object.keys(map).sort((a, b) => b.length - a.length); // longest code wins (OWALA24FS before OWALA)
+  for (const hay of [assembly?.toUpperCase() ?? "", code?.item?.toUpperCase() ?? ""]) {
+    if (!hay) continue;
+    for (const k of keys) if (hay.includes(k)) return map[k];
+  }
   return MACHINES[0];
 }
 
