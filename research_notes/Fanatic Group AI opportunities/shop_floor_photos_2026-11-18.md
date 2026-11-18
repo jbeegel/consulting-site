@@ -101,3 +101,56 @@ Clips IMG_6590.MOV (74 s, press workstation) and IMG_6596.MOV (60 s, shipping be
 2. Routing work orders to machines is itself a rule the staging job can apply: item family (RSST2, CM102, OWALA24FS, PF4x6, JRNPN) maps to a machine and jig, which determines the output format and the nest group.
 3. The X5 jig count (about 28 positions) is the nesting unit; a nest builder that fills a jig from released work orders of the same blank and colorway is a direct throughput gain.
 4. Supplier cartons carry PO number, item code, quantity and weights; scanning them at receiving can post NetSuite item receipts and populate the missing item weights and dimensions that the shipping step needs.
+
+---
+
+# Second pass: frame-by-frame review of all four clips at full resolution
+
+Every frame (one per second, 202 frames) was extracted and the screen regions enlarged. Audio could not be transcribed in this environment. Details below are additive to the sections above.
+
+## Press workstation (clips IMG_6590 and IMG_6587)
+
+**The art lookup has more steps than first described.** The sequence actually observed:
+1. Operator reads the filename from the traveler and types `xu-fan-cm102-gray.eps` into the Dropbox desktop search.
+2. Dropbox returns **six matches for the same design**: `XU-FAN-CM102-GRAY.eps` (edited 4 years ago by Steven Cipparulo, in `TFG Team Folder/CUSTOM ORDERS/FANATICS/...`), a `.psd` of 40.1 MB, two `.jpg` renders, a `.pdf`, and another `.jpg` in `TFG Team Folder/AMAZON/Dropbox Downloads/...` edited by Alexandria Matthews. The operator picks the .eps.
+3. Right-click → Open. The .eps opens in a **Chrome browser tab** as a preview (red Xavier X with TM, zoom 237%).
+4. Chrome's Downloads popup appears (`XU-FAN-CM102-GRAY...`): the file is **downloaded to the local Downloads folder**.
+5. In ColorPRINT Server, File → Open, navigate the Windows file dialog to Downloads, select the file.
+6. The job layout shows a **jig template of empty placeholder rectangles** (rows of cells); the operator drops the mark into a cell. Other jobs ("Nest" files) combine several marks on one template.
+7. Job list columns: Name, Status (Pending / Completed), Job Size, Copies, Color Mode (SPOT), Output Profile "X-Jet S1 ink CMYKWW 1200x600". The PCS 6 printer control panel on the same screen shows X/Y/Z axis offsets, "Use Independent Origin", and print settings.
+
+Implications: the same design exists in multiple formats and folders already (eps, psd, jpg, pdf, plus an Amazon copy), so deduplication and a "which file is the master" rule matter as much as retrieval; the art files are mature (edited ~4 years ago); and the download-to-Downloads step means the RIP PC accumulates loose copies with no link back to the work order.
+
+**Dropbox also holds royalty spreadsheets**: a search result shows `YALE Q2.xlsx` in `TFG Team Folder/Royalties/Q2`, so quarterly royalty reports are built per school in Excel and stored in Dropbox.
+
+**Room details**: a wall-mounted security camera; a metal rack of printing jigs/fixture trays behind the operator; the Nocai machine (white, "Nocai" badge, green status light) directly behind the ColorPRINT station with its own keyboard and a UPS mousepad; a second operator working at the Nocai; blue nitrile gloves; a taped "POLICIES" sheet beside the color chart with rules about empty boxes, the prep area, not opening boxes without a knife, and keeping areas clean. The color chart (Color / # / Component) maps 22 colors: Black, Blue, Burgundy, Gold, Green, Navy, Oak, Orange, Pink, Purple, Red, Silver, White, Gray, MVNavy, Olive, Dove, Brown, Sunglow, Oasis, Jade, Saphire.
+
+## Shipping bench (clip IMG_6596)
+
+**Three shipping tools are in play, not one.** Browser tabs and bookmarks on the shipping PC: "Item Fulfillment - NetSuite", "**ShipRush Web Shipping**" (plus a ShipRush bookmark), "Inbox - shipping@thefanaticgr…" (shared Gmail), "Pi-hole raspberrypi", "Paychex Flex", "Sales Order #274353", "Fulfill Orders", OzLINK and "Pack" bookmarks, and UPS / USPS / FedEx icons. UPS WorldShip is the desktop app that OzLINK hands off to. ShipRush (also a Descartes product) appears to be used for some shipments, probably USPS/FedEx or parcels that WorldShip does not cover. Discovery item: which shipments go through ShipRush versus WorldShip, and why.
+
+**Amazon is an active channel in NetSuite.** The dashboard's customer list shows `100226 AMAZON PARENT` and `100316 AMAZON PARENT`, so Amazon orders land in NetSuite under parent customer records (likely one per marketplace/account), separate from Shopify.
+
+**Retail-compliance fields already exist on the fulfillment form.** The custom Item Fulfillment form carries a `UCC_LABEL` checkbox and a `PARTY CITY DEPT NAME` field, so GS1-128/UCC carton labels and department-store routing (Party City is or was a customer) have been handled before. Item lines carry `ROYALTY PERCENTAGE` and `ROYALTY CODE` columns, and `ON HAND` quantities by location. All lines show Location = "Florida Warehouse".
+
+**The packing slip is printed with a Florida address.** Header: "301 Goolsby Blvd, Deerfield Beach FL 33442, P (732) 512-1544"; the return-address block repeats Deerfield Beach. Order # 276531, PO # 493421, Terms Net 30, Ship Via "See Admin", Ship ASAP (NOW): No, "Do Not Ship Till 10/22/2026", a barcode of the order number, and a Customer Return Form stub. Combined with the "Florida Warehouse" location and the `FL-WH-PROD` bin on travelers, the Florida address is embedded in NetSuite's company/location setup, whether or not goods physically ship from Florida. This must be asked directly.
+
+**The OzLINK pack step, field by field.** Package Content Verification window: UPC/Item No (blank, with Add), Serial Number, Box Number 1 (Close/Open), Box Type (blank dropdown), Box Dimensions typed L 18 W 12 H 13, Item Weight 0.00, Scale Weight 0.0, Scale Enabled unchecked, Dunnage Weight blank. Items were added through "Manual Item Selection" (Item Number, Description, Order Quantity 3, Add To Box 3, OK), repeated for the 12-unit line. Then "Manual Weight Entry: Box Weight 17". Box Content Detail then lists Box 1: 12 SKY MARSHMALLOW, 3 VERY VERY DARK. OzLINK writes this to NetSuite's **Packages** subtab (Box 1, 17.0 lbs, Package Contents Description "IU-OWALA24FS-VERY VERY DARK (3) IU-OWALA24FS-SKY MARSHMALLOW (12)").
+
+**UPS WorldShip then opens pre-filled**: Shipper account 4V819R, profile TFG; Ship To "Store 0017", Von Maur Distribution Center, 6565 N Brady Street, Davenport IA 52806; UPS Ground; Package 18 x 12 x 13 in; Weight 17 lb; Reference Number 1 = 276531 (the NetSuite order number), Reference Number 2 = 493421 (the customer PO); "Electronic Scale Activated" unchecked; Shipper's Cost Published $36.65, Negotiated $13.50; Pkg 1 of 1; "Process Shipment F10". So OzLINK does populate address, service, dims, weight and references into WorldShip; the human work is upstream in the pack dialog and in pressing Process Shipment.
+
+**Hardware on the bench**: two Zebra desktop thermal label printers side by side (one with a handwritten sticky "271405290" on the monitor, likely a tracking or account number), two corded handheld scanners on stands, a bench scale whose display read "0.35" (connected to the PC but not enabled in OzLINK), thermal label rolls, a stack of packing slips, NetSuite shortcuts "Print Packing Slips" and "Fulfill Orders", and the "Orders shipped today" dashboard report showing TOTAL: 2 at about 10:30 AM, both created from sales orders entered by sales rep "Brian Ma…".
+
+## Production room (clip IMG_6593)
+
+No additional detail beyond the earlier section: Inkcups X5 with ~28-position jig of green tumblers, the Nocai printing black Owala FreeSip bottles from divided master cartons, and the large dark UV printer with an "ARTECH"-style nameplate, PC and touchscreen, with Owala cartons staged in front of it.
+
+## Added implications (consultant judgment)
+
+1. **Art finder must dedupe and pick a master.** Six files per design across CUSTOM ORDERS and AMAZON folders means the index needs a canonical-master rule (prefer .eps/.ai in the item's path; treat .psd/.jpg/.pdf as derivatives) and should surface all variants with their last-edited date and editor.
+2. **Eliminate the browser-download hop.** Today's path copies the file into Downloads with no tie to the work order. The staging job should write files into a per-machine queue folder named by work order and ColorPRINT should open from there (or via hot folder if supported).
+3. **Shipping stack rationalisation is a bigger question than OzLINK alone**: WorldShip, OzLINK and ShipRush coexist, UPS negotiated rates are already loaded, and a scale is present but disabled. The cheapest first step is still: item weights/dims, box types, enable the scale, scan-to-verify.
+4. **Amazon is live in NetSuite** and should be included in the channel map and in any Shopify-to-NetSuite connector decision (Celigo and Pipe17 both cover Amazon as well as Shopify and TikTok Shop).
+5. **GS1/UCC labels have been done before** (UCC_LABEL flag, Party City field), so retailer compliance for Rally House and Von Maur is likely configured in TrueCommerce already; confirm rather than rebuild.
+6. **Royalty reporting is spreadsheet-per-school in Dropbox** (`Royalties/Q2/YALE Q2.xlsx`), even though royalty code and percentage are on every NetSuite line. This is a clean target for a SuiteQL report that generates each school's quarterly file.
+7. **The Florida address question is now more pointed**: it appears on customer-facing packing slips and in NetSuite's location and bin names, not just in directories.
