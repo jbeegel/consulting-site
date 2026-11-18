@@ -50,6 +50,9 @@ export default function ArtPull() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [barcode, setBarcode] = useState("");
   const [timing, setTiming] = useState<{ read?: number; find?: number } | null>(null);
+  const [connMsg, setConnMsg] = useState<string | null>(null);
+  const [seedMsg, setSeedMsg] = useState<string | null>(null);
+  const [seeding, setSeeding] = useState(false);
   const barcodeRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { setSettings(loadSettings()); }, []);
@@ -63,6 +66,25 @@ export default function ArtPull() {
   const refreshStatus = useCallback(async () => {
     try { const r = await fetch("/api/artpull/status", { headers, cache: "no-store" }); setStatus(r.ok ? await r.json() : null); } catch { setStatus(null); }
   }, [headers]);
+  async function testConnections() {
+    setConnMsg("Testing…");
+    try {
+      const r = await fetch("/api/artpull/status", { headers, cache: "no-store" });
+      const j = (await r.json()) as Status;
+      setStatus(j);
+      setConnMsg(j.dropbox.connected ? `Connected to Dropbox as ${j.dropbox.account}${j.dropbox.team ? " (team space)" : ""}. Reader ${j.reader ? "on" : "off"}.` : `Dropbox not connected${j.dropbox.error ? `: ${j.dropbox.error}` : " (no token)"}. Reader ${j.reader ? "on" : "off"}.`);
+    } catch (e) { setConnMsg(e instanceof Error ? e.message : String(e)); }
+  }
+  async function seedTestFiles() {
+    setSeeding(true); setSeedMsg(null);
+    try {
+      const r = await fetch("/api/artpull/seed", { method: "POST", headers, body: JSON.stringify({}) });
+      const j = await r.json();
+      if (!r.ok) { setSeedMsg(j.error || "Could not create test files"); return; }
+      setSeedMsg(`Created ${j.created.length} files in ${j.account}'s Dropbox: ${j.created.filter((p: string) => p.endsWith(".eps")).join(" · ")}`);
+    } catch (e) { setSeedMsg(e instanceof Error ? e.message : String(e)); }
+    finally { setSeeding(false); }
+  }
   useEffect(() => { refreshStatus(); }, [refreshStatus]);
 
   function persist(next: Settings) { setSettings(next); try { localStorage.setItem(LS, JSON.stringify(next)); } catch {} }
@@ -172,7 +194,10 @@ export default function ArtPull() {
               </label>
             ))}
           </div>
-          <div className="row"><button onClick={refreshStatus}>Test connections</button>{status?.dropbox.error && <span className="err">{status.dropbox.error}</span>}</div>
+          <div className="row"><button onClick={testConnections}>Test connections</button>{connMsg && <span className={status?.dropbox.connected ? "okline" : "err"}>{connMsg}</span>}</div>
+          <h2 style={{ marginTop: 18 }}>Rehearsal</h2>
+          <p className="small dim" style={{ margin: "0 0 10px" }}>Puts placeholder art for the three sample travelers (Kent State, Arizona, Xavier) into the connected Dropbox, in the same folder chain the real travelers print, so a photographed traveler resolves to a real file. Safe to run more than once.</p>
+          <div className="row"><button onClick={seedTestFiles} disabled={seeding || !status?.dropbox.connected}>{seeding ? "Creating…" : "Create test files in my Dropbox"}</button>{seedMsg && <span className={seedMsg.startsWith("Created") ? "okline" : "err"}>{seedMsg}</span>}</div>
         </section>
       )}
 
@@ -315,7 +340,7 @@ const CSS = `
 .drop.busy{opacity:.6;cursor:progress} .drop img{max-height:360px;max-width:100%;border-radius:8px}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px} .row.small button{font-size:13px;padding:8px 10px}
 .progress{margin-top:12px;color:var(--accent);font-weight:600;animation:pulse 1.2s infinite} @keyframes pulse{50%{opacity:.5}} @media (prefers-reduced-motion:reduce){.progress{animation:none}}
-.err{margin-top:12px;color:var(--critical);font-size:14px} .warn-line{color:var(--warning);font-size:13px;margin-top:8px}
+.err{margin-top:12px;color:var(--critical);font-size:14px} .okline{color:var(--good);font-size:13px} .warn-line{color:var(--warning);font-size:13px;margin-top:8px}
 .muted{color:var(--muted)} .dim{color:var(--muted)} .small{font-size:13px} .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.92em} .wrap{overflow-wrap:anywhere}
 .facts{display:grid;gap:8px} .fact{display:grid;grid-template-columns:130px minmax(0,1fr);gap:10px;align-items:baseline;font-size:15px} .fact span{color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.06em} .fact b{font-weight:500;color:var(--ink);min-width:0}
 .fact.big b{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}

@@ -70,17 +70,21 @@ export async function copyTo(ctx: DbxCtx, from: string, to: string): Promise<str
   return r.metadata.path_display ?? to;
 }
 
-export async function uploadText(ctx: DbxCtx, path: string, text: string): Promise<string> {
+export async function uploadBytes(ctx: DbxCtx, path: string, body: Uint8Array | string): Promise<string> {
   const headers: Record<string, string> = {
     Authorization: `Bearer ${ctx.token}`,
     "Content-Type": "application/octet-stream",
     "Dropbox-API-Arg": JSON.stringify({ path, mode: "overwrite", mute: true }),
   };
   if (ctx.pathRoot) headers["Dropbox-API-Path-Root"] = ctx.pathRoot;
-  const r = await fetch(`${CONTENT}/files/upload`, { method: "POST", headers, body: text });
+  const r = await fetch(`${CONTENT}/files/upload`, { method: "POST", headers, body: body as BodyInit });
   if (!r.ok) throw new Error(`Dropbox upload ${r.status}: ${(await r.text()).slice(0, 200)}`);
   const m = (await r.json()) as Entry;
   return m.path_display ?? path;
+}
+
+export async function uploadText(ctx: DbxCtx, path: string, text: string): Promise<string> {
+  return uploadBytes(ctx, path, text);
 }
 
 export type { Entry as DbxEntry };
